@@ -24,10 +24,12 @@ SOFTWARE.
 
 AVERTISSEMENT IMPORTANT (non contractuel, à titre informatif)
 
-AXECUBE est un logiciel de minage solo Bitcoin/Fractal Bitcoin/VerusCoin à
-but éducatif et ludique. Il ne produit aucun revenu garanti ni régulier.
-La probabilité de trouver un bloc avec un ordinateur personnel est infime
-(de l'ordre de 1 sur plusieurs centaines de milliards par jour en solo BTC).
-N'installez pas ce logiciel dans l'attente d'un gain financier. Le minage
-consomme de l'électricité et sollicite votre processeur. Ceci n'est pas un
-conseil en investissement.
+AXECUBE est un logiciel de minage solo Bitcoin (et, dans une moindre mesure,
+Fractal Bitcoin) à but éducatif et ludique. Il ne produit aucun revenu
+garanti ni régulier. La probabilité de trouver un bloc avec un ordinateur
+personnel est infime (de l'ordre de 1 sur plusieurs centaines de milliards
+par jour en solo BTC). Le mode Fractal Bitcoin est fonctionnel mais peu
+adapté au minage CPU en pratique à ce jour, en raison de la difficulté
+minimale imposée par les pools actuels. N'installez pas ce logiciel dans
+l'attente d'un gain financier. Le minage consomme de l'électricité et
+sollicite votre processeur. Ceci n'est pas un conseil en investissement.

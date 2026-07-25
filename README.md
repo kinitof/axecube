@@ -1,10 +1,12 @@
 # ⛏ AXECUBE — Mineur Lottery
 
-**Minage solo Bitcoin, Fractal Bitcoin et VerusCoin, directement sur votre CPU — gratuit, honnête, sans rien acheter.**
+**Minage solo Bitcoin, directement sur votre CPU — gratuit, honnête, sans rien acheter.**
 
 AXECUBE transforme votre ordinateur en un vrai mineur solo : calcul SHA-256 réel (WASM/SIMD), tableau de bord en temps réel, vérification en direct de ce que vous toucheriez si un bloc était trouvé, système de badges de progression, et classement communautaire vérifié cryptographiquement.
 
 > ⚠️ **Ce que ce projet n'est pas** : un plan pour s'enrichir. Sur CPU, vos vraies chances de trouver un bloc Bitcoin sont de l'ordre de **1 sur plusieurs centaines de milliards par jour**. AXECUBE affiche ce chiffre honnêtement, sans jamais l'enjoliver. C'est un outil pédagogique et ludique — pas un produit financier.
+
+> 🧪 **État actuel du projet** : AXECUBE est encore une petite communauté naissante. Le mode **Bitcoin (solo)** est celui qui fonctionne le mieux aujourd'hui. Le mode **Fractal Bitcoin** est fonctionnel techniquement, mais actuellement peu adapté au minage CPU dans la pratique : les pools testés imposent une difficulté minimale élevée, ce qui peut prendre plusieurs heures, voire plusieurs jours, avant la moindre share confirmée à ce hashrate. Ce n'est pas un bug d'AXECUBE — c'est l'état actuel de l'écosystème de pools Fractal, pensé pour du matériel ASIC. Le projet a vocation à s'améliorer sur ce point avec le temps.
 
 ---
 
@@ -15,7 +17,7 @@ AXECUBE transforme votre ordinateur en un vrai mineur solo : calcul SHA-256 rée
 - 🔒 Vérification en direct de la coinbase — sachez exactement ce que vous toucheriez si un bloc était trouvé
 - 🏅 Système de badges par palier de difficulté (Bronze → Légende), avec popup de célébration
 - 🏆 Classement communautaire avec preuve cryptographique anti-triche, fenêtres jour/semaine/mois
-- 🪙 Trois réseaux : Bitcoin, Fractal Bitcoin (solo), et VerusCoin (pool, module indépendant)
+- 🪙 Bitcoin (solo, recommandé) et Fractal Bitcoin (solo, voir avertissement ci-dessus)
 - 🤝 Préréglages de pool : solo (public-pool.io, Braiins Solo, CKPool, Mineshop.eu) ou répartition automatique (ViaBTC, Braiins Pool)
 - ⏸️ Pause/reprise du minage à la volée depuis le dashboard
 - 🧭 Page de découverte pédagogique et visite guidée interactive intégrées
@@ -60,17 +62,9 @@ Le tableau de bord s'ouvre automatiquement sur `http://localhost:1337`.
 - **Solo** (`--mode solo`, par défaut) : l'adresse peut être partagée entre plusieurs machines (famille/amis) pour cumuler le hashrate. La récompense entière va sur cette adresse si un bloc est trouvé — à réserver aux personnes de confiance.
 - **Pool** (`--mode pool`) : répartition automatique proportionnelle à votre contribution réelle, aucun risque de partage. Nécessite un compte créé au préalable chez le pool (ex. [ViaBTC](https://viabtc.com), [Braiins Pool](https://pool.braiins.com)).
 
-## 🪙 Mode VerusCoin (CPU, module indépendant)
+## 🪙 À propos du module VerusCoin (présent dans le code, non maintenu)
 
-Verus utilise l'algorithme VerusHash 2.2. AXECUBE peut piloter un mineur natif externe ([ccminer, branche ARM](https://github.com/monkins1010/ccminer)) :
-
-```bash
-node axecube.js VOTRE_ADRESSE_VRSC --network verus \
-  --verus-miner /chemin/vers/ccminer \
-  --verus-pool stratum+tcp://eu.luckpool.net:3956
-```
-
-Ce mode ne modifie jamais le moteur BTC/Fractal — c'est un module séparé.
+Une première version d'AXECUBE incluait un mode expérimental pour VerusCoin (VerusHash 2.2, en pilotant un mineur natif externe comme `ccminer`). Ce mode existe toujours techniquement dans `axecube.js` (`--network verus`), mais **nous avons choisi de ne plus le développer ni le mettre en avant** : le projet se concentre désormais sur Bitcoin/Fractal Bitcoin en solo, cœur de métier d'AXECUBE. VerusCoin (VRSC) reste une cryptomonnaie active par ailleurs — ce choix est uniquement une décision de priorité pour ce projet, pas un jugement sur Verus lui-même.
 
 ## 🏆 Classement communautaire
 
@@ -88,7 +82,7 @@ node axecube.js --selftest
 
 ```
 axecube/
-├── axecube.js              # Moteur principal (BTC/Fractal/Verus + dashboard)
+├── axecube.js              # Moteur principal (Bitcoin/Fractal + dashboard ; module Verus présent mais non maintenu)
 ├── AXECUBE.command          # Lanceur macOS
 ├── AXECUBE.bat               # Lanceur Windows
 ├── assets/badges/            # Images des paliers de progression

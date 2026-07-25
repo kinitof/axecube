@@ -2,7 +2,7 @@
 
 ## Ce que c'est
 Un classement communautaire des meilleures difficultés atteintes par les mineurs AXECUBE
-(BTC/Fractal ET Verus), hébergé gratuitement sur Netlify (fonctions serverless + stockage Blobs).
+(Bitcoin/Fractal), hébergé gratuitement sur Netlify (fonctions serverless + stockage Blobs).
 
 ## Nouveautés : vérification cryptographique + classements par période
 
