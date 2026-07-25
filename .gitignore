@@ -1,0 +1,19 @@
+# État local du mineur (jamais versionné — propre à chaque machine)
+miner-state.json
+.axecube-config
+leaderboard-data.json
+banque-*.json
+
+# Dépendances
+node_modules/
+leaderboard-netlify/node_modules/
+leaderboard-netlify/.netlify/
+
+# Fichiers système
+.DS_Store
+Thumbs.db
+
+# Éditeurs
+.vscode/
+.idea/
+*.swp

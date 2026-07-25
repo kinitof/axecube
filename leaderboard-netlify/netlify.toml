@@ -1,0 +1,13 @@
+[build]
+  functions = "netlify/functions"
+  publish = "public"
+
+[[redirects]]
+  from = "/top"
+  to = "/.netlify/functions/top"
+  status = 200
+
+[[redirects]]
+  from = "/submit"
+  to = "/.netlify/functions/submit"
+  status = 200
