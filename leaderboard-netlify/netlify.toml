@@ -11,3 +11,8 @@
   from = "/submit"
   to = "/.netlify/functions/submit"
   status = 200
+
+[[redirects]]
+  from = "/register"
+  to = "/.netlify/functions/register"
+  status = 200

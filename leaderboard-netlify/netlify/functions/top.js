@@ -24,7 +24,9 @@ exports.handler = async (event) => {
   };
   if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers: cors, body: '' };
 
-  const store = getStore('axecube-leaderboard');
+  const store = (process.env.BLOBS_SITE_ID && process.env.BLOBS_TOKEN)
+    ? getStore({ name: 'axecube-leaderboard', siteID: process.env.BLOBS_SITE_ID, token: process.env.BLOBS_TOKEN })
+    : getStore('axecube-leaderboard');
   const { blobs } = await store.list();
   const toutes = (await Promise.all(blobs.map(b => store.get(b.key, { type: 'json' })))).filter(Boolean);
 

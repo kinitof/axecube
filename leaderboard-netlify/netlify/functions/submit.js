@@ -63,7 +63,9 @@ exports.handler = async (event) => {
     return { statusCode: 200, headers: cors, body: JSON.stringify({ ok: false, raison: 'preuve manquante ou invalide' }) };
   }
 
-  const store = getStore('axecube-leaderboard');
+  const store = (process.env.BLOBS_SITE_ID && process.env.BLOBS_TOKEN)
+    ? getStore({ name: 'axecube-leaderboard', siteID: process.env.BLOBS_SITE_ID, token: process.env.BLOBS_TOKEN })
+    : getStore('axecube-leaderboard');
   const cle = worker + '|' + cpu;
   let precedent = null;
   try { precedent = await store.get(cle, { type: 'json' }); } catch { /* pas d'entrée existante */ }

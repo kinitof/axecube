@@ -931,7 +931,26 @@ function main() {
   const ouvertLan = !!(args.lan || process.env.AXECUBE_LAN);
   const leaderboardUrl = (typeof args.leaderboard === 'string' ? args.leaderboard : process.env.AXECUBE_LEADERBOARD) || '';
   const jeton = ouvertLan ? crypto.randomBytes(12).toString('hex') : null;
-  const workerName = args.worker || process.env.WORKER || 'web';
+
+  // Nom de worker : explicite (--worker) sinon, si un classement communautaire est
+  // configuré, on demande un nom unique auto-attribué (axecube001, 002...) au serveur.
+  // Sinon repli sur 'web'. L'appel est synchrone (via curl) pour ne pas transformer
+  // tout le reste du démarrage en code asynchrone.
+  let workerName = args.worker || process.env.WORKER || '';
+  if (!workerName && leaderboardUrl) {
+    try {
+      const base = leaderboardUrl.endsWith('/') ? leaderboardUrl.slice(0, -1) : leaderboardUrl;
+      const { execFileSync } = require('child_process');
+      const sortie = execFileSync('curl', ['-s', '-m', '4', '-X', 'POST', base + '/register'],
+        { timeout: 5000 }).toString('utf8');
+      const j = JSON.parse(sortie);
+      if (j && j.nom) {
+        workerName = j.nom;
+        console.log(`🏷️  Nom de mineur attribué automatiquement : ${workerName} (mineur n°${j.total} sur AXECUBE)`);
+      }
+    } catch { /* service injoignable : repli silencieux sur 'web' */ }
+  }
+  if (!workerName) workerName = 'web';
   const poolPassword = args.password || process.env.POOL_PASSWORD || 'x';
   const user = `${address}.${workerName}`;
   const poolLabel = poolHost;
