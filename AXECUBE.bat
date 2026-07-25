@@ -59,6 +59,7 @@ set COEURS=
 set LAN=
 set RESEAU=
 set WORKER=
+set POOLPRESET=
 if exist "%CONF%" (
   for /f "usebackq tokens=1,2 delims==" %%a in ("%CONF%") do (
     if "%%a"=="ADRESSE" set ADRESSE=%%b
@@ -66,6 +67,7 @@ if exist "%CONF%" (
     if "%%a"=="LAN"     set LAN=%%b
     if "%%a"=="RESEAU"  set RESEAU=%%b
     if "%%a"=="WORKER"  set WORKER=%%b
+    if "%%a"=="POOLPRESET" set POOLPRESET=%%b
   )
 )
 
@@ -126,6 +128,19 @@ if not defined WORKER (
   echo.
 )
 
+rem ------------------------------  Choix du pool  ------------------------------
+if not defined POOLPRESET (
+  echo Quel pool utiliser ?
+  echo 1^) Par defaut     - public-pool.io ^(BTC^) / solopool.org ^(Fractal^), 0%% de frais
+  echo 2^) Braiins Solo   - aucun compte requis, 0,5%% de frais sur bloc trouve
+  echo 3^) CKPool         - actif depuis 2014, 2%% de frais, difficulte minimale elevee
+  echo 4^) Mineshop.eu    - aucun compte requis, 0%% de frais, serveur Europe
+  echo.
+  set /p REP_POOL="  Pool [1] : "
+  if "!REP_POOL!"=="2" (set POOLPRESET=braiins-solo) else if "!REP_POOL!"=="3" (set POOLPRESET=ckpool) else if "!REP_POOL!"=="4" (set POOLPRESET=mineshop-solo) else (set POOLPRESET=defaut)
+  echo.
+)
+
 rem ------------------------  Acces depuis le telephone  ------------------------
 if not defined LAN (
   echo Autoriser la consultation depuis votre telephone ?
@@ -144,6 +159,7 @@ rem Memorisation des reglages (fichier de donnees, jamais execute)
   echo LAN=%LAN%
   echo RESEAU=%RESEAU%
   echo WORKER=%WORKER%
+  echo POOLPRESET=%POOLPRESET%
 ) > "%CONF%"
 
 rem ------------------------------  Port libre  ------------------------------
@@ -158,6 +174,7 @@ rem ------------------------------  Depart  ------------------------------
 echo Adresse  %ADRESSE%
 echo Nom      %WORKER%
 if "%RESEAU%"=="fractal" (echo Reseau   Fractal Bitcoin) else (echo Reseau   Bitcoin)
+if "%POOLPRESET%"=="defaut" (echo Pool     par defaut) else (echo Pool     %POOLPRESET%)
 echo Coeurs   %COEURS% sur %COEURS_MAX%
 echo Ecran    http://localhost:%PORT%
 echo.
@@ -166,6 +183,7 @@ echo.
 
 set OPTS=--network %RESEAU% --worker %WORKER%
 if "%LAN%"=="1" set OPTS=%OPTS% --lan
+if not "%POOLPRESET%"=="defaut" set OPTS=%OPTS% --pool-preset %POOLPRESET%
 
 start "" cmd /c "timeout /t 3 >nul & start http://localhost:%PORT%"
 

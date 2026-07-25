@@ -81,6 +81,7 @@ lire_config() {
       LAN)     LAN=$(printf '%s' "$valeur" | tr -cd '01') ;;
       RESEAU)  RESEAU=$(printf '%s' "$valeur" | tr -cd 'a-z') ;;
       WORKER)  WORKER=$(printf '%s' "$valeur" | tr -cd 'A-Za-z0-9_-') ;;
+      POOLPRESET) POOLPRESET=$(printf '%s' "$valeur" | tr -cd 'a-z-') ;;
     esac
   done < "$CONF"
 }
@@ -148,6 +149,25 @@ if [ -z "$WORKER" ]; then
   echo
 fi
 
+# ──────────────────────────────  Choix du pool  ────────────────────────
+if [ -z "$POOLPRESET" ]; then
+  echo "${BLANC}${GRAS}Quel pool utiliser ?${RAZ}"
+  echo "${GRIS}1) Par défaut${RAZ}      — public-pool.io (BTC) / solopool.org (Fractal), 0% de frais"
+  echo "${GRIS}2) Braiins Solo${RAZ}    — aucun compte requis, 0,5% de frais sur bloc trouvé"
+  echo "${GRIS}3) CKPool${RAZ}          — actif depuis 2014, 2% de frais, difficulté minimale élevée"
+  echo "${GRIS}4) Mineshop.eu${RAZ}     — aucun compte requis, 0% de frais, serveur Europe"
+  echo
+  printf "  Pool [1] : "
+  read -r REP_POOL
+  case "$REP_POOL" in
+    2) POOLPRESET=braiins-solo ;;
+    3) POOLPRESET=ckpool ;;
+    4) POOLPRESET=mineshop-solo ;;
+    *) POOLPRESET=defaut ;;
+  esac
+  echo
+fi
+
 # ─────────────────────────  Accès depuis le téléphone  ────────────────────
 if [ -z "$LAN" ]; then
   echo "${BLANC}${GRAS}Autoriser la consultation depuis votre téléphone ?${RAZ}"
@@ -167,6 +187,7 @@ COEURS=$COEURS
 LAN=$LAN
 RESEAU=$RESEAU
 WORKER=$WORKER
+POOLPRESET=$POOLPRESET
 CONFIG
 
 # ────────────────────────────  Port libre  ────────────────────────────
@@ -179,6 +200,7 @@ done
 echo "${GRIS}Adresse  ${RAZ}${ADRESSE}"
 echo "${GRIS}Nom      ${RAZ}${WORKER}"
 echo "${GRIS}Réseau   ${RAZ}$([ "$RESEAU" = "fractal" ] && echo "Fractal Bitcoin" || echo "Bitcoin")"
+echo "${GRIS}Pool     ${RAZ}$([ -n "$POOLPRESET" ] && [ "$POOLPRESET" != "defaut" ] && echo "$POOLPRESET" || echo "par défaut")"
 echo "${GRIS}Cœurs    ${RAZ}${COEURS} sur ${COEURS_MAX}"
 echo "${GRIS}Écran    ${RAZ}http://localhost:${PORT}"
 echo
@@ -189,6 +211,7 @@ echo
 
 OPTS="--network $RESEAU --worker $WORKER"
 [ "$LAN" = "1" ] && OPTS="$OPTS --lan"
+[ -n "$POOLPRESET" ] && [ "$POOLPRESET" != "defaut" ] && OPTS="$OPTS --pool-preset $POOLPRESET"
 
 node axecube.js "$ADRESSE" --threads "$COEURS" --port "$PORT" $OPTS
 

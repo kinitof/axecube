@@ -13,10 +13,13 @@ AXECUBE transforme votre ordinateur en un vrai mineur solo : calcul SHA-256 rée
 - ⛏️ Moteur SHA-256 réel (WASM + SIMD), aucune simulation
 - 📊 Tableau de bord web en temps réel, accessible aussi depuis votre téléphone (même réseau Wi-Fi)
 - 🔒 Vérification en direct de la coinbase — sachez exactement ce que vous toucheriez si un bloc était trouvé
-- 🏅 Système de badges par palier de difficulté (Bronze → Légende)
-- 🏆 Classement communautaire avec preuve cryptographique anti-triche (voir `leaderboard-netlify/`)
+- 🏅 Système de badges par palier de difficulté (Bronze → Légende), avec popup de célébration
+- 🏆 Classement communautaire avec preuve cryptographique anti-triche, fenêtres jour/semaine/mois
 - 🪙 Trois réseaux : Bitcoin, Fractal Bitcoin (solo), et VerusCoin (pool, module indépendant)
-- 🤝 Deux modes : solo (adresse partagée, famille/amis) ou pool à répartition automatique (ViaBTC, Braiins Pool)
+- 🤝 Préréglages de pool : solo (public-pool.io, Braiins Solo, CKPool, Mineshop.eu) ou répartition automatique (ViaBTC, Braiins Pool)
+- ⏸️ Pause/reprise du minage à la volée depuis le dashboard
+- 🧭 Page de découverte pédagogique et visite guidée interactive intégrées
+- 💚 Page de soutien (don Bitcoin + partenaires matériel)
 - 🖥️ macOS et Windows, lanceurs graphiques inclus (aucune ligne de commande requise)
 
 ## 🚀 Démarrage rapide
@@ -46,7 +49,7 @@ Le tableau de bord s'ouvre automatiquement sur `http://localhost:1337`.
 | `--threads N` | Nombre de cœurs CPU utilisés | `cœurs - 1` |
 | `--worker NOM` | Nom affiché sur le pool (utile à plusieurs machines) | `web` |
 | `--pool host:port` | Pool personnalisé | pool par défaut du réseau |
-| `--pool-preset NOM` | Préréglage (`braiins-solo`, `viabtc`, `braiins-pool`) | — |
+| `--pool-preset NOM` | Préréglage (`braiins-solo`, `ckpool`, `mineshop-solo`, `viabtc`, `braiins-pool`) | — |
 | `--mode solo\|pool` | Type de minage | `solo` |
 | `--lan` | Ouvre le tableau de bord au réseau local (téléphone) | désactivé |
 | `--leaderboard URL` | Active le classement communautaire | désactivé |
