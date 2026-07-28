@@ -16,7 +16,7 @@
   a{color:inherit}
   .top{display:flex;align-items:center;gap:12px;padding:14px 28px;border-bottom:1px solid var(--line)}
   .topRight{margin-left:auto}
-  .logo{width:auto;height:34px}
+  .logo{width:auto;height:132px}
   .brand{font-weight:800;letter-spacing:.06em;font-size:16px;margin-right:8px}
   .brand b{color:var(--green)}
   .navtop{display:flex;align-items:center;gap:4px;flex:1}
@@ -153,7 +153,7 @@
   <div class="topRight">
     <div class="statut" id="statutLigne"><span class="dot"></span> —</div>
     <div class="compte" id="compteBtn">
-      <img src="icones/cube-05-vert.png?v=2" alt="" width="30" height="30">
+      <img id="compteCube" src="icones/cube-05-vert.png" alt="" width="30" height="30">
       <span id="compteNom">AXECUBE001</span> <span style="opacity:.5">▾</span>
       <div class="menuCompte" id="menuCompte">
         <div class="menuItem" data-action="profil">👤 Mon compte</div>
@@ -252,6 +252,32 @@ function avatar(nom){
   const cube=CUBES[h%CUBES.length];
   return '<img class="avatar" src="icones/'+cube+'.png" alt="" width="44" height="44">';
 }
+
+// Cube du badge compte (haut à droite) : contrairement à l'avatar ci-dessus (couleur
+// aléatoire par mineur), celui-ci reflète une vraie progression -- un palier tous les 200
+// de meilleure difficulté. Palier 0 (0-199) = cube vert par défaut pour un mineur qui
+// débute. Au-delà du dernier palier défini ci-dessous (faute de nouvelles couleurs créées
+// pour l'instant), le mineur conserve simplement le dernier palier en attendant.
+const PALIERS_CUBE=['cube-05-vert','cube-09-cyan','cube-03-bleu','cube-10-bleu2',
+                     'cube-04-violet','cube-11-cyanrose','cube-02-rouge','cube-06-orange',
+                     'cube-01-or','cube-07-arcenciel1','cube-08-arcenciel2'];
+const PALIER_PAS=200;
+function cubeSelonPalier(bestDiff){
+  const p=Math.floor(Math.max(bestDiff||0,0)/PALIER_PAS);
+  return PALIERS_CUBE[Math.min(p,PALIERS_CUBE.length-1)];
+}
+// Met à jour le cube du badge compte selon la meilleure difficulté du mineur affiché.
+// Provisoire : sans vrai système de compte/identité machine, on retrouve "mon" entrée en
+// cherchant le nom affiché (compteNom) dans les données déjà chargées -- à remplacer par
+// une vraie correspondance via machineId quand la gestion de compte existera.
+function majCubeCompte(){
+  if(!data) return;
+  const nom=(document.getElementById('compteNom').textContent||'').trim();
+  const toutes=[...(data.cpu.allTime||[]), ...(data.asic.allTime||[])];
+  const moi=toutes.find(e=>e.worker===nom);
+  const cube=cubeSelonPalier(moi?moi.bestDiff:0);
+  document.getElementById('compteCube').src='icones/'+cube+'.png';
+}
 function sparkSvg(vals){
   if(!vals || vals.length<2) return '';
   const min=Math.min(...vals), max=Math.max(...vals), ecart=(max-min)||1;
@@ -276,6 +302,7 @@ async function charger(bouton){
     };
     statutEl.className='statut ok'; statutEl.innerHTML='<span class="dot"></span> EN LIGNE';
     rendre();
+    majCubeCompte();
   }catch(e){
     statutEl.className='statut ko'; statutEl.innerHTML='<span class="dot"></span> HORS LIGNE';
     document.getElementById('corps').innerHTML='<tr><td colspan="6" class="err">Serveur injoignable pour le moment.</td></tr>';
