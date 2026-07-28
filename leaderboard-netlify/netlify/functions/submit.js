@@ -96,6 +96,10 @@ exports.handler = async (event) => {
     // simple resynchro depuis un autre pool écraserait à tort le pool où le vrai record a
     // été trouvé.
     poolRecord: nouveauMeilleur ? pool : (precedent ? precedent.poolRecord || pool : pool),
+    // Pool actuel de la machine : toujours mis à jour à chaque soumission, qu'il y ait
+    // un nouveau record ou non -- reflète l'état live du mineur, indépendamment d'où
+    // le record all-time a été trouvé.
+    poolActuel: pool,
     historique: historiqueElague,
     vu: maintenant,
   };

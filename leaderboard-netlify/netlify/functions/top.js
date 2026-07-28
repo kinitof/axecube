@@ -52,6 +52,7 @@ exports.handler = async (event) => {
     return entrees
       .map(e => ({
         worker: e.worker, cpu: e.cpu, hashrate: e.hashrate, poolRecord: e.poolRecord || null,
+        poolActuel: e.poolActuel || null,
         bestDiff: depuis ? meilleurDansFenetre(e.historique, maintenant - depuis) : e.bestDiff,
         vu: e.vu || null, spark: decimer(e.historique, 12),
       }))
