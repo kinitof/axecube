@@ -1,4 +1,6 @@
-// AXECUBE — fonction Netlify : classements (jour / semaine / mois / historique complet)
+// AXECUBE — fonction Netlify : classements (jour / semaine / mois / historique complet),
+// séparés entre petits mineurs CPU et grosses machines (ASIC type Bitaxe) pour rester
+// comparable — un CPU et un ASIC n'ont rien à faire dans le même tableau.
 'use strict';
 const { getStore } = require('@netlify/blobs');
 
@@ -8,11 +10,25 @@ const FENETRES = {
   mois: 30 * 24 * 3600e3,
 };
 const INACTIF_MS = 7 * 24 * 3600e3; // un mineur silencieux depuis 7j sort du classement all-time affiché
+const SEUIL_ASIC_HS = 1e9; // même seuil que submit.js — cohérence si une vieille entrée n'a pas le champ
 
 function meilleurDansFenetre(historique, depuis) {
   let max = 0;
   for (const e of historique || []) if (e.t >= depuis && e.d > max) max = e.d;
   return max;
+}
+
+function categorieDe(e) {
+  return e.categorie || (Number(e.hashrate) >= SEUIL_ASIC_HS ? 'asic' : 'cpu');
+}
+
+function decimer(historique, n) {
+  if (!historique || !historique.length) return [];
+  if (historique.length <= n) return historique.map(p => p.d);
+  const pas = (historique.length - 1) / (n - 1);
+  const vals = [];
+  for (let i = 0; i < n; i++) vals.push(historique[Math.round(i * pas)].d);
+  return vals;
 }
 
 exports.handler = async (event) => {
@@ -31,24 +47,41 @@ exports.handler = async (event) => {
   const toutes = (await Promise.all(blobs.map(b => store.get(b.key, { type: 'json' })))).filter(Boolean);
 
   const maintenant = Date.now();
-  const construireClassement = (depuis) =>
-    toutes
+
+  function construireClassement(entrees, depuis) {
+    return entrees
       .map(e => ({
-        worker: e.worker, cpu: e.cpu, hashrate: e.hashrate,
+        worker: e.worker, cpu: e.cpu, hashrate: e.hashrate, poolRecord: e.poolRecord || null,
         bestDiff: depuis ? meilleurDansFenetre(e.historique, maintenant - depuis) : e.bestDiff,
+        vu: e.vu || null, spark: decimer(e.historique, 12),
       }))
       .filter(e => e.bestDiff > 0)
       .sort((a, b) => b.bestDiff - a.bestDiff)
       .slice(0, 100);
+  }
 
-  const actifs = toutes.filter(e => (maintenant - e.vu) <= INACTIF_MS);
+  function classementsPourCategorie(categorie) {
+    const entrees = toutes.filter(e => categorieDe(e) === categorie);
+    const actifs = entrees.filter(e => (maintenant - e.vu) <= INACTIF_MS).length;
+    return {
+      allTime: construireClassement(entrees, null),
+      jour: construireClassement(entrees, FENETRES.jour),
+      semaine: construireClassement(entrees, FENETRES.semaine),
+      mois: construireClassement(entrees, FENETRES.mois),
+      total: entrees.length,
+      actifs,
+    };
+  }
+
+  const cpu = classementsPourCategorie('cpu');
+  const asic = classementsPourCategorie('asic');
 
   const reponse = {
-    top: construireClassement(null).filter(e => actifs.some(a => a.worker === e.worker)), // compat. rétro (all-time, actifs)
-    allTime: construireClassement(null),
-    jour: construireClassement(FENETRES.jour),
-    semaine: construireClassement(FENETRES.semaine),
-    mois: construireClassement(FENETRES.mois),
+    cpu, asic, misAJour: maintenant,
+    // Compat. rétro pour d'anciennes versions de l'app : les champs de premier niveau
+    // reprennent le classement CPU (c'est la catégorie par défaut du produit).
+    top: cpu.allTime, allTime: cpu.allTime,
+    jour: cpu.jour, semaine: cpu.semaine, mois: cpu.mois,
     total: toutes.length,
   };
 
