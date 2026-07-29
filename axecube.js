@@ -892,23 +892,24 @@ function main() {
   }
 
   const PRESETS_POOL = {
-    solopool:       { host: 'public-pool.io', port: 21496, mode: 'solo', compte: false,
+    solopool:       { host: 'public-pool.io', port: 21496, mode: 'solo', compte: false, diffMin: 1,
                       note: 'Solo, aucun compte requis -- adresse BTC directe.' },
-    'braiins-solo': { host: 'solo.stratum.braiins.com', port: 3333, mode: 'solo', compte: false,
-                      note: 'Solo (Braiins), aucun compte requis -- adresse BTC directe.' },
-    ckpool:         { host: 'solo.ckpool.org', port: 3333, mode: 'solo', compte: false,
+    'braiins-solo': { host: 'solo.stratum.braiins.com', port: 3333, mode: 'solo', compte: false, diffMin: 512,
+                      note: 'Solo (Braiins), aucun compte requis -- adresse BTC directe. '
+                          + 'Difficulte minimale fixee a 512 par le pool (documente officiellement).' },
+    ckpool:         { host: 'solo.ckpool.org', port: 3333, mode: 'solo', compte: false, diffMin: 10000,
                       note: 'Solo (CKPool, actif depuis 2014, tres reputable), aucun compte requis -- '
                           + 'adresse BTC directe. 2% de frais sur bloc trouve. ATTENTION : difficulte '
                           + 'minimale fixee a 10000 par le pool -- a hashrate CPU, vos shares resteront '
                           + 'probablement invisibles la plupart du temps (ce pool cible plutot les ASIC).' },
-    'mineshop-solo': { host: 'stratum-de.solo.mineshop.eu', port: 3333, mode: 'solo', compte: false,
+    'mineshop-solo': { host: 'stratum-de.solo.mineshop.eu', port: 3333, mode: 'solo', compte: false, diffMin: 100,
                       note: 'Solo (Mineshop.eu), aucun compte requis -- adresse BTC directe. '
                           + '0% de frais, serveur Allemagne (faible latence Europe).' },
-    viabtc:         { host: 'btc.viabtc.io', port: 3333, mode: 'pool', compte: true,
+    viabtc:         { host: 'btc.viabtc.io', port: 3333, mode: 'pool', compte: true, diffMin: 128,
                       note: 'Repartition auto (FPPS/PPS+/PPLNS) -- necessite un compte ViaBTC cree '
                           + 'au prealable sur viabtc.com. Utilisateur au format "votreIDViaBTC.worker", '
                           + 'pas votre adresse BTC seule.' },
-    'braiins-pool': { host: 'stratum.braiins.com', port: 3333, mode: 'pool', compte: true,
+    'braiins-pool': { host: 'stratum.braiins.com', port: 3333, mode: 'pool', compte: true, diffMin: 128,
                       note: 'Repartition auto (FPPS) -- necessite un compte cree au prealable sur '
                           + 'pool.braiins.com. Utilisateur au format "votrePseudoBraiins.worker", '
                           + 'pas votre adresse BTC seule.' },
@@ -929,31 +930,42 @@ function main() {
   const threads = Math.max(1, parseInt(args.threads || process.env.THREADS || String(Math.max(1, coreCount - 1)), 10));
   const dashPort = parseInt(args.port || process.env.DASH_PORT || '1337', 10);
   const ouvertLan = !!(args.lan || process.env.AXECUBE_LAN);
-  const leaderboardUrl = (typeof args.leaderboard === 'string' ? args.leaderboard : process.env.AXECUBE_LEADERBOARD) || '';
+  const CLASSEMENT_PAR_DEFAUT = 'https://axecube-leaderboard.netlify.app';
+  const leaderboardDesactive = !!(args['no-leaderboard'] || process.env.AXECUBE_NO_LEADERBOARD);
+  const leaderboardUrl = leaderboardDesactive ? '' :
+    ((typeof args.leaderboard === 'string' ? args.leaderboard : process.env.AXECUBE_LEADERBOARD) || CLASSEMENT_PAR_DEFAUT);
   const jeton = ouvertLan ? crypto.randomBytes(12).toString('hex') : null;
 
-  // Nom de worker : explicite (--worker) sinon, si un classement communautaire est
-  // configuré, on demande un nom unique auto-attribué (axecube001, 002...) au serveur.
-  // Sinon repli sur 'web'. L'appel est synchrone (via curl) pour ne pas transformer
-  // tout le reste du démarrage en code asynchrone.
-  let workerName = args.worker || process.env.WORKER || '';
-  if (!workerName && leaderboardUrl) {
+  // Identité machine : une empreinte tirée du matériel/OS, jamais stockée dans un fichier
+  // qu'on pourrait copier d'une machine à l'autre par erreur (contrairement au nom de
+  // worker, qui lui vit dans .axecube-config et peut être recopié par inadvertance).
+  // Sert uniquement à distinguer deux machines physiques sur le classement — n'a aucun
+  // rapport avec le nom affiché.
+  function obtenirIdentiteMachine() {
+    const { execFileSync } = require('child_process');
+    let brut = '';
     try {
-      const base = leaderboardUrl.endsWith('/') ? leaderboardUrl.slice(0, -1) : leaderboardUrl;
-      const { execFileSync } = require('child_process');
-      const sortie = execFileSync('curl', ['-s', '-m', '4', '-X', 'POST', base + '/register'],
-        { timeout: 5000 }).toString('utf8');
-      const j = JSON.parse(sortie);
-      if (j && j.nom) {
-        workerName = j.nom;
-        console.log(`🏷️  Nom de mineur attribué automatiquement : ${workerName} (mineur n°${j.total} sur AXECUBE)`);
+      if (process.platform === 'darwin') {
+        const sortie = execFileSync('ioreg', ['-rd1', '-c', 'IOPlatformExpertDevice'], { timeout: 3000 }).toString('utf8');
+        const m = sortie.match(/"IOPlatformUUID"\s*=\s*"([^"]+)"/);
+        if (m) brut = m[1];
+      } else if (process.platform === 'win32') {
+        const sortie = execFileSync('powershell', ['-NoProfile', '-Command', '(Get-CimInstance Win32_ComputerSystemProduct).UUID'], { timeout: 4000 }).toString('utf8');
+        brut = sortie.trim();
+      } else {
+        brut = fs.readFileSync('/etc/machine-id', 'utf8').trim();
       }
-    } catch { /* service injoignable : repli silencieux sur 'web' */ }
+    } catch { /* commande indisponible : repli ci-dessous */ }
+    if (!brut) brut = `${os.hostname()}|${(os.cpus()[0] || {}).model || ''}|${os.totalmem()}`;
+    return crypto.createHash('sha256').update(brut).digest('hex').slice(0, 12);
   }
-  if (!workerName) workerName = 'web';
+  const machineId = obtenirIdentiteMachine();
+
+  let workerName = args.worker || process.env.WORKER || '';
+  if (!workerName) workerName = `mineur-${machineId.slice(0, 6)}`;
   const poolPassword = args.password || process.env.POOL_PASSWORD || 'x';
   const user = `${address}.${workerName}`;
-  const poolLabel = poolHost;
+  let poolLabel = poolHost;
 
   /* ------------------------------ État global ----------------------------- */
   const state = {
@@ -969,6 +981,7 @@ function main() {
     accepted: 0,
     rejected: 0,
     bestDiff: 0,
+    recordExterne: 0, // meilleure diff vue sur le pool, non prouvable localement -- affichage seulement
     engine: 'démarrage…',
     btcPrice: null, btcAt: 0,
     lastBlockAt: 0, netHashrate: 0,
@@ -1187,39 +1200,155 @@ function main() {
   setTimeout(majCours, 1500);
   setInterval(() => majCours(), 5 * 60 * 1000); // rafraîchi toutes les 5 minutes
 
-  /* -------------------- Reprise du record depuis le pool ------------------- */
-  // public-pool.io garde en mémoire ta meilleure difficulté même sans fichier local.
-  function reprendreRecordDuPool() {
-    if (reseau.symbole !== 'BTC' || !/public-pool\.io/i.test(poolHost)) return;
-    getJSON(`https://public-pool.io:40557/api/client/${address}`, (err, j) => {
-      if (err || !j) return;
-      let meilleur = 0;
-      if (Array.isArray(j.workers)) {
-        for (const w of j.workers) {
-          const d = parseFloat(w.bestDifficulty);
-          if (isFinite(d) && d > meilleur) meilleur = d;
-        }
-      }
-      const global = parseFloat(j.bestDifficulty);
-      if (isFinite(global) && global > meilleur) meilleur = global;
-      if (meilleur > state.bestDiff) {
-        state.bestDiff = meilleur;
-        stateDirty = true; saveState();
-        log('ok', t.recordRepris(formatDiff(meilleur)));
-      }
-    });
+  /* ---- Reprise du record & stats officielles, quel que soit le pool solo ---- */
+  // Chaque pool solo connu garde en mémoire la meilleure difficulté déjà soumise pour une
+  // adresse, même sans fichier local chez nous. On la resynchronise à chaque connexion (et
+  // reconnexion) au pool, pas seulement au démarrage — c'est ce endroit-là qui donne l'API
+  // à interroger pour le pool actuellement configuré. Braiins Solo ne propose rien
+  // d'équivalent en public sans compte : on ne tente rien pour ce pool-là.
+  function urlStatsExternes(host) {
+    if (/public-pool\.io/i.test(host)) return { type: 'publicpool', url: `https://public-pool.io:40557/api/client/${address}` };
+    if (/ckpool\.org/i.test(host)) return { type: 'ckpool', url: `https://solo.ckpool.org/users/${address}` };
+    if (/mineshop\.eu/i.test(host)) return { type: 'ckpool', url: `https://solo.mineshop.eu/api/miner.php?wallet=${encodeURIComponent(address)}` };
+    return null;
   }
-  setTimeout(reprendreRecordDuPool, 2500);
+  let statsExternesPool = null;
+  function synchroniserRecordEtStats() {
+    const cible = urlStatsExternes(poolHost || '');
+    if (!cible) { statsExternesPool = null; return; }
+    https.get(cible.url, { timeout: 5000 }, (res) => {
+      let data = '';
+      res.on('data', (d) => { data += d; });
+      res.on('end', () => {
+        if (res.statusCode < 200 || res.statusCode >= 300) {
+          log('warn', `⚠️ Reprise du record : ${cible.url} → HTTP ${res.statusCode}. Réponse : ${data.slice(0, 150).replace(/\s+/g, ' ')}`);
+          return;
+        }
+        try {
+          const j = JSON.parse(data);
+          let meilleur = 0;
+          if (cible.type === 'publicpool') {
+            if (Array.isArray(j.workers)) {
+              for (const w of j.workers) { const d = parseFloat(w.bestDifficulty); if (isFinite(d) && d > meilleur) meilleur = d; }
+            }
+            const global = parseFloat(j.bestDifficulty);
+            if (isFinite(global) && global > meilleur) meilleur = global;
+            const hrSomme = Array.isArray(j.workers) ? j.workers.reduce((a, w) => a + (parseFloat(w.hashRate) || 0), 0) : 0;
+            statsExternesPool = {
+              hashrate1hr: hrSomme ? formatHashrate(hrSomme) : null, shares: null,
+              bestshare: meilleur || null, workers: Array.isArray(j.workers) ? j.workers.length : null,
+              recu: Date.now(),
+            };
+          } else { // ckpool (couvre aussi Mineshop.eu, qui tourne le même logiciel)
+            // bestshare = valeur précise (ex. 362.9995...) ; bestever = version arrondie
+            // affichée dans leur UI (362). On garde la précise pour la comparaison locale.
+            meilleur = Number(j.bestshare) || Number(j.bestever) || 0;
+            statsExternesPool = {
+              hashrate1hr: j.hashrate1hr, hashrate1d: j.hashrate1d,
+              shares: j.shares, bestshare: meilleur || j.bestever, workers: j.workers,
+              recu: Date.now(),
+            };
+          }
+          if (!meilleur) {
+            log('warn', `⚠️ Reprise du record : réponse reçue de ${cible.url} mais aucun champ de difficulté reconnu (${Object.keys(j).slice(0, 8).join(', ')}).`);
+          }
+          // Important : on ne touche PAS à state.bestDiff ici -- cette valeur sert aussi à
+          // décider si une part minée localement est "un nouveau record" (et donc à
+          // soumettre au classement). Si on y mettait la valeur récupérée du pool (invérifiable
+          // localement), toute vraie part future avec une diff plus basse ne serait plus
+          // jamais reconnue comme record, même si elle est la seule qu'on peut prouver.
+          // On la garde donc à part, uniquement pour l'affichage et les paliers.
+          if (meilleur > state.recordExterne) {
+            state.recordExterne = meilleur;
+            stateDirty = true; saveState();
+            log('ok', t.recordRepris(formatDiff(meilleur)));
+            for (const p of PALIERS) {
+              if (meilleur >= p.seuil && !state.paliersAtteints[p.cle]) {
+                state.paliersAtteints[p.cle] = new Date().toISOString();
+                log('best', `🏅 Palier ${p.nom} débloqué !`);
+              }
+            }
+          }
+        } catch (e) {
+          log('warn', `⚠️ Reprise du record : réponse illisible depuis ${cible.url} (${data.slice(0, 150).replace(/\s+/g, ' ')})`);
+        }
+      });
+    }).on('error', (e) => { log('warn', `⚠️ Reprise du record : ${cible.url} injoignable (${e.code || e.message})`); })
+      .on('timeout', function () { this.destroy(); });
+  }
+  setTimeout(synchroniserRecordEtStats, 2500);
+  setInterval(synchroniserRecordEtStats, 60000);
+
+  // Ping périodique du classement, indépendant du navigateur : avant, seul un nouveau
+  // record déclenchait une soumission depuis ce process -- si personne ne gardait le
+  // dashboard ouvert dans un onglet (seul module à soumettre en continu via majLead()),
+  // le pool actuellement utilisé ne se rafraîchissait jamais côté classement, même si
+  // le mineur tournait depuis des heures sans battre son record. Silencieux (pas de log)
+  // car il est parfaitement normal qu'un ping périodique n'apporte pas de preuve nouvelle.
+  setInterval(() => soumettreRecordLeaderboard(false), 90000);
+
+  /* -------- Soumission immédiate au classement dès qu'un nouveau record apparaît -------- */
+  // Avant : seul le dashboard ouvert dans le navigateur soumettait (toutes les ~30s, et
+  // jamais si personne ne regarde). Maintenant c'est le process AXECUBE lui-même qui pousse,
+  // dès la détection, sans dépendre d'un onglet ouvert.
+  let dernierEnvoiRecord = 0;
+  function soumettreRecordLeaderboard(avecLog = true) {
+    if (!leaderboardUrl || leaderboardDesactive) return;
+    const maintenant = Date.now();
+    if (maintenant - dernierEnvoiRecord < 3000) return; // anti-rafale si plusieurs 'best' arrivent d'un coup
+    dernierEnvoiRecord = maintenant;
+    try {
+      const base = leaderboardUrl.endsWith('/') ? leaderboardUrl.slice(0, -1) : leaderboardUrl;
+      const payload = JSON.stringify({
+        worker: workerName, bestDiff: state.bestDiff, hashrate: state.hashrate, machineId, pool: poolLabel,
+        cpu: cpuModel, headerHex: state.bestProofHeader || null,
+      });
+      const urlObj = new URL(base + '/submit');
+      const req = https.request(urlObj, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) },
+        timeout: 5000,
+      }, (res) => {
+        let data = '';
+        res.on('data', (d) => { data += d; });
+        res.on('end', () => {
+          try {
+            const j = JSON.parse(data);
+            // On ne log que pour une vraie tentative de nouveau record (avecLog=true) --
+            // le ping périodique en arrière-plan ne signale jamais rien à l'écran, sans quoi
+            // ce message reviendrait toutes les 90s pour un mineur au record non prouvable.
+            if (avecLog && j && j.verifie === false) {
+              log('warn', `⚠️ Classement : record de ${formatDiff(state.bestDiff)} non retenu (${j.raison || 'raison inconnue'}). ` +
+                `Normal si ce record vient d'une reprise depuis le pool sans preuve locale — il repassera dès qu'AXECUBE le retrouvera lui-même.`);
+            }
+          } catch { /* réponse illisible, on ignore */ }
+        });
+      });
+      req.on('error', () => { /* leaderboard injoignable, on retentera au prochain record */ });
+      req.on('timeout', function () { this.destroy(); });
+      req.write(payload);
+      req.end();
+    } catch { /* ignore */ }
+  }
 
   /* --------------------- Persistance (record & compteurs) ------------------ */
   const STATE_FILE = path.join(__dirname, 'miner-state.json');
   let stateDirty = false;
+  // Au-delà de 30 minutes d'arrêt, le compteur de shares accepté/rejeté (qui ne sert qu'à
+  // voir "l'activité de cette session"), ainsi que le chrono UPTIME affiché, sont considérés
+  // comme une nouvelle session et repartent à zéro -- seul le record de difficulté (permanent)
+  // n'est jamais remis à zéro.
+  const SEUIL_REPRISE_MS = 1800e3; // 30 minutes
 
   // Chaque réseau (BTC, Fractal…) a sa propre mémoire : un record de 757 sur Bitcoin
   // n'a aucun sens affiché comme record Fractal, les échelles de difficulté diffèrent trop.
   let banques = {};
+  let dernierArretISO = null;
+  let dernierStartedAt = null;
   try {
     const saved = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+    dernierArretISO = saved.savedAt || null;
+    dernierStartedAt = typeof saved.startedAt === 'number' ? saved.startedAt : null;
     if (saved.reseaux && typeof saved.reseaux === 'object') {
       banques = saved.reseaux;
     } else if (typeof saved.bestDiff === 'number') {
@@ -1231,19 +1360,37 @@ function main() {
     }
   } catch { /* premier lancement : pas de fichier, c'est normal */ }
 
+  // Coupure depuis le dernier arrêt (crash, redémarrage manuel, mise à jour…). Réutilisée
+  // à la fois pour la reprise des shares (dans chargerBanque) et pour la reprise du chrono
+  // UPTIME juste en dessous : les deux partagent la même règle des 30 minutes.
+  const coupureDepuisArretMs = dernierArretISO ? (Date.now() - new Date(dernierArretISO).getTime()) : Infinity;
+
   function chargerBanque(cle) {
     const b = banques[cle] || {};
     state.bestDiff = b.bestDiff || 0;
-    state.accepted = b.accepted || 0;
-    state.rejected = b.rejected || 0;
+    state.bestProofHeader = b.bestProofHeader || null;
+    state.recordExterne = b.recordExterne || 0;
+    // Shares acceptés/rejetés : cumulés tant que la coupure entre deux lancements reste
+    // sous une heure (ex. redémarrage pour une mise à jour) -- au-delà, on considère que
+    // c'est une nouvelle session de minage et le compteur repart à zéro.
+    const coupureMs = coupureDepuisArretMs;
+    if (coupureMs <= SEUIL_REPRISE_MS) {
+      state.accepted = b.accepted || 0;
+      state.rejected = b.rejected || 0;
+    } else {
+      if (dernierArretISO) log('info', `Reprise après plus d'1h d'arrêt (${Math.round(coupureMs/3600e3*10)/10}h) — compteur de shares de cette session remis à zéro. Le record de difficulté, lui, reste conservé.`);
+      state.accepted = 0;
+      state.rejected = 0;
+    }
     state.totalHashes = b.totalHashes || 0;
     state.depuis = b.depuis || new Date().toISOString();
     state.paliersAtteints = b.paliersAtteints || {};
-    // Rattrapage : si un record préexistant dépasse déjà des paliers jamais enregistrés
-    // (ex. mise à jour depuis une version antérieure à cette fonctionnalité), on les
-    // marque atteints avec la date de premier lancement comme repère raisonnable.
+    // Rattrapage : si un record préexistant (prouvé ou récupéré du pool) dépasse déjà des
+    // paliers jamais enregistrés (ex. mise à jour depuis une version antérieure à cette
+    // fonctionnalité), on les marque atteints avec la date de premier lancement comme repère.
+    const meilleurConnu = Math.max(state.bestDiff, state.recordExterne);
     for (const p of PALIERS) {
-      if (state.bestDiff >= p.seuil && !state.paliersAtteints[p.cle]) {
+      if (meilleurConnu >= p.seuil && !state.paliersAtteints[p.cle]) {
         state.paliersAtteints[p.cle] = state.depuis;
       }
     }
@@ -1251,15 +1398,27 @@ function main() {
   chargerBanque(reseauCle);
   log('info', t.recordCharge(state.bestDiff > 0 ? formatDiff(state.bestDiff) : '—', state.accepted, formatHashrate(state.totalHashes).replace('/s', '')));
 
+  // Reprise du chrono UPTIME : si l'arrêt précédent (crash, redémarrage, mise à jour) date
+  // de moins de 30 minutes, on repart avec l'horodatage d'origine plutôt que Date.now(),
+  // pour que le compteur affiché continue comme si de rien n'était plutôt que de retomber à 0.
+  if (coupureDepuisArretMs <= SEUIL_REPRISE_MS && typeof dernierStartedAt === 'number' && dernierStartedAt > 0) {
+    state.startedAt = dernierStartedAt;
+    state.startedReal = dernierStartedAt;
+    log('info', `⏱️ Chrono repris (coupure de ${Math.round(coupureDepuisArretMs / 1000)}s) — l'UPTIME continue depuis avant l'arrêt.`);
+  }
+
   function saveState() {
     banques[reseauCle] = {
-      bestDiff: state.bestDiff, accepted: state.accepted,
-      rejected: state.rejected, totalHashes: state.totalHashes,
+      bestDiff: state.bestDiff, bestProofHeader: state.bestProofHeader || null,
+      recordExterne: state.recordExterne || 0,
+      accepted: state.accepted, rejected: state.rejected,
+      totalHashes: state.totalHashes,
       depuis: state.depuis, paliersAtteints: state.paliersAtteints,
     };
     try {
       fs.writeFileSync(STATE_FILE, JSON.stringify({
         reseaux: banques,
+        startedAt: state.startedAt,
         savedAt: new Date().toISOString(),
       }, null, 2));
       stateDirty = false;
@@ -1332,6 +1491,7 @@ function main() {
           state.bestProofHeader = m.headerHex || null;
           stateDirty = true;
           if (m.diff >= 1) log('best', t.nouveauRecord(formatDiff(m.diff)));
+          soumettreRecordLeaderboard();
           for (const p of PALIERS) {
             if (m.diff >= p.seuil && !state.paliersAtteints[p.cle]) {
               state.paliersAtteints[p.cle] = new Date().toISOString();
@@ -1455,6 +1615,10 @@ function main() {
       perWorker.clear();
       state.threads = 0;
       state.actif = false;
+      state.hashrate = 0;
+      state.hashEvents = [];
+      state.hrParCoeurPic = 0;
+      state.throttle = 0;
       log('warn', '⏸ Minage mis en pause.');
     } else {
       state.actif = true;
@@ -1481,6 +1645,32 @@ function main() {
     if (socket && !socket.destroyed) socket.write(JSON.stringify(obj) + '\n');
   }
 
+  // Difficulté suggérée au pool : basse au départ (adaptée à du CPU, pas de l'ASIC), mais
+  // jamais en dessous du plancher connu du pool choisi (ex. 512 sur Braiins Solo, 10000 sur
+  // CKPool) -- inutile de suggérer plus bas, le pool l'ignorerait de toute façon. Ensuite,
+  // divisée par deux automatiquement si aucune part n'est acceptée pendant 4 minutes, sans
+  // jamais descendre sous ce plancher. Ça ne change rien aux vraies chances de trouver un
+  // bloc : ça ne dépend que de la difficulté réseau, jamais de la difficulté de part.
+  const DIFF_PLANCHER_POOL = (preset && preset.diffMin) || 1;
+  const DIFF_SUGGESTION_INITIALE = Math.max(16, DIFF_PLANCHER_POOL);
+  let diffSuggereeActuelle = DIFF_SUGGESTION_INITIALE;
+  let accepteesAuDernierControle = 0;
+  let minuteurAjustementDiff = null;
+  function demarrerAjustementDiff() {
+    diffSuggereeActuelle = DIFF_SUGGESTION_INITIALE;
+    accepteesAuDernierControle = state.accepted;
+    if (minuteurAjustementDiff) clearInterval(minuteurAjustementDiff);
+    minuteurAjustementDiff = setInterval(() => {
+      if (!state.connected) return;
+      if (state.accepted === accepteesAuDernierControle && diffSuggereeActuelle > DIFF_PLANCHER_POOL) {
+        diffSuggereeActuelle = Math.max(DIFF_PLANCHER_POOL, Math.floor(diffSuggereeActuelle / 2));
+        send({ id: ++msgId, method: 'mining.suggest_difficulty', params: [diffSuggereeActuelle] });
+        log('info', `⚙️ Aucune part acceptée depuis 4 min — nouvelle difficulté suggérée au pool : ${diffSuggereeActuelle}`);
+      }
+      accepteesAuDernierControle = state.accepted;
+    }, 4 * 60 * 1000);
+  }
+
   function submitShare(share) {
     if (!state.connected) { log('warn', t.sharePerdu); return; }
     const id = ++msgId;
@@ -1501,8 +1691,10 @@ function main() {
         const res = msg.result;
         extranonce1 = res[1];
         extranonce2Size = res[2];
-        // Demande une difficulté adaptée à un CPU (le pool peut refuser)
-        send({ id: ++msgId, method: 'mining.suggest_difficulty', params: [256] });
+        // Demande une difficulté adaptée à un CPU (le pool peut refuser), avec ajustement
+        // automatique à la baisse si aucune part n'arrive après quelques minutes.
+        send({ id: ++msgId, method: 'mining.suggest_difficulty', params: [DIFF_SUGGESTION_INITIALE] });
+        demarrerAjustementDiff();
         const id = ++msgId;
         pending.set(id, { type: 'authorize' });
         send({ id, method: 'mining.authorize', params: [user, poolPassword] });
@@ -1568,6 +1760,79 @@ function main() {
     }
   }
 
+  // Changement de pool à chaud, même principe que changerReseau : on garde le même record
+  // (bestDiff) puisque c'est le même réseau/difficulté, on change juste où on soumet les
+  // parts. Limité aux préréglages solo BTC connus -- passer à un pool "compte requis"
+  // (ViaBTC, Braiins Pool) nécessiterait un identifiant de compte, pas juste l'adresse.
+  // Persiste le choix dans .axecube-config (celui que le lanceur .command/.bat lit au
+  // démarrage) pour qu'un changement fait en direct survive à un redémarrage -- sans ça,
+  // relancer AXECUBE revenait toujours au pool d'origine choisi à la création.
+  function mettreAJourConfigPool(presetCle) {
+    try {
+      const cheminConf = path.join(__dirname, '.axecube-config');
+      let lignes = [];
+      try { lignes = fs.readFileSync(cheminConf, 'utf8').split('\n'); } catch { /* pas de config existante */ }
+      let trouve = false;
+      lignes = lignes.map((l) => {
+        if (/^POOLPRESET=/.test(l)) { trouve = true; return `POOLPRESET=${presetCle}`; }
+        return l;
+      }).filter((l) => l.trim() !== '');
+      if (!trouve) lignes.push(`POOLPRESET=${presetCle}`);
+      fs.writeFileSync(cheminConf, lignes.join('\n') + '\n');
+    } catch { /* pas de lanceur officiel utilisé, ou dossier non accessible en écriture : pas grave */ }
+  }
+
+  function changerPool(nouveauPreset) {
+    const p = PRESETS_POOL[nouveauPreset];
+    if (!p || p.compte || reseauCle !== 'btc') return false;
+    if (nouveauPreset === presetCle) return false; // déjà sur ce pool (presetCle = celui du lancement actuel)
+    mettreAJourConfigPool(nouveauPreset);
+    log('info', `🔀 Relance d'AXECUBE sur le pool ${nouveauPreset} (${p.host})…`);
+    saveState(); // on ne perd pas le record en cours
+
+    // On repart avec les mêmes arguments qu'au lancement, en remplaçant juste --pool-preset
+    // (et en retirant --pool s'il était utilisé, pour éviter un conflit entre les deux).
+    const argsActuels = process.argv.slice(2);
+    const nouveauxArgs = [];
+    for (let i = 0; i < argsActuels.length; i++) {
+      const a = argsActuels[i];
+      if (a === '--pool-preset' || a === '--pool') { i++; continue; }
+      nouveauxArgs.push(a);
+    }
+    nouveauxArgs.push('--pool-preset', nouveauPreset);
+
+    const { spawn } = require('child_process');
+    let dejaRelance = false;
+    function lancerEnfantEtQuitter() {
+      if (dejaRelance) return;
+      dejaRelance = true;
+      try {
+        const quote = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`;
+        const commande = `cd ${quote(__dirname)} && ${[process.execPath, __filename, ...nouveauxArgs].map(quote).join(' ')}`;
+        if (process.platform === 'darwin') {
+          // macOS : on demande à Terminal.app d'ouvrir une vraie fenêtre visible, comme au
+          // premier lancement -- sans ça la relance est invisible (process détaché muet).
+          const script = `tell application "Terminal" to do script "${commande.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+          spawn('osascript', ['-e', script], { detached: true, stdio: 'ignore' }).unref();
+        } else if (process.platform === 'win32') {
+          spawn('cmd.exe', ['/c', 'start', '""', 'cmd', '/k', process.execPath, __filename, ...nouveauxArgs],
+            { detached: true, stdio: 'ignore', cwd: __dirname }).unref();
+        } else {
+          // Linux : pas de terminal universel -- on garde un process détaché silencieux,
+          // avec les logs redirigés vers un fichier pour ne rien perdre.
+          const fdLog = fs.openSync(path.join(__dirname, 'axecube.log'), 'a');
+          spawn(process.execPath, [__filename, ...nouveauxArgs],
+            { detached: true, stdio: ['ignore', fdLog, fdLog], cwd: __dirname }).unref();
+        }
+      } catch (e) { log('warn', `Échec de la relance automatique : ${e.message}`); }
+      process.exit(0);
+    }
+    if (socket && !socket.destroyed) socket.destroy();
+    server.close(lancerEnfantEtQuitter);
+    setTimeout(lancerEnfantEtQuitter, 3000); // filet de sécurité si server.close tarde
+    return true;
+  }
+
   function changerReseau(cle) {
     if (!RESEAUX[cle] || cle === reseauCle) return false;
     log('info', t.changementReseau(RESEAUX[cle].label));
@@ -1603,6 +1868,9 @@ function main() {
       const id = ++msgId;
       pending.set(id, { type: 'subscribe' });
       send({ id, method: 'mining.subscribe', params: ['axecube/1.0'] });
+      // À chaque connexion (démarrage, reconnexion, changement de pool), on redemande
+      // au pool sa meilleure difficulté connue pour cette adresse.
+      setTimeout(synchroniserRecordEtStats, 2000);
     });
 
     socket.on('data', (chunk) => {
@@ -1656,6 +1924,9 @@ function main() {
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="AXECUBE">
 <meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="/manifest.json${jeton ? '?token=' + jeton : ''}">
+<link rel="icon" href="/icon.svg${jeton ? '?token=' + jeton : ''}" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icon.svg${jeton ? '?token=' + jeton : ''}">
 <title>AXECUBE</title>
 <style>
   :root{
@@ -1680,8 +1951,8 @@ function main() {
     .brand-logo{height:26px}
     .plate{padding:1px 2px 8px;gap:6px}
     .serial{font-size:8px;max-width:70px}
-    .btns{gap:5px}
-    .plate-right{gap:5px}
+    .btns{gap:3px}
+    .plate-right{gap:4px;padding-left:3px}
     .netbtn{min-width:44px;font-size:8px;padding:0 5px}
     .hero .hr{font-size:34px}
     canvas{height:32px}
@@ -1747,11 +2018,13 @@ function main() {
   .pip .pjack b{color:var(--amber)}
   .serial{font-size:9.5px;color:#7a8496;letter-spacing:.08em;white-space:nowrap;
           overflow:hidden;text-overflow:ellipsis;min-width:0}
-  .plate-right{display:flex;align-items:center;flex-wrap:wrap;justify-content:flex-end;
-               gap:8px;margin-left:auto;max-width:100%}
-  .btns{display:flex;align-items:center;gap:7px;flex:0 0 auto;
-        padding-left:12px;border-left:1px solid #262b35}
-  .netsel{display:flex;gap:4px;flex:0 0 auto}
+  .plate-right{display:flex;align-items:center;flex-wrap:nowrap;justify-content:flex-end;
+               gap:6px;margin-left:auto;max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;
+               scrollbar-width:none;padding-left:4px}
+  .plate-right::-webkit-scrollbar{display:none}
+  .btns{display:flex;align-items:center;gap:5px;flex:0 0 auto;
+        padding-left:8px;border-left:1px solid #262b35}
+  .netsel{display:flex;gap:3px;flex:0 0 auto}
   .netbtn{background:none;border:1px solid #333a47;color:#8a94a6;font-family:var(--mono);
           font-size:9px;letter-spacing:.06em;padding:0 8px;height:24px;min-width:52px;
           border-radius:6px;cursor:pointer;text-align:center}
@@ -1764,6 +2037,8 @@ function main() {
           padding:16px 14px 12px;color:var(--amber);position:relative}
   .screen::after{content:'';position:absolute;inset:0;pointer-events:none;border-radius:12px;
           background:repeating-linear-gradient(0deg,transparent 0 2px,rgba(0,0,0,.14) 2px 3px)}
+  .screenScroll{flex:1;display:flex;flex-direction:column;gap:12px;min-height:0;
+                overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch}
   .lbl{font-size:9px;letter-spacing:.28em;color:var(--white-dim)}
   .hero .hr{font-size:44px;font-weight:700;line-height:1.05;text-shadow:var(--glow);
             font-variant-numeric:tabular-nums;margin-top:4px}
@@ -1777,6 +2052,10 @@ function main() {
                font-variant-numeric:tabular-nums;display:flex;align-items:center;
                justify-content:center;gap:10px}
   .cup-big{font-size:26px;filter:drop-shadow(0 0 6px rgba(150,240,31,.5))}
+  .planete{font-size:20px;cursor:pointer;margin-left:6px;filter:drop-shadow(0 0 4px rgba(150,240,31,.4));
+           display:inline-block;animation:tournePlanete 12s linear infinite}
+  .planete:hover{filter:drop-shadow(0 0 8px rgba(150,240,31,.7))}
+  @keyframes tournePlanete{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
   /* Aperçu classement communautaire (top 3) */
   .badgeChip{display:flex;align-items:center;gap:8px;width:100%;margin:0 0 5px;padding:6px 10px;
              background:rgba(150,240,31,.06);border:1px solid var(--amber-faint);border-radius:8px;
@@ -1794,15 +2073,12 @@ function main() {
                         animation:popScale .5s cubic-bezier(.34,1.56,.64,1)}
   .palierImgWrap{position:relative;width:100%;max-width:260px;margin:0 auto}
   .palierImgWrap img{display:block}
-  .palierOverlayFond{position:absolute;left:54%;top:56%;width:26%;height:14%;
-                      background:rgba(8,7,6,.96);border-radius:2px}
-  .palierOverlayDiff{position:absolute;left:54%;top:56.5%;width:26%;text-align:center;
-                      font-size:15px;font-weight:800;color:#f2f4f8;line-height:2.0;
+  .palierRecordBandeau{margin-top:10px;padding:10px 14px;background:rgba(150,240,31,.06);
+                        border:1px solid var(--amber-faint);border-radius:10px;
+                        display:flex;align-items:center;justify-content:space-between}
+  .palierOverlayDiff{font-size:20px;font-weight:800;color:var(--amber);text-shadow:var(--glow);
                       font-variant-numeric:tabular-nums}
-  .palierOverlayDateFond{position:absolute;left:49%;top:67.5%;width:29%;height:9.5%;
-                          background:rgba(8,7,6,.96);border-radius:2px}
-  .palierOverlayDate{position:absolute;left:49%;top:68.5%;width:29%;text-align:center;
-                      font-size:6.5px;color:#c9cdd6;line-height:1.4;letter-spacing:.02em}
+  .palierOverlayDate{font-size:10px;color:var(--white-dim);letter-spacing:.03em}
   .palierPopupNext{margin-top:8px;font-size:9.5px;color:var(--white-dim);letter-spacing:.05em}
   @keyframes popScale{from{transform:scale(.6);opacity:0}to{transform:scale(1);opacity:1}}
   .palierPopupTitre{margin-top:14px;font-size:15px;font-weight:800;color:var(--amber);
@@ -1811,6 +2087,28 @@ function main() {
                       color:var(--amber);font-family:var(--mono);font-size:10px;
                       letter-spacing:.1em;padding:9px 18px;border-radius:8px;cursor:pointer}
   .palierPopupFermer:hover{border-color:var(--amber);background:rgba(150,240,31,.08)}
+  .donPopup{display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);
+            z-index:999;align-items:center;justify-content:center;padding:20px}
+  .donPopupCard{background:var(--chassis);border:1px solid var(--edge);border-radius:16px;
+                padding:24px;text-align:left;max-width:360px;max-height:88vh;overflow-y:auto;
+                box-shadow:0 20px 60px rgba(0,0,0,.8);animation:popScale .4s cubic-bezier(.34,1.56,.64,1)}
+  .donPopupTitre{font-size:16px;font-weight:800;color:var(--amber);text-shadow:var(--glow);
+                 margin-bottom:10px;display:flex;align-items:center;gap:8px}
+  .donPopupTexte{font-size:12.5px;color:var(--white-dim);line-height:1.6;margin-bottom:14px}
+  .donPopupAdresse{display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.04);
+                    border:1px solid var(--edge);border-radius:8px;padding:10px 12px;
+                    margin-bottom:14px;min-width:0}
+  .donPopupAdresse span{font-size:11px;color:var(--white);white-space:nowrap;overflow:hidden;
+                         text-overflow:ellipsis;min-width:0;flex:1 1 auto}
+  .donPopupAdresse button{flex:0 0 auto;background:none;border:1px solid var(--amber-faint);
+                           color:var(--amber);font-family:var(--mono);font-size:10px;
+                           padding:6px 10px;border-radius:6px;cursor:pointer}
+  .donPopupAdresse button:hover{border-color:var(--amber);background:rgba(150,240,31,.08)}
+  .donPopupActions{display:flex;gap:8px;justify-content:flex-end}
+  .donPopupFermer{background:none;border:1px solid var(--edge);color:var(--white-dim);
+                   font-family:var(--mono);font-size:10px;letter-spacing:.05em;
+                   padding:9px 16px;border-radius:8px;cursor:pointer}
+  .donPopupFermer:hover{border-color:var(--white-dim)}
   .leadPreview{padding:8px 0 6px;border-bottom:1px dashed rgba(150,240,31,.3)}
   .leadPreview .lbl{text-align:center}
   .lp-list{display:flex;flex-direction:column;gap:4px;margin-top:6px;font-size:11px}
@@ -1864,11 +2162,36 @@ function main() {
   .console .err{color:#ff6a78}
   
   .foot{text-align:center;padding-top:9px;font-size:8.5px;letter-spacing:.3em;color:#626c7e}
+  .device.pip-actif{display:none}
+  .pip-placeholder{display:none;max-width:380px;margin:60px auto;text-align:center;
+                    font-family:var(--mono);color:var(--white-dim);padding:24px}
+  .pip-placeholder b{color:var(--amber)}
+  .pip-placeholder button{margin-top:16px;background:none;border:1px solid var(--amber-faint);
+                           color:var(--amber);font-family:var(--mono);font-size:11px;
+                           padding:9px 18px;border-radius:8px;cursor:pointer}
+  .pip-placeholder button:hover{border-color:var(--amber);background:rgba(150,240,31,.08)}
   @media(prefers-reduced-motion:no-preference){
     .led.on{animation:pulse 3s ease-in-out infinite}
     @keyframes pulse{50%{box-shadow:0 0 12px var(--led-ok)}}
   }
+  .don-btn{color:#ff4d6a;border-color:rgba(255,77,106,.35)}
+  .don-btn:hover{border-color:#ff4d6a;background:rgba(255,77,106,.1)}
+  @media(prefers-reduced-motion:no-preference){
+    .don-btn{animation:donbeat 1.8s ease-in-out infinite}
+    @keyframes donbeat{
+      0%,100%{transform:scale(1)}
+      14%{transform:scale(1.28)}
+      28%{transform:scale(1)}
+      42%{transform:scale(1.2)}
+      56%{transform:scale(1)}
+    }
+  }
 </style></head><body>
+<div id="pipPlaceholder" class="pip-placeholder">
+  💚 Le panneau flottant est actif.<br>
+  Il continue de tourner même si tu fermes ou mets de côté cette fenêtre.<br>
+  <button onclick="fermerModeMini()">Revenir au dashboard complet</button>
+</div>
 <div class="device">
   <div class="plate">
     <div class="led" id="led"></div>
@@ -1881,6 +2204,7 @@ function main() {
     </div>
     <div class="plate-right">
       <div class="netsel" id="netsel"></div>
+      <button class="mini-btn don-btn" onclick="ouvrirPopupDon()" title="Soutenir le projet">❤️</button>
       <div class="btns">
         <button class="mini-btn" id="pausebtn" onclick="basculerMinage()" title="Mettre en pause / reprendre le minage">⏸</button>
         <button class="mini-btn" id="detailsbtn" onclick="location.href='/details'+Q" title="${t.ui.details}">☰</button>
@@ -1902,7 +2226,7 @@ function main() {
     <canvas id="spark" width="360" height="44"></canvas>
     <div class="record">
       <div class="lbl">${t.ui.record}</div>
-      <div class="val"><span id="best">—</span><span class="cup-big">🏆</span></div>
+      <div class="val"><span id="best">—</span><span class="cup-big">🏆</span><span class="planete" id="planeteBtn" onclick="location.href='/details'+Q+'#classement'" title="Voir le classement communautaire" style="display:none">🌍</span></div>
     </div>
     <button class="badgeChip" id="badgeChip" style="display:none" onclick="ouvrirPopupPalier(PALIERS_CLIENT[dernierPalierIdx],true)">
       <span id="badgeChipIcone">🥉</span>
@@ -1913,6 +2237,7 @@ function main() {
       <div class="lbl">🏆 TOP 3 AXECUBE <span id="lp_moi" style="color:var(--amber-dim);font-weight:normal"></span></div>
       <div id="lp_list" class="lp-list"></div>
     </div>
+    <div class="screenScroll">
     <div class="rows">
       <div class="row"><span class="k">${t.ui.shares}</span>
         <span class="v"><span id="acc">0</span> <span class="dim">${t.ui.acceptes} ·</span> <span id="rej">0</span> <span class="dim">${t.ui.rejetes}</span></span></div>
@@ -1923,6 +2248,18 @@ function main() {
         <span class="v"><span id="pdiff">—</span> <span class="dim">${t.ui.poolMot} ·</span> <span id="ndiff">—</span> <span class="dim">${t.ui.reseauMot}</span></span></div>
       <div class="row"><span class="k">POOL</span>
         <span class="v" id="poolNom" style="font-size:11px">—</span></div>
+      <div class="row" style="margin-top:-4px" id="poolAdapteLigne">
+        <span class="k" style="opacity:0"></span>
+        <span class="v" id="poolAdapte" style="font-size:9px;font-weight:normal"></span></div>
+      <div class="row" style="margin-top:-4px">
+        <span class="k" style="opacity:0"></span>
+        <span class="v" style="font-size:9px;font-weight:normal">
+          <a id="poolStatsLien" href="#" target="_blank" rel="noopener"
+             style="color:var(--amber-dim);text-decoration:none;display:none">🔗 Voir mes stats sur le pool ›</a>
+        </span></div>
+      <div class="row" id="statsPoolLigne" style="display:none;margin-top:-2px">
+        <span class="k" style="opacity:0"></span>
+        <span class="v" id="statsPoolTexte" style="font-size:9px;color:var(--white-dim);font-weight:normal"></span></div>
       <div class="row"><span class="k">${t.ui.bloc}</span>
         <span class="v"><span id="height">—</span> <span class="dim" id="blockage"></span></span></div>
       <div class="row"><span class="k">${t.ui.reseau}</span>
@@ -1947,6 +2284,13 @@ function main() {
     <div class="odds" id="odds">${t.ui.calibrage}</div>
     <div class="odds" id="avisFractal" style="display:none;color:#ffd166"></div>
     <div class="console" id="console"><div class="conin" id="conin"></div></div>
+    <a id="classementBandeau" href="#" onclick="location.href='/details'+Q;return false"
+       style="display:none;text-align:center;padding:10px;margin-top:8px;
+       border:1px solid var(--amber-faint);border-radius:8px;text-decoration:none;
+       color:var(--amber);font-size:11px;background:rgba(150,240,31,.05)">
+       🏆 Voir le classement communautaire complet ›
+    </a>
+    </div>
   </div>
   <div class="foot">${t.ui.pied}</div>
 </div>
@@ -1954,9 +2298,9 @@ function main() {
   <div class="palierPopupCard">
     <div class="palierImgWrap">
       <img id="palierPopupImg" src="" alt="">
-      <div class="palierOverlayFond" id="palierOverlayFond"></div>
+    </div>
+    <div class="palierRecordBandeau">
       <div class="palierOverlayDiff" id="palierOverlayDiff">—</div>
-      <div class="palierOverlayDateFond"></div>
       <div class="palierOverlayDate" id="palierOverlayDate"></div>
     </div>
     <div class="palierPopupTitre" id="palierPopupTitre"></div>
@@ -1964,11 +2308,34 @@ function main() {
     <button class="palierPopupFermer" onclick="fermerPopupPalier()">Continuer le minage</button>
   </div>
 </div>
+<div id="donPopup" class="donPopup" onclick="if(event.target===this)fermerPopupDon()">
+  <div class="donPopupCard">
+    <div class="donPopupTitre">💚 Soutenir AXECUBE</div>
+    <div class="donPopupTexte">
+      AXECUBE est gratuit, sans publicité, et le restera toujours. Si ce petit mineur t'a
+      fait sourire — un nouveau record, un badge débloqué, le frisson du tirage — c'est tout
+      ce qu'on lui demandait. Un don libre (même minime) aide simplement à financer le temps
+      passé à le construire et à l'améliorer. Et qui sait — peut-être qu'un jour, ce sera
+      <b style="color:var(--amber)">toi</b> qui décroches le bloc entier et ses ~3,125 BTC.
+      Aucune obligation, aucune pression : juste une porte ouverte pour ceux qui veulent dire
+      merci autrement qu'en mots. Pensez à nous 🙂
+    </div>
+    <div class="donPopupAdresse"><span id="donPopupAdr" title="${DON_BTC_ADRESSE}">${DON_BTC_ADRESSE}</span>
+      <button onclick="navigator.clipboard.writeText(${JSON.stringify(DON_BTC_ADRESSE)});this.textContent='✓ copié'">copier</button>
+    </div>
+    <div class="donPopupActions">
+      <button class="donPopupFermer" onclick="location.href='/soutenir'+Q" style="color:var(--amber);border-color:var(--amber-faint)">en savoir plus ›</button>
+      <button class="donPopupFermer" onclick="fermerPopupDon()">Fermer</button>
+    </div>
+  </div>
+</div>
 <canvas id="cardcanvas" width="1200" height="675"></canvas>
 <div style="display:none">
 </div>
 <script>
 const L=${JSON.stringify(t.ui)};const TOK=${JSON.stringify(jeton || '')};const Q=TOK?('?token='+TOK):'';
+function ouvrirPopupDon(){document.getElementById('donPopup').style.display='flex';}
+function fermerPopupDon(){document.getElementById('donPopup').style.display='none';}
 const LEADER_URL=${JSON.stringify(leaderboardUrl || '')};
 const hist=[];let curThreads=0,maxThreads=1;let pipWin=null,pipDoc=null;let changementEnCours=false;
 let adresseCourante='',lanCourant=null;
@@ -2126,7 +2493,7 @@ const PIP_HTML='<div class="pip">'+
   '<div class="pjack" id="p_jack"></div>'+
   '</div>';
 async function modeMini(){
-  if(pipWin){pipWin.close();return;}
+  if(pipWin){fermerModeMini();return;}
   if(!window.documentPictureInPicture){
     document.body.classList.toggle('compact');
     alert(L.pipSafari);
@@ -2140,9 +2507,21 @@ async function modeMini(){
     pipDoc.title='AXECUBE';
     pipDoc.body.style.margin='0';pipDoc.body.style.background='#05070a';
     pipDoc.body.innerHTML=PIP_HTML;
-    pipWin.addEventListener('pagehide',()=>{pipWin=null;pipDoc=null;});
+    pipWin.addEventListener('pagehide',()=>{pipWin=null;pipDoc=null;basculerAffichagePip(false);});
+    basculerAffichagePip(true);
     tick();
   }catch(e){pipWin=null;}
+}
+function fermerModeMini(){
+  if(pipWin){pipWin.close();}
+  pipWin=null;pipDoc=null;
+  basculerAffichagePip(false);
+}
+function basculerAffichagePip(actif){
+  const dev=document.querySelector('.device');
+  const ph=document.getElementById('pipPlaceholder');
+  if(dev) dev.classList.toggle('pip-actif',actif);
+  if(ph) ph.style.display=actif?'block':'none';
 }
 function majPip(s){
   if(!pipDoc)return;
@@ -2196,13 +2575,15 @@ function spark(){const c=document.getElementById('spark'),x=c.getContext('2d');
 let leadTick=0;
 async function majLead(s){
   const box=document.getElementById('leadPreview');
+  document.getElementById('planeteBtn').style.display=LEADER_URL?'inline-block':'none';
+  document.getElementById('classementBandeau').style.display=LEADER_URL?'block':'none';
   if(!LEADER_URL||!s){box.style.display='none';return;}
   leadTick++;
   if(leadTick%15!==1)return; // ~30s (tick toutes les 2s)
   try{
     const base=LEADER_URL.endsWith('/')?LEADER_URL.slice(0,-1):LEADER_URL;
     fetch(base+'/submit',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({worker:s.user,bestDiff:s.bestDiff,hashrate:s.hashrate,cpu:s.cpuModel,
+      body:JSON.stringify({worker:s.worker,bestDiff:s.bestDiff,hashrate:s.hashrate,cpu:s.cpuModel,machineId:s.machineId,pool:s.pool,
                             headerHex:s.bestProofHeader||null})}).catch(()=>{});
     const j=await(await fetch(base+'/top')).json();
     const list=(j.top||j||[]).slice(0,3);
@@ -2210,9 +2591,10 @@ async function majLead(s){
     box.style.display='';
     const medailles=['🥇','🥈','🥉'];
     document.getElementById('lp_list').innerHTML=list.map((e,i)=>
-      '<div class="lp-row'+(e.worker===s.user?' me':'')+'"><span class="lp-who">'+medailles[i]+' '+
-      (e.worker||'anon')+'</span><b>'+fmtD(e.bestDiff)+'</b></div>').join('');
-    const monRang=(j.top||j||[]).findIndex(e=>e.worker===s.user)+1;
+      '<div class="lp-row'+(e.worker===s.worker?' me':'')+'"><span class="lp-who">'+medailles[i]+' '+
+      (e.worker||'anon')+(e.poolRecord?' <span style="color:var(--mut);font-size:10px">('+e.poolRecord+')</span>':'')+
+      '</span><b>'+fmtD(e.bestDiff)+'</b></div>').join('');
+    const monRang=(j.top||j||[]).findIndex(e=>e.worker===s.worker)+1;
     document.getElementById('lp_moi').textContent=monRang>3?('· vous êtes '+monRang+'ᵉ'):'';
   }catch(e){box.style.display='none';}
 }
@@ -2233,7 +2615,8 @@ let dernierPalierIdx=null,dernierStats=null;
 function majBadge(s){
   dernierStats=s;
   const chip=document.getElementById('badgeChip');
-  const idx=palierPour(s.bestDiff);
+  const meilleurAffiche=Math.max(s.bestDiff||0, s.recordExterne||0);
+  const idx=palierPour(meilleurAffiche);
   if(idx<0){chip.style.display='none';return;}
   const p=PALIERS_CLIENT[idx];
   chip.style.display='';
@@ -2247,7 +2630,7 @@ function ouvrirPopupPalier(p,manuel){
   const s=dernierStats||{};
   document.getElementById('palierPopupImg').src='/badges/'+p.cle+'.png'+Q;
   document.getElementById('palierPopupTitre').textContent=manuel?('Palier '+p.nom):('Palier '+p.nom+' débloqué !');
-  document.getElementById('palierOverlayDiff').textContent=fmtD(s.bestDiff||0);
+  document.getElementById('palierOverlayDiff').textContent=fmtD(Math.max(s.bestDiff||0,s.recordExterne||0));
   const dateISO=(s.paliersAtteints||{})[p.cle];
   document.getElementById('palierOverlayDate').textContent=dateISO
     ? new Date(dateISO).toLocaleDateString('fr-FR').toUpperCase() : '';
@@ -2290,17 +2673,46 @@ async function tick(){try{
   const mx=Math.max(...s.perThread.map(t=>t.rate),1);
   document.getElementById('cores').innerHTML=s.perThread.map(t=>
     '<i style="height:'+Math.max(8,Math.round(t.rate/mx*100))+'%" title="T'+t.id+' '+fmtHR(t.rate)+'"></i>').join('');
-  document.getElementById('best').textContent=fmtD(s.bestDiff);
+  document.getElementById('best').textContent=fmtD(Math.max(s.bestDiff||0,s.recordExterne||0));
   majBadge(s);
   document.getElementById('acc').textContent=s.accepted;
   document.getElementById('rej').textContent=s.rejected;
   const depuisEl=document.getElementById('depuis');
-  if(depuisEl&&s.depuis){
-    const d=new Date(s.depuis);
-    depuisEl.textContent='cumul depuis le '+d.toLocaleDateString('fr-FR');
+  if(depuisEl){
+    depuisEl.textContent='depuis ce lancement';
   }
   document.getElementById('pdiff').textContent=fmtD(s.poolDiff);
   document.getElementById('poolNom').textContent=s.pool||'—';
+  {
+    // Explique en une phrase simple pourquoi les shares sont fréquents ou rares : la
+    // difficulté imposée par le pool compte bien plus que le hashrate lui-même pour ça.
+    const pa=document.getElementById('poolAdapte'), d=s.poolDiff||0;
+    if(!d){ pa.textContent=''; }
+    else if(d<=10){ pa.style.color='var(--amber)'; pa.textContent='🟢 Difficulté adaptée à un CPU — shares fréquents attendus.'; }
+    else if(d<=200){ pa.style.color='#e8b64a'; pa.textContent='🟡 Difficulté moyenne — shares plus espacés, c\\'est normal en CPU.'; }
+    else { pa.style.color='#ff5d5d'; pa.textContent='🔴 Difficulté élevée (pensée pour de l\\'ASIC) — shares rares en CPU. Un pool comme public-pool.io serait plus adapté.'; }
+  }
+  {
+    const lienEl=document.getElementById('poolStatsLien');
+    const host=(s.pool||'').split(':')[0];
+    const adr=(s.user||'').split('.')[0];
+    let url=null;
+    if(host.includes('ckpool.org')) url='https://solo.ckpool.org/users/'+adr;
+    else if(host.includes('mineshop.eu')) url='https://solo.mineshop.eu/miner/?wallet='+adr;
+    else if(host.includes('public-pool.io')) url='https://web.public-pool.io/';
+    else if(host.includes('braiins.com')) url='https://pool.braiins.com/';
+    if(url&&adr){lienEl.href=url;lienEl.style.display='inline';}
+    else{lienEl.style.display='none';}
+  }
+  {
+    const ligne=document.getElementById('statsPoolLigne');
+    const texte=document.getElementById('statsPoolTexte');
+    if(s.statsExternesPool){
+      const p=s.statsExternesPool;
+      texte.textContent='Pool officiel : '+(p.hashrate1hr||'—')+' (1h) · '+(p.shares!=null?p.shares:'—')+' shares · meilleure '+(p.bestshare!=null?Number(p.bestshare).toFixed(1):'—');
+      ligne.style.display='';
+    } else { ligne.style.display='none'; }
+  }
   document.getElementById('ndiff').textContent=fmtD(s.netDiff);
   document.getElementById('height').textContent=s.blockHeight?s.blockHeight.toLocaleString('fr-FR'):'—';
   lastBlockAt=s.lastBlockAt||0;
@@ -2360,6 +2772,7 @@ async function tick(){try{
   derniereStat=s;surveiller(s);
   majLead(s);
   majPip(s);
+  if(hist.length===0 && s.histHash && s.histHash.length) hist.push(...s.histHash);
   hist.push(s.hashrate);if(hist.length>50)hist.shift();spark();
   const box=document.getElementById('console'),cin=document.getElementById('conin');
   const enBas=box.scrollHeight-box.scrollTop-box.clientHeight<12;
@@ -2635,7 +3048,7 @@ setInterval(tick,2000);tick();
 <h2 id="h_perf">PERFORMANCE</h2>
 <div class="grid">
   <div class="card"><div class="k" id="k_hr">TAUX DE HASH</div><div class="v big" id="d_hr">—</div><div class="sub" id="d_hrsub"></div></div>
-  <div class="card"><div class="k" id="k_rec">RECORD</div><div class="v big" id="d_rec">—</div></div>
+  <div class="card"><div class="k" id="k_rec">RECORD</div><div class="v big" id="d_rec">—</div><div class="k" id="d_recsub" style="margin-top:2px"></div></div>
   <div class="card"><div class="k" id="k_sh">SHARES</div><div class="v" id="d_sh">—</div><div class="sub" id="d_shsub"></div></div>
   <div class="card"><div class="k" id="k_thr">THERMIQUE</div><div class="v" id="d_thr">—</div></div>
   <div class="card"><div class="k" id="k_tot">TICKETS JOUÉS</div><div class="v" id="d_tot">—</div></div>
@@ -2658,10 +3071,22 @@ setInterval(tick,2000);tick();
 <div class="grid" id="g_pay"></div>
 
 <h2 id="h_workers">MES MACHINES SUR LE POOL <span id="w_via" style="font-size:9px;color:var(--mut)"></span></h2>
+<div style="margin-bottom:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+  <span style="font-size:10px;color:var(--mut)">CHANGER DE POOL :</span>
+  <select id="sel_pool" style="background:var(--bg2);color:var(--fg);border:1px solid var(--line);border-radius:8px;
+    padding:5px 8px;font-family:inherit;font-size:11px">
+    <option value="">— choisir —</option>
+    <option value="solopool">public-pool.io — 🟢 Idéal CPU</option>
+    <option value="mineshop-solo">Mineshop.eu — 🟡 Correct, shares moyens</option>
+    <option value="braiins-solo">Braiins Solo — 🟠 Shares rares en CPU</option>
+    <option value="ckpool">CKPool — 🔴 Pensé pour ASIC</option>
+  </select>
+</div>
+<div id="poolNote" style="font-size:10px;color:var(--white-dim);margin-bottom:10px;max-width:480px"></div>
 <div id="poolLinks" style="display:none;margin-bottom:10px;gap:8px;flex-wrap:wrap"></div>
 <div class="card full"><div id="d_workers" class="loading">Interrogation du pool…</div></div>
 
-<h2 id="h_leader">CLASSEMENT AXECUBE <span id="l_via" style="font-size:9px;color:var(--mut)"></span></h2>
+<h2 id="h_leader">CLASSEMENT AXECUBE <a id="l_via" href="#" target="_blank" rel="noopener" style="font-size:9px;color:var(--amber-dim);text-decoration:none"></a></h2>
 <div class="card full"><div id="d_leader" class="loading">—</div></div>
 
 <div class="foot" id="foot"></div>
@@ -2702,11 +3127,14 @@ async function charger(){
   // Performance
   document.getElementById('d_hr').textContent=fmtHR(d.perf.hashrate);
   document.getElementById('d_hrsub').textContent=d.machine.cpu+' · '+(d.moteur.variante||d.moteur.nom);
-  document.getElementById('d_rec').textContent=fmtD(d.loterie.bestDiff);
+  const meilleurAffiche=Math.max(d.loterie.bestDiff||0, d.loterie.recordExterne||0);
+  document.getElementById('d_rec').textContent=fmtD(meilleurAffiche);
+  document.getElementById('d_recsub').textContent=
+    (d.loterie.recordExterne>d.loterie.bestDiff)
+      ? 'vu sur le pool, pas encore prouvé localement'
+      : '';
   document.getElementById('d_sh').innerHTML=d.loterie.accepted+' <span style="color:var(--mut);font-size:12px">acc.</span> · '+d.loterie.rejected+' <span style="color:var(--mut);font-size:12px">rej.</span>';
-  if(d.loterie.depuis){
-    document.getElementById('d_shsub').textContent='cumul depuis le '+new Date(d.loterie.depuis).toLocaleDateString('fr-FR');
-  }
+  document.getElementById('d_shsub').textContent='depuis ce lancement';
   const thr=Math.round((d.perf.throttle||0)*100);
   document.getElementById('d_thr').innerHTML=thr>2?('−'+thr+'%'):'<span style="color:var(--amber)">nominal</span>';
   document.getElementById('d_tot').textContent=fmtHR(d.perf.totalHashes).replace('/s','');
@@ -2751,13 +3179,36 @@ async function charger(){
   // Workers du pool (appel direct navigateur → API public-pool)
   chargerWorkers(d);
   chargerLeader(d);
+  const HOTE_VERS_PRESET={'public-pool.io':'solopool','solo.stratum.braiins.com':'braiins-solo',
+    'solo.ckpool.org':'ckpool','stratum-de.solo.mineshop.eu':'mineshop-solo'};
+  const selPool=document.getElementById('sel_pool');
+  const cleActuelle=HOTE_VERS_PRESET[d.pool.hote]||'';
+  if(selPool && document.activeElement!==selPool){ selPool.value=cleActuelle; afficherNotePool(cleActuelle); }
+}
+const NOTES_POOL={
+  solopool:{c:'var(--amber)',t:'🟢 Difficulté minimale de 1, ajustée automatiquement à votre hashrate (vardiff) -- '
+    +'le plus adapté pour un CPU, vous verrez des shares régulièrement.'},
+  'mineshop-solo':{c:'#e8b64a',t:'🟡 Difficulté minimale de 100 imposée par le pool -- shares moins fréquents que sur '
+    +'public-pool.io, mais tout à fait normal.'},
+  'braiins-solo':{c:'#e8a64a',t:'🟠 Difficulté minimale de 512 imposée par le pool -- les shares seront rares avec '
+    +'un hashrate CPU.'},
+  ckpool:{c:'#ff5d5d',t:'🔴 Difficulté minimale de 10 000 -- ce pool cible les machines ASIC. À hashrate CPU, vos '
+    +'shares resteront probablement invisibles la plupart du temps.'},
+};
+function afficherNotePool(cle){
+  const el=document.getElementById('poolNote'); if(!el)return;
+  const n=NOTES_POOL[cle];
+  if(!n){ el.textContent=''; return; }
+  el.style.color=n.c; el.textContent=n.t;
 }
 async function chargerWorkers(d){
   const box=document.getElementById('d_workers');
-  const m=/public-pool\\.io/i.test(d.pool.nom);
-  document.getElementById('w_via').textContent=m?'(via public-pool.io)':'';
+  const hote=d.pool.hote||'';
+  const estPublicPool=/public-pool\\.io/i.test(hote);
+  const estMineshop=/mineshop\\.eu/i.test(hote);
+  document.getElementById('w_via').textContent=estPublicPool?'(via public-pool.io)':estMineshop?'(via mineshop.eu)':'';
   const liens=document.getElementById('poolLinks');
-  if(m){
+  if(estPublicPool){
     liens.style.display='flex';
     liens.innerHTML=
       '<a href="https://web.public-pool.io/#/app/'+d.adresse+'" target="_blank" rel="noopener" '+
@@ -2766,36 +3217,67 @@ async function chargerWorkers(d){
       '<a href="https://public-pool.io:40557/api/client/'+d.adresse+'" target="_blank" rel="noopener" '+
       'style="font-size:11px;color:var(--white-dim);border:1px solid var(--line);padding:6px 12px;'+
       'border-radius:8px;text-decoration:none">{ } Données brutes (JSON) ↗</a>';
+  } else if(estMineshop){
+    liens.style.display='flex';
+    liens.innerHTML=
+      '<a href="https://solo.mineshop.eu/miner/?wallet='+d.adresse+'" target="_blank" rel="noopener" '+
+      'style="font-size:11px;color:var(--amber);border:1px solid rgba(150,240,31,.3);padding:6px 12px;'+
+      'border-radius:8px;text-decoration:none">📊 Voir sur mineshop.eu ↗</a>'+
+      '<a href="https://solo.mineshop.eu/api/miner.php?wallet='+d.adresse+'" target="_blank" rel="noopener" '+
+      'style="font-size:11px;color:var(--white-dim);border:1px solid var(--line);padding:6px 12px;'+
+      'border-radius:8px;text-decoration:none">{ } Données brutes (JSON) ↗</a>';
   } else liens.style.display='none';
-  if(!m){box.innerHTML='<span style="color:var(--mut)">Disponible uniquement sur public-pool.io.</span>';return;}
+  if(!estPublicPool && !estMineshop){box.innerHTML='<span style="color:var(--mut)">Disponible uniquement sur public-pool.io ou Mineshop.eu.</span>';return;}
   try{
-    const r=await fetch('https://public-pool.io:40557/api/client/'+d.adresse);
-    const j=await r.json();
-    const w=j.workers||[];
-    if(!w.length){box.innerHTML='<span style="color:var(--mut)">Aucun worker actif signalé par le pool (délai de quelques minutes).</span>';return;}
-    box.innerHTML='<table><tr><th>WORKER</th><th>HASHRATE (pool)</th><th>MEILLEURE DIFF</th><th>DIFF SESSION</th></tr>'+
-      w.map(x=>{const moi=x.name===d.worker;
-        return '<tr><td class="'+(moi?'me':'')+'">'+(x.name||'—')+(moi?' ◄ vous':'')+'</td><td>'+
-        fmtHR(parseFloat(x.hashRate)||0)+'</td><td>'+fmtD(parseFloat(x.bestDifficulty)||0)+
-        '</td><td>'+fmtD(parseFloat(x.sessionDifficulty)||0)+'</td></tr>';}).join('')+'</table>'+
-      (j.bestDifficulty?'<div style="margin-top:10px;font-size:11px;color:var(--amber-dim)">Meilleure difficulté tous workers confondus : <b style="color:var(--amber)">'+fmtD(parseFloat(j.bestDifficulty))+'</b></div>':'');
+    if(estPublicPool){
+      const r=await fetch('https://public-pool.io:40557/api/client/'+d.adresse);
+      const j=await r.json();
+      const w=j.workers||[];
+      if(!w.length){box.innerHTML='<span style="color:var(--mut)">Aucun worker actif signalé par le pool (délai de quelques minutes).</span>';return;}
+      box.innerHTML='<table><tr><th>WORKER</th><th>HASHRATE (pool)</th><th>MEILLEURE DIFF</th><th>DIFF SESSION</th></tr>'+
+        w.map(x=>{const moi=x.name===d.worker;
+          return '<tr><td class="'+(moi?'me':'')+'">'+(x.name||'—')+(moi?' ◄ vous':'')+'</td><td>'+
+          fmtHR(parseFloat(x.hashRate)||0)+'</td><td>'+fmtD(parseFloat(x.bestDifficulty)||0)+
+          '</td><td>'+fmtD(parseFloat(x.sessionDifficulty)||0)+'</td></tr>';}).join('')+'</table>'+
+        (j.bestDifficulty?'<div style="margin-top:10px;font-size:11px;color:var(--amber-dim)">Meilleure difficulté tous workers confondus : <b style="color:var(--amber)">'+fmtD(parseFloat(j.bestDifficulty))+'</b></div>':'');
+    } else { // Mineshop.eu (format ckpool : un objet racine + un tableau "worker")
+      const r=await fetch('https://solo.mineshop.eu/api/miner.php?wallet='+d.adresse);
+      const j=await r.json();
+      const w=Array.isArray(j.worker)?j.worker:(j.worker?[j.worker]:[]);
+      if(!w.length){box.innerHTML='<span style="color:var(--mut)">Aucun worker actif signalé par le pool (délai de quelques minutes).</span>';return;}
+      box.innerHTML='<table><tr><th>WORKER</th><th>HASHRATE (1h)</th><th>MEILLEURE DIFF</th></tr>'+
+        w.map(x=>{
+          const nom=(x.workername||'').indexOf('.')>=0?x.workername.split('.').slice(1).join('.'):(x.workername||'—');
+          const moi=nom===d.worker;
+          return '<tr><td class="'+(moi?'me':'')+'">'+nom+(moi?' ◄ vous':'')+'</td><td>'+
+          (x.hashrate1hr||'—')+'</td><td>'+fmtD(Number(x.bestever)||Number(x.bestshare)||0)+'</td></tr>';
+        }).join('')+'</table>'+
+        ((j.bestever||j.bestshare)?'<div style="margin-top:10px;font-size:11px;color:var(--amber-dim)">Meilleure difficulté tous workers confondus : <b style="color:var(--amber)">'+fmtD(Number(j.bestever)||Number(j.bestshare))+'</b></div>':'');
+    }
   }catch(e){box.innerHTML='<span style="color:var(--mut)">Pool injoignable (CORS ou hors ligne). Vos données restent visibles ci-dessus.</span>';}
 }
-let leaderData=null, leaderFenetre='mois';
+let leaderData=null, leaderFenetre='mois', leaderCategorie='cpu';
 function rendreLeader(d){
   const box=document.getElementById('d_leader');
   if(!leaderData)return;
-  const list=leaderData[leaderFenetre]||[];
+  const bloc=leaderData[leaderCategorie]||{jour:[],semaine:[],mois:[],allTime:[]};
+  const list=bloc[leaderFenetre]||[];
+  const categories=[['cpu','🧠 CPU'],['asic','⚡ ASIC / BITAXE']];
+  const barreCat='<div class="lead-tabs">'+categories.map(([cle,lbl])=>
+    '<button class="lead-tab'+(cle===leaderCategorie?' on':'')+'" data-cat="'+cle+'">'+lbl+'</button>').join('')+'</div>';
   const onglets=[['jour','JOUR'],['semaine','SEMAINE'],['mois','MOIS'],['allTime','TOUJOURS']];
   const barre='<div class="lead-tabs">'+onglets.map(([cle,lbl])=>
     '<button class="lead-tab'+(cle===leaderFenetre?' on':'')+'" data-fen="'+cle+'">'+lbl+'</button>').join('')+'</div>';
   const tableau=list.length
-    ? '<table><tr><th>#</th><th>MINEUR</th><th>MACHINE</th><th>MEILLEURE DIFF</th></tr>'+
+    ? '<table><tr><th>#</th><th>MINEUR</th><th>MACHINE</th><th>POOL</th><th>MEILLEURE DIFF</th></tr>'+
       list.slice(0,50).map((e,i)=>'<tr><td>'+(i+1)+'</td><td>'+(e.worker||'anon')+'</td><td style="color:var(--mut)">'+
-      (e.cpu||'—')+'</td><td class="'+(e.worker===d.worker?'me':'')+'">'+fmtD(e.bestDiff)+'</td></tr>').join('')+'</table>'
-    : '<span style="color:var(--mut)">Aucun record sur cette période pour l\\'instant.</span>';
-  box.innerHTML=barre+tableau;
-  box.querySelectorAll('.lead-tab').forEach(b=>b.addEventListener('click',()=>{
+      (e.cpu||'—')+'</td><td style="color:var(--mut);font-size:11px">'+(e.poolRecord||'—')+'</td><td class="'+(e.worker===d.worker?'me':'')+'">'+fmtD(e.bestDiff)+'</td></tr>').join('')+'</table>'
+    : '<span style="color:var(--mut)">Aucun record sur cette période pour l\\'instant'+(leaderCategorie==='asic'?' (aucun ASIC recensé)':'')+'.</span>';
+  box.innerHTML=barreCat+barre+tableau;
+  box.querySelectorAll('.lead-tab[data-cat]').forEach(b=>b.addEventListener('click',()=>{
+    leaderCategorie=b.dataset.cat; rendreLeader(d);
+  }));
+  box.querySelectorAll('.lead-tab[data-fen]').forEach(b=>b.addEventListener('click',()=>{
     leaderFenetre=b.dataset.fen; rendreLeader(d);
   }));
 }
@@ -2803,26 +3285,47 @@ async function chargerLeader(d){
   const box=document.getElementById('d_leader');
   if(!LEADER_URL){box.innerHTML='<span style="color:var(--mut)">Classement communautaire non configuré. '+
     'Pour l\\'activer, lancez AXECUBE avec <code style="color:var(--amber)">--leaderboard https://votre-serveur</code>.</span>';return;}
-  document.getElementById('l_via').textContent='(via '+(LEADER_URL.startsWith('https://')?LEADER_URL.slice(8):LEADER_URL.startsWith('http://')?LEADER_URL.slice(7):LEADER_URL)+')';
+  // Lien de retour : quand on clique depuis le classement public sur "retour au mineur",
+  // cette URL (avec le token si le dashboard est protégé) permet de revenir directement ici,
+  // sur cette même machine/onglet -- au lieu d'atterrir sur une page générique sans contexte.
+  const retour=encodeURIComponent(location.origin+'/details'+Q);
+  const via=LEADER_URL.startsWith('https://')?LEADER_URL.slice(8):LEADER_URL.startsWith('http://')?LEADER_URL.slice(7):LEADER_URL;
+  const lienVia=document.getElementById('l_via');
+  lienVia.textContent='(via '+via+' ↗)';
+  lienVia.href=LEADER_URL+(LEADER_URL.includes('?')?'&':'?')+'back='+retour;
   try{
-    // publie mon record puis récupère les classements (jour/semaine/mois/toujours)
+    // publie mon record puis récupère les classements (jour/semaine/mois/toujours), séparés
+    // entre petits mineurs CPU et grosses machines (ASIC type Bitaxe)
     const base=LEADER_URL.endsWith('/')?LEADER_URL.slice(0,-1):LEADER_URL;
     await fetch(base+'/submit',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({worker:d.worker,bestDiff:d.loterie.bestDiff,hashrate:d.perf.hashrate,cpu:d.machine.cpu,
+      body:JSON.stringify({worker:d.worker,bestDiff:d.loterie.bestDiff,hashrate:d.perf.hashrate,cpu:d.machine.cpu,machineId:d.machineId,pool:d.pool.nom,
                             headerHex:d.loterie.bestProofHeader||null})}).catch(()=>{});
     const j=await(await fetch(base+'/top')).json();
-    leaderData={jour:j.jour||[],semaine:j.semaine||[],mois:j.mois||[],allTime:j.allTime||j.top||j||[]};
+    leaderData={
+      cpu: j.cpu || {jour:j.jour||[],semaine:j.semaine||[],mois:j.mois||[],allTime:j.allTime||j.top||j||[]},
+      asic: j.asic || {jour:[],semaine:[],mois:[],allTime:[]},
+    };
     rendreLeader(d);
   }catch(e){box.innerHTML='<span style="color:var(--mut)">Serveur de classement injoignable.</span>';}
 }
 document.getElementById('foot').textContent='AXECUBE · minage solo réel · les données du pool proviennent directement de public-pool.io, celles du réseau sont déduites de la difficulté.';
+document.getElementById('sel_pool').addEventListener('change', async (e)=>{
+  const val=e.target.value; if(!val) return;
+  afficherNotePool(val);
+  e.target.disabled=true;
+  try{ await fetch('/api/pool?preset='+encodeURIComponent(val)+(TOK?'&token='+TOK:'')); }catch(_){}
+  setTimeout(()=>{e.target.disabled=false;}, 3000);
+});
 charger();setInterval(charger,5000);
 </script></body></html>`;
 
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://localhost');
-    // En mode réseau, toute requête distante exige le jeton
-    if (ouvertLan) {
+    // En mode réseau, toute requête distante exige le jeton -- sauf le manifeste et
+    // l'icône PWA, ressources publiques non sensibles que Chrome/Edge doivent pouvoir
+    // récupérer pour proposer l'installation en application (pas toujours fiable avec
+    // un paramètre ?token dans ce genre de requête interne au navigateur).
+    if (ouvertLan && url.pathname !== '/manifest.json' && url.pathname !== '/icon.svg') {
       const dist = req.socket.remoteAddress || '';
       const local = dist === '127.0.0.1' || dist === '::1' || dist === '::ffff:127.0.0.1';
       const fourni = url.searchParams.get('token') || req.headers['x-axecube-token'] || '';
@@ -2856,7 +3359,8 @@ charger();setInterval(charger,5000);
     if (url.pathname === '/api/stats') {
       res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
       res.end(JSON.stringify({
-        connected: state.connected, pool: state.pool, user: state.user, lan: lanInfo, actif: state.actif,
+        connected: state.connected, pool: state.pool, user: state.user, worker: workerName, machineId, lan: lanInfo, actif: state.actif,
+        statsExternesPool,
         hashrate: state.hashrate, threads: state.threads, maxThreads, cpuModel,
         engine: state.engine,
         btcPrice: state.btcPrice, btcSymbol: state.btcSymbol, btcAt: state.btcAt,
@@ -2866,7 +3370,9 @@ charger();setInterval(charger,5000);
         reseau: { cle: reseauCle, symbole: reseau.symbole, recompense: reseau.recompense, label: reseau.label, reseaux: Object.keys(RESEAUX) },
         perThread: [...workers.keys()].sort((a, b) => a - b).map(id => ({ id, rate: workerRate(id) })),
         accepted: state.accepted, rejected: state.rejected, depuis: state.depuis,
+        histHash: state.histHash.slice(-50).map(p => p.v),
         bestDiff: state.bestDiff, bestProofHeader: state.bestProofHeader || null,
+        recordExterne: state.recordExterne || 0,
         paliersAtteints: state.paliersAtteints || {},
         poolDiff: state.poolDiff, netDiff: state.netDiff,
         blockHeight: state.blockHeight, jobId: state.jobId,
@@ -2888,7 +3394,7 @@ charger();setInterval(charger,5000);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
         version: '1.0',
-        adresse: address, worker: workerName, scriptPubKey: scriptAttendu,
+        adresse: address, worker: workerName, machineId, scriptPubKey: scriptAttendu,
         pool: { hote: poolHost, port: poolPort, nom: poolLabel },
         stratum: {
           connecte: state.connected, extranonce1, extranonce2Size,
@@ -2902,6 +3408,7 @@ charger();setInterval(charger,5000);
         },
         loterie: {
           bestDiff: state.bestDiff, bestProofHeader: state.bestProofHeader || null,
+          recordExterne: state.recordExterne || 0,
           accepted: state.accepted, rejected: state.rejected,
           netDiff: state.netDiff, netHashrate: state.netHashrate,
         },
@@ -2914,6 +3421,28 @@ charger();setInterval(charger,5000);
         uptime: (Date.now() - state.startedReal) / 1000,
         lang,
       }));
+    } else if (url.pathname === '/manifest.json') {
+      res.writeHead(200, { 'Content-Type': 'application/manifest+json' });
+      res.end(JSON.stringify({
+        name: 'AXECUBE — Mineur Lottery',
+        short_name: 'AXECUBE',
+        description: 'Mineur Bitcoin solo CPU, gratuit et sans publicité.',
+        start_url: '/' + (jeton ? '?token=' + jeton : ''),
+        scope: '/',
+        display: 'standalone',
+        background_color: '#05070a',
+        theme_color: '#05070a',
+        icons: [{ src: '/icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' }],
+      }));
+    } else if (url.pathname === '/icon.svg') {
+      res.writeHead(200, { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'public, max-age=86400' });
+      res.end(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+        <rect width="100" height="100" rx="18" fill="#05070a"/>
+        <g stroke="#96f01f" stroke-width="3" fill="none" stroke-linejoin="round">
+          <path d="M50 14 L84 32 L84 68 L50 86 L16 68 L16 32 Z"/>
+          <path d="M50 14 L50 50 M50 50 L84 32 M50 50 L16 32 M50 50 L50 86"/>
+        </g>
+      </svg>`);
     } else if (url.pathname === '/details') {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(DETAILS_HTML);
@@ -2928,6 +3457,11 @@ charger();setInterval(charger,5000);
       const ok = changerReseau(cle);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ ok, reseau: reseauCle }));
+    } else if (url.pathname === '/api/pool') {
+      const cle = (url.searchParams.get('preset') || '').toLowerCase();
+      const ok = changerPool(cle);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok, pool: poolLabel, host: poolHost, port: poolPort }));
     } else if (url.pathname === '/api/calibrer') {
       if (!state.calibEnCours) calibrer();
       res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -2966,8 +3500,14 @@ charger();setInterval(charger,5000);
   } else if (modeCle === 'pool') {
     console.log(`\n🤝 MODE POOL — paiement automatique proportionnel à votre contribution réelle (pas de risque de partage).\n`);
   }
+  if (leaderboardUrl && !leaderboardDesactive) {
+    console.log(`🌍 Classement communautaire activé (par défaut) : ${leaderboardUrl}`);
+    console.log(`   Seuls votre nom de worker, votre CPU et votre meilleure difficulté sont partagés — jamais votre adresse.`);
+    console.log(`   Pour désactiver : ajoutez --no-leaderboard\n`);
+  }
 
   let lanInfo = { ouvert: ouvertLan, port: dashPort, ip: null };
+
   server.listen(dashPort, ouvertLan ? '0.0.0.0' : '127.0.0.1', () => {
     if (!ouvertLan) { log('info', t.dashboardLocal(dashPort)); return; }
     log('info', t.dashboard(dashPort));

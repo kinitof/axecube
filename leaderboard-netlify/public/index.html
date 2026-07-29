@@ -151,6 +151,8 @@
     <span class="navitem" title="Bientôt disponible">⚙️ PARAMÈTRES</span>
   </nav>
   <div class="topRight">
+    <a id="retourMineur" href="#" style="display:none;font-size:11px;color:var(--green);text-decoration:none;
+       border:1px solid var(--green-dim);border-radius:9px;padding:8px 12px;white-space:nowrap">‹ Retour au mineur</a>
     <div class="statut" id="statutLigne"><span class="dot"></span> —</div>
     <div class="compte" id="compteBtn">
       <img id="compteCube" src="icones/cube-05-vert.png" alt="" width="30" height="30">
@@ -226,6 +228,17 @@
 
 <script>
 let data=null, cat='cpu', fen='mois', page=1, taillePage=25, filtre='';
+
+// Lien de retour vers le mineur : présent seulement si on est arrivé ici depuis le
+// dashboard local (qui ajoute ?back=... à l'URL) -- absent pour un visiteur classique
+// du site public, qui n'a pas de mineur local vers lequel revenir.
+(function initRetourMineur(){
+  const back=new URLSearchParams(location.search).get('back');
+  if(!back) return;
+  const lien=document.getElementById('retourMineur');
+  lien.href=back;
+  lien.style.display='inline-block';
+})();
 
 function fmtD(d){
   if(!d) return '0';

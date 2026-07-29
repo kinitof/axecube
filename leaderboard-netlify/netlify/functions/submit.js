@@ -54,8 +54,11 @@ exports.handler = async (event) => {
   if (bestDiffAnnonce <= 0) return { statusCode: 400, headers: cors, body: '{}' };
 
   // Vérification cryptographique : sans preuve valide correspondant à la difficulté
-  // annoncée (ou dépassant la tolérance d'arrondi), on ignore silencieusement la
-  // soumission plutôt que de faire confiance à un chiffre envoyé tel quel.
+  // annoncée (ou dépassant la tolérance d'arrondi), on ne retient PAS cette valeur comme
+  // nouveau record -- mais on n'ignore plus toute la soumission pour autant : le pool
+  // actuellement utilisé, le hashrate et le "vu à" doivent quand même pouvoir se mettre à
+  // jour à chaque ping (ex. reprise d'un ancien record sans preuve locale, ou simple
+  // battement de coeur périodique), sans que ça ouvre la porte à truquer le record lui-même.
   let bestDiffVerifie = 0;
   let verifie = false;
   if (headerHex) {
@@ -64,9 +67,6 @@ exports.handler = async (event) => {
       bestDiffVerifie = Math.min(recalcul, bestDiffAnnonce * 1.02); // ne retient pas plus que ce qui a été annoncé (+marge)
       verifie = true;
     }
-  }
-  if (!verifie) {
-    return { statusCode: 200, headers: cors, body: JSON.stringify({ ok: false, raison: 'preuve manquante ou invalide' }) };
   }
 
   const store = (process.env.BLOBS_SITE_ID && process.env.BLOBS_TOKEN)
@@ -80,30 +80,41 @@ exports.handler = async (event) => {
   try { precedent = await store.get(cle, { type: 'json' }); } catch { /* pas d'entrée existante */ }
 
   const maintenant = Date.now();
+  const bestDiffPrecedent = precedent ? (precedent.bestDiff || 0) : 0;
+  const nouveauMeilleur = verifie && bestDiffVerifie > bestDiffPrecedent;
+
+  // L'historique de progression n'accueille que les VRAIS nouveaux records (nouveauMeilleur),
+  // pas chaque simple confirmation périodique de l'ancien (le mineur revérifie/republie sa
+  // meilleure preuve toutes les ~90s, voire ~5s si un dashboard est ouvert, juste pour garder
+  // le pool/hashrate/statut à jour) -- sinon chaque battement de coeur rajoute une entrée
+  // fraîchement datée avec la valeur du record all-time, et les classements par période
+  // (jour/semaine/mois) finissent par toujours afficher le record de toujours au lieu du
+  // vrai progrès réalisé pendant cette période précise.
   const historique = (precedent && Array.isArray(precedent.historique)) ? precedent.historique : [];
-  historique.push({ t: maintenant, d: bestDiffVerifie });
+  if (nouveauMeilleur) {
+    historique.push({ t: maintenant, d: bestDiffVerifie });
+  }
   const seuil = maintenant - FENETRE_HISTOIRE_MS;
   const historiqueElague = historique.filter(e => e.t >= seuil).slice(-HISTOIRE_MAX);
 
   const categorie = hashrate >= SEUIL_ASIC_HS ? 'asic' : 'cpu';
-  const bestDiffPrecedent = precedent ? (precedent.bestDiff || 0) : 0;
-  const nouveauMeilleur = bestDiffVerifie > bestDiffPrecedent;
 
   const entree = {
     worker, cpu, hashrate, categorie,
-    bestDiff: Math.max(bestDiffVerifie, bestDiffPrecedent), // record all-time
-    // Le pool n'est attaché au record que quand celui-ci s'améliore vraiment -- sinon un
-    // simple resynchro depuis un autre pool écraserait à tort le pool où le vrai record a
-    // été trouvé.
+    bestDiff: Math.max(bestDiffVerifie, bestDiffPrecedent), // record all-time (jamais abaissé par un ping non prouvé)
+    // Le pool "record" n'est attaché que quand le record s'améliore vraiment (donc prouvé) --
+    // sinon une resynchro depuis un autre pool écraserait à tort le pool où le vrai record a
+    // été trouvé. Le pool "actuel", lui, reflète l'état live et se met à jour à chaque ping,
+    // prouvé ou non -- ce n'est qu'une info d'affichage, pas une donnée de classement.
     poolRecord: nouveauMeilleur ? pool : (precedent ? precedent.poolRecord || pool : pool),
-    // Pool actuel de la machine : toujours mis à jour à chaque soumission, qu'il y ait
-    // un nouveau record ou non -- reflète l'état live du mineur, indépendamment d'où
-    // le record all-time a été trouvé.
     poolActuel: pool,
     historique: historiqueElague,
     vu: maintenant,
   };
   await store.setJSON(cle, entree);
 
-  return { statusCode: 200, headers: cors, body: JSON.stringify({ ok: true, verifie: true, bestDiff: entree.bestDiff, categorie }) };
+  return { statusCode: 200, headers: cors, body: JSON.stringify({
+    ok: true, verifie, bestDiff: entree.bestDiff, categorie,
+    raison: verifie ? undefined : 'preuve manquante ou invalide — pool/statut mis à jour, record inchangé',
+  }) };
 };

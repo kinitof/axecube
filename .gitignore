@@ -17,3 +17,14 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+
+# Outils admin personnels (jamais distribués avec AXECUBE, contiennent des identifiants)
+axecube-admin.command
+netlify-blobs-clean.js
+.env
+.env.*
+
+# Artefacts locaux (app compilée, logs, archives — pas du code source)
+AXECUBE Desktop.app/
+axecube.log
+leaderboard-netlify.zip
