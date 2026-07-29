@@ -30,6 +30,35 @@ function difficulteDepuisHeader(headerHex) {
   return Number((DIFF1 * 1000000n) / hashBE) / 1000000;
 }
 
+// Étiquettes calendaires (toujours en UTC, pour que tous les mineurs dans le monde partagent
+// exactement les mêmes frontières de jour/semaine/mois -- sans ça, un mineur au Japon et un
+// mineur en France ne changeraient pas de "jour" au même instant, ce qui fausserait le classement).
+function etiquetteJour(ts) {
+  const d = new Date(ts);
+  return d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0') + '-' + String(d.getUTCDate()).padStart(2, '0');
+}
+function etiquetteMois(ts) {
+  const d = new Date(ts);
+  return d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0');
+}
+function etiquetteSemaineISO(ts) {
+  // Semaine ISO 8601 (commence le lundi) -- même convention que "SEMAINE" affiché côté UI.
+  const d = new Date(Date.UTC(new Date(ts).getUTCFullYear(), new Date(ts).getUTCMonth(), new Date(ts).getUTCDate()));
+  const jourSemaine = (d.getUTCDay() + 6) % 7; // lundi=0 ... dimanche=6
+  d.setUTCDate(d.getUTCDate() - jourSemaine + 3); // jeudi de la semaine courante
+  const premierJeudi = new Date(Date.UTC(d.getUTCFullYear(), 0, 4));
+  const numero = 1 + Math.round(((d - premierJeudi) / 86400000 - 3 + ((premierJeudi.getUTCDay() + 6) % 7)) / 7);
+  return d.getUTCFullYear() + '-W' + String(numero).padStart(2, '0');
+}
+
+/** Fait avancer (ou garde) un compteur de période : nouvelle étiquette = on repart de cette
+ *  valeur (même si elle est plus basse que l'ancienne -- la période précédente est terminée) ;
+ *  même étiquette = on ne garde que le maximum. */
+function avancerPeriode(actuel, etiquette, valeur) {
+  if (!actuel || actuel.etiquette !== etiquette) return { etiquette, valeur };
+  return { etiquette, valeur: Math.max(actuel.valeur, valeur) };
+}
+
 exports.handler = async (event) => {
   const cors = {
     'Access-Control-Allow-Origin': '*',
@@ -51,6 +80,8 @@ exports.handler = async (event) => {
   const pool = nettoieTexte(j.pool, 30) || null;
   const machineId = /^[0-9a-f]{8,32}$/i.test(j.machineId || '') ? j.machineId : null;
   const headerHex = typeof j.headerHex === 'string' ? j.headerHex : null;
+  const diffPeriodeAnnonce = Number(j.diffPeriode) || 0;
+  const headerHexPeriode = typeof j.headerHexPeriode === 'string' ? j.headerHexPeriode : null;
   if (bestDiffAnnonce <= 0) return { statusCode: 400, headers: cors, body: '{}' };
 
   // Vérification cryptographique : sans preuve valide correspondant à la difficulté
@@ -68,6 +99,19 @@ exports.handler = async (event) => {
       verifie = true;
     }
   }
+
+  // Le candidat "période" (JOUR/SEMAINE/MOIS) a sa propre preuve, potentiellement différente
+  // de celle du record all-time -- vérifié indépendamment, avec la même exigence cryptographique.
+  let diffPeriodeVerifie = 0;
+  if (headerHexPeriode && diffPeriodeAnnonce > 0) {
+    const recalcul = difficulteDepuisHeader(headerHexPeriode);
+    if (recalcul !== null && recalcul >= diffPeriodeAnnonce * TOLERANCE) {
+      diffPeriodeVerifie = Math.min(recalcul, diffPeriodeAnnonce * 1.02);
+    }
+  }
+  // Un nouveau record all-time est par définition aussi le meilleur du jour/de la semaine/du
+  // mois en cours -- on prend donc le plus grand des deux candidats vérifiés de cette soumission.
+  const meilleurCandidatSoumission = Math.max(bestDiffVerifie, diffPeriodeVerifie);
 
   const store = (process.env.BLOBS_SITE_ID && process.env.BLOBS_TOKEN)
     ? getStore({ name: 'axecube-leaderboard', siteID: process.env.BLOBS_SITE_ID, token: process.env.BLOBS_TOKEN })
@@ -99,6 +143,17 @@ exports.handler = async (event) => {
 
   const categorie = hashrate >= SEUIL_ASIC_HS ? 'asic' : 'cpu';
 
+  // Compteurs calendaires JOUR/SEMAINE/MOIS : chacun repart à zéro dès que son étiquette
+  // (jour civil / semaine ISO / mois) change par rapport à la dernière soumission enregistrée
+  // -- exactement le comportement décrit : un record du jour glisse en acquis de la semaine
+  // et du mois tant qu'il n'est pas dépassé, puis s'efface au changement de période suivant.
+  const periodesPrecedentes = (precedent && precedent.periodes) || {};
+  const periodes = meilleurCandidatSoumission > 0 ? {
+    jour: avancerPeriode(periodesPrecedentes.jour, etiquetteJour(maintenant), meilleurCandidatSoumission),
+    semaine: avancerPeriode(periodesPrecedentes.semaine, etiquetteSemaineISO(maintenant), meilleurCandidatSoumission),
+    mois: avancerPeriode(periodesPrecedentes.mois, etiquetteMois(maintenant), meilleurCandidatSoumission),
+  } : periodesPrecedentes;
+
   const entree = {
     worker, cpu, hashrate, categorie,
     bestDiff: Math.max(bestDiffVerifie, bestDiffPrecedent), // record all-time (jamais abaissé par un ping non prouvé)
@@ -109,6 +164,7 @@ exports.handler = async (event) => {
     poolRecord: nouveauMeilleur ? pool : (precedent ? precedent.poolRecord || pool : pool),
     poolActuel: pool,
     historique: historiqueElague,
+    periodes,
     vu: maintenant,
   };
   await store.setJSON(cle, entree);

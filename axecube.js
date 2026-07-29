@@ -28,6 +28,11 @@
  *    C'est un ticket de loterie astronomiquement improbable. Mais il est réel.
  */
 
+// Numéro de version local -- comparé à celui publié sur GitHub au démarrage (voir
+// verifierMiseAJour plus bas) pour prévenir simplement si une version plus récente existe.
+// À incrémenter à chaque changement notable poussé sur main.
+const AXECUBE_VERSION = '1.5.0';
+
 'use strict';
 
 const crypto = require('crypto');
@@ -997,6 +1002,12 @@ function main() {
     log: [],              // derniers évènements
     totalHashes: 0,
     actif: true,           // false = minage en pause (workers arrêtés)
+    // Meilleur candidat "en cours" (indépendant du record all-time) : sert uniquement à
+    // alimenter les classements JOUR/SEMAINE/MOIS du classement communautaire. N'a pas
+    // besoin d'être persisté ni remis à zéro localement -- le serveur gère le découpage
+    // calendaire lui-même à chaque soumission reçue.
+    bestDiffRecent: 0,
+    bestProofHeaderRecent: null,
   };
 
   function log(kind, msg) {
@@ -1302,6 +1313,7 @@ function main() {
       const payload = JSON.stringify({
         worker: workerName, bestDiff: state.bestDiff, hashrate: state.hashrate, machineId, pool: poolLabel,
         cpu: cpuModel, headerHex: state.bestProofHeader || null,
+        diffPeriode: state.bestDiffRecent || 0, headerHexPeriode: state.bestProofHeaderRecent || null,
       });
       const urlObj = new URL(base + '/submit');
       const req = https.request(urlObj, {
@@ -1486,12 +1498,13 @@ function main() {
     w.on('message', (m) => {
       if (m.type === 'stats') recordHashes(id, m.hashes);
       else if (m.type === 'best') {
+        let nouveauteAEnvoyer = false;
         if (m.diff > state.bestDiff) {
           state.bestDiff = m.diff;
           state.bestProofHeader = m.headerHex || null;
           stateDirty = true;
+          nouveauteAEnvoyer = true;
           if (m.diff >= 1) log('best', t.nouveauRecord(formatDiff(m.diff)));
-          soumettreRecordLeaderboard();
           for (const p of PALIERS) {
             if (m.diff >= p.seuil && !state.paliersAtteints[p.cle]) {
               state.paliersAtteints[p.cle] = new Date().toISOString();
@@ -1499,6 +1512,16 @@ function main() {
             }
           }
         }
+        // Barre indépendante du record all-time : capture TOUT nouveau meilleur candidat,
+        // même s'il ne bat pas le record de toujours -- c'est cette valeur qui alimente les
+        // classements JOUR/SEMAINE/MOIS côté classement communautaire (le serveur se charge
+        // du découpage calendaire et de la remise à zéro périodique, voir submit.js).
+        if (m.diff > state.bestDiffRecent) {
+          state.bestDiffRecent = m.diff;
+          state.bestProofHeaderRecent = m.headerHex || null;
+          nouveauteAEnvoyer = true;
+        }
+        if (nouveauteAEnvoyer) soumettreRecordLeaderboard();
       } else if (m.type === 'share') {
         submitShare(m);
       } else if (m.type === 'engine') {
@@ -2584,7 +2607,8 @@ async function majLead(s){
     const base=LEADER_URL.endsWith('/')?LEADER_URL.slice(0,-1):LEADER_URL;
     fetch(base+'/submit',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({worker:s.worker,bestDiff:s.bestDiff,hashrate:s.hashrate,cpu:s.cpuModel,machineId:s.machineId,pool:s.pool,
-                            headerHex:s.bestProofHeader||null})}).catch(()=>{});
+                            headerHex:s.bestProofHeader||null,
+                            diffPeriode:s.bestDiffRecent||0,headerHexPeriode:s.bestProofHeaderRecent||null})}).catch(()=>{});
     const j=await(await fetch(base+'/top')).json();
     const list=(j.top||j||[]).slice(0,3);
     if(!list.length){box.style.display='none';return;}
@@ -3299,7 +3323,8 @@ async function chargerLeader(d){
     const base=LEADER_URL.endsWith('/')?LEADER_URL.slice(0,-1):LEADER_URL;
     await fetch(base+'/submit',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({worker:d.worker,bestDiff:d.loterie.bestDiff,hashrate:d.perf.hashrate,cpu:d.machine.cpu,machineId:d.machineId,pool:d.pool.nom,
-                            headerHex:d.loterie.bestProofHeader||null})}).catch(()=>{});
+                            headerHex:d.loterie.bestProofHeader||null,
+                            diffPeriode:d.loterie.bestDiffRecent||0,headerHexPeriode:d.loterie.bestProofHeaderRecent||null})}).catch(()=>{});
     const j=await(await fetch(base+'/top')).json();
     leaderData={
       cpu: j.cpu || {jour:j.jour||[],semaine:j.semaine||[],mois:j.mois||[],allTime:j.allTime||j.top||j||[]},
@@ -3372,6 +3397,7 @@ charger();setInterval(charger,5000);
         accepted: state.accepted, rejected: state.rejected, depuis: state.depuis,
         histHash: state.histHash.slice(-50).map(p => p.v),
         bestDiff: state.bestDiff, bestProofHeader: state.bestProofHeader || null,
+        bestDiffRecent: state.bestDiffRecent || 0, bestProofHeaderRecent: state.bestProofHeaderRecent || null,
         recordExterne: state.recordExterne || 0,
         paliersAtteints: state.paliersAtteints || {},
         poolDiff: state.poolDiff, netDiff: state.netDiff,
@@ -3408,6 +3434,7 @@ charger();setInterval(charger,5000);
         },
         loterie: {
           bestDiff: state.bestDiff, bestProofHeader: state.bestProofHeader || null,
+          bestDiffRecent: state.bestDiffRecent || 0, bestProofHeaderRecent: state.bestProofHeaderRecent || null,
           recordExterne: state.recordExterne || 0,
           accepted: state.accepted, rejected: state.rejected,
           netDiff: state.netDiff, netHashrate: state.netHashrate,
@@ -3519,6 +3546,30 @@ charger();setInterval(charger,5000);
       for (const autre of ips.slice(1, 4)) log('info', t.dashboardLanAutre(autre.nom, autre.ip + q));
     }
   });
+
+  /** Vérifie une seule fois au démarrage si une version plus récente est publiée sur GitHub
+   *  (fichier VERSION à la racine du repo) -- purement informatif, jamais bloquant : toute
+   *  erreur (hors ligne, GitHub inaccessible, timeout) est simplement ignorée en silence. */
+  async function verifierMiseAJour() {
+    try {
+      const ctrl = new AbortController();
+      const minuteur = setTimeout(() => ctrl.abort(), 4000);
+      const res = await fetch('https://raw.githubusercontent.com/kinitof/axecube/main/VERSION', { signal: ctrl.signal });
+      clearTimeout(minuteur);
+      if (!res.ok) return;
+      const distante = (await res.text()).trim();
+      const enTableau = (v) => v.split('.').map(n => parseInt(n, 10) || 0);
+      const [dA, dB, dC] = enTableau(distante), [lA, lB, lC] = enTableau(AXECUBE_VERSION);
+      const plusRecente = dA > lA || (dA === lA && dB > lB) || (dA === lA && dB === lB && dC > lC);
+      if (plusRecente && /^\d+\.\d+\.\d+$/.test(distante)) {
+        console.log('');
+        console.log(`  ⚠️  Nouvelle version d'AXECUBE disponible : v${AXECUBE_VERSION} → v${distante}`);
+        console.log('     https://github.com/kinitof/axecube');
+        console.log('');
+      }
+    } catch { /* hors ligne ou GitHub inaccessible -- on n'interrompt jamais le démarrage pour ça */ }
+  }
+  verifierMiseAJour();
 
   /* ------------------------------- Démarrage ------------------------------ */
   console.log('');

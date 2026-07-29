@@ -4,18 +4,32 @@
 'use strict';
 const { getStore } = require('@netlify/blobs');
 
-const FENETRES = {
-  jour: 24 * 3600e3,
-  semaine: 7 * 24 * 3600e3,
-  mois: 30 * 24 * 3600e3,
-};
 const INACTIF_MS = 7 * 24 * 3600e3; // un mineur silencieux depuis 7j sort du classement all-time affiché
 const SEUIL_ASIC_HS = 1e9; // même seuil que submit.js — cohérence si une vieille entrée n'a pas le champ
 
-function meilleurDansFenetre(historique, depuis) {
-  let max = 0;
-  for (const e of historique || []) if (e.t >= depuis && e.d > max) max = e.d;
-  return max;
+// Mêmes étiquettes calendaires (UTC) que submit.js -- nécessaires pour savoir si le compteur
+// jour/semaine/mois stocké sur une entrée correspond encore à la période EN COURS, ou s'il
+// date d'une période déjà terminée (mineur resté silencieux depuis) et doit donc afficher 0.
+function etiquetteJour(ts) {
+  const d = new Date(ts);
+  return d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0') + '-' + String(d.getUTCDate()).padStart(2, '0');
+}
+function etiquetteMois(ts) {
+  const d = new Date(ts);
+  return d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0');
+}
+function etiquetteSemaineISO(ts) {
+  const d = new Date(Date.UTC(new Date(ts).getUTCFullYear(), new Date(ts).getUTCMonth(), new Date(ts).getUTCDate()));
+  const jourSemaine = (d.getUTCDay() + 6) % 7;
+  d.setUTCDate(d.getUTCDate() - jourSemaine + 3);
+  const premierJeudi = new Date(Date.UTC(d.getUTCFullYear(), 0, 4));
+  const numero = 1 + Math.round(((d - premierJeudi) / 86400000 - 3 + ((premierJeudi.getUTCDay() + 6) % 7)) / 7);
+  return d.getUTCFullYear() + '-W' + String(numero).padStart(2, '0');
+}
+/** Valeur d'un compteur de période pour CE moment précis : 0 si son étiquette stockée ne
+ *  correspond plus à la période en cours (personne n'a rien soumis depuis le changement). */
+function valeurPeriode(compteur, etiquetteActuelle) {
+  return (compteur && compteur.etiquette === etiquetteActuelle) ? compteur.valeur : 0;
 }
 
 function categorieDe(e) {
@@ -48,12 +62,18 @@ exports.handler = async (event) => {
 
   const maintenant = Date.now();
 
-  function construireClassement(entrees, depuis) {
+  // Étiquettes de la période EN COURS, calculées une seule fois pour cette requête.
+  const labelJour = etiquetteJour(maintenant), labelSemaine = etiquetteSemaineISO(maintenant), labelMois = etiquetteMois(maintenant);
+
+  function construireClassement(entrees, cle) {
     return entrees
       .map(e => ({
         worker: e.worker, cpu: e.cpu, hashrate: e.hashrate, poolRecord: e.poolRecord || null,
         poolActuel: e.poolActuel || null,
-        bestDiff: depuis ? meilleurDansFenetre(e.historique, maintenant - depuis) : e.bestDiff,
+        bestDiff: cle === 'jour' ? valeurPeriode(e.periodes && e.periodes.jour, labelJour)
+                : cle === 'semaine' ? valeurPeriode(e.periodes && e.periodes.semaine, labelSemaine)
+                : cle === 'mois' ? valeurPeriode(e.periodes && e.periodes.mois, labelMois)
+                : e.bestDiff,
         vu: e.vu || null, spark: decimer(e.historique, 12),
       }))
       .filter(e => e.bestDiff > 0)
@@ -66,9 +86,9 @@ exports.handler = async (event) => {
     const actifs = entrees.filter(e => (maintenant - e.vu) <= INACTIF_MS).length;
     return {
       allTime: construireClassement(entrees, null),
-      jour: construireClassement(entrees, FENETRES.jour),
-      semaine: construireClassement(entrees, FENETRES.semaine),
-      mois: construireClassement(entrees, FENETRES.mois),
+      jour: construireClassement(entrees, 'jour'),
+      semaine: construireClassement(entrees, 'semaine'),
+      mois: construireClassement(entrees, 'mois'),
       total: entrees.length,
       actifs,
     };
