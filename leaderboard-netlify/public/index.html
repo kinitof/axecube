@@ -190,9 +190,9 @@
       <button data-cat="asic"><img src="icones/icone-asic.png" width="16" height="22" style="vertical-align:-6px;margin-right:6px"> ASIC / BITAXE</button>
     </div>
     <div class="fens" id="fens">
-      <button data-fen="jour">JOUR</button>
+      <button class="on" data-fen="jour">JOUR</button>
       <button data-fen="semaine">SEMAINE</button>
-      <button class="on" data-fen="mois">MOIS</button>
+      <button data-fen="mois">MOIS</button>
       <button data-fen="allTime">TOUJOURS</button>
     </div>
     <div class="recherche">
@@ -227,7 +227,7 @@
 </div>
 
 <script>
-let data=null, cat='cpu', fen='mois', page=1, taillePage=25, filtre='';
+let data=null, cat='cpu', fen='jour', page=1, taillePage=25, filtre='';
 
 // Lien de retour vers le mineur : présent seulement si on est arrivé ici depuis le
 // dashboard local (qui ajoute ?back=... à l'URL) -- absent pour un visiteur classique

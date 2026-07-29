@@ -3112,7 +3112,7 @@ setInterval(tick,2000);tick();
 <div id="poolLinks" style="display:none;margin-bottom:10px;gap:8px;flex-wrap:wrap"></div>
 <div class="card full"><div id="d_workers" class="loading">Interrogation du pool…</div></div>
 
-<h2 id="h_leader">CLASSEMENT AXECUBE <a id="l_via" href="#" target="_blank" rel="noopener" style="font-size:9px;color:var(--amber-dim);text-decoration:none"></a></h2>
+<h2 id="h_leader">CLASSEMENT AXECUBE <a id="l_via" href="#" style="font-size:9px;color:var(--amber-dim);text-decoration:none"></a></h2>
 <div class="card full"><div id="d_leader" class="loading">—</div></div>
 
 <div class="foot" id="foot"></div>
