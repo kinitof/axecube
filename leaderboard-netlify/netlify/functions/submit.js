@@ -109,9 +109,6 @@ exports.handler = async (event) => {
       diffPeriodeVerifie = Math.min(recalcul, diffPeriodeAnnonce * 1.02);
     }
   }
-  // Un nouveau record all-time est par définition aussi le meilleur du jour/de la semaine/du
-  // mois en cours -- on prend donc le plus grand des deux candidats vérifiés de cette soumission.
-  const meilleurCandidatSoumission = Math.max(bestDiffVerifie, diffPeriodeVerifie);
 
   const store = (process.env.BLOBS_SITE_ID && process.env.BLOBS_TOKEN)
     ? getStore({ name: 'axecube-leaderboard', siteID: process.env.BLOBS_SITE_ID, token: process.env.BLOBS_TOKEN })
@@ -126,6 +123,15 @@ exports.handler = async (event) => {
   const maintenant = Date.now();
   const bestDiffPrecedent = precedent ? (precedent.bestDiff || 0) : 0;
   const nouveauMeilleur = verifie && bestDiffVerifie > bestDiffPrecedent;
+
+  // Le mineur revérifie/republie sa meilleure preuve toutes les ~90s (voire ~5s si un
+  // dashboard est ouvert) juste pour garder le pool/hashrate/statut à jour -- ce heartbeat
+  // renvoie systématiquement le MÊME headerHex, qui se revérifie donc systématiquement à la
+  // MÊME valeur (l'ancien record). Sans la condition nouveauMeilleur ci-dessous, chaque
+  // heartbeat "confirmerait" à tort le jour/la semaine/le mois à ce vieux record dès la
+  // première réception après un changement de période, exactement le même bug que celui
+  // déjà corrigé plus haut pour l'historique -- juste déplacé ici si on ne fait pas attention.
+  const meilleurCandidatSoumission = Math.max(nouveauMeilleur ? bestDiffVerifie : 0, diffPeriodeVerifie);
 
   // L'historique de progression n'accueille que les VRAIS nouveaux records (nouveauMeilleur),
   // pas chaque simple confirmation périodique de l'ancien (le mineur revérifie/republie sa

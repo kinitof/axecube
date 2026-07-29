@@ -23,6 +23,7 @@
  *   --leaderboard URL  (serveur de classement communautaire AXECUBE, optionnel)
  *   --network btc|fractal  (réseau à miner, défaut : btc)  [env AXECUBE_NETWORK]
  *   --selftest         (vérifie le moteur de hash contre le bloc Genesis)
+ *   --version          (affiche le numéro de version et quitte)
  *
  * ⚠Honnêteté totale : un CPU fait ~1 MH/s, un Bitaxe ~1 200 000 MH/s.
  *    C'est un ticket de loterie astronomiquement improbable. Mais il est réel.
@@ -858,6 +859,7 @@ maj(); setInterval(maj, 2000);
 
 function main() {
   const args = parseArgs(process.argv);
+  if (args.version) { console.log(AXECUBE_VERSION); process.exit(0); }
   if (args.selftest) return selfTest();
 
   // Mode VerusCoin : module totalement indépendant, ne touche pas au moteur BTC/Fractal
@@ -3574,6 +3576,7 @@ charger();setInterval(charger,5000);
   /* ------------------------------- Démarrage ------------------------------ */
   console.log('');
   console.log('  ⛏️  ' + t.banniere + (reseau.symbole !== 'BTC' ? `  [${reseau.label}]` : ''));
+  console.log(`  Version : ${AXECUBE_VERSION}`);
   console.log(`  ${t.adresse} : ${address}`);
   console.log(`  ${t.pool} : ${poolHost}:${poolPort}`);
   console.log(`  ${t.threads} : ${threads}`);
