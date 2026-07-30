@@ -64,6 +64,7 @@
          position:relative;overflow:hidden}
   .carte.vide{opacity:.45}
   .carte .emoji{font-size:34px;line-height:1}
+  .carte .emoji-cube{display:block}
   .carte .nom{font-weight:800;font-size:15px;margin-top:8px;letter-spacing:.03em}
   .carte .seuil{font-size:11px;color:var(--mut);margin-top:2px}
   .carte .compteur{margin-top:14px;font-size:11px;color:var(--green);font-weight:700}
@@ -333,8 +334,10 @@ function rendreCpu(mineurs){
     const vide=tenants.length===0;
     if(!vide) debloquesTotal++;
     const meilleur=tenants[0];
+    const iconeIdx=Math.min(niveau,22);
+    const icone='cube-p'+String(iconeIdx).padStart(2,'0');
     return '<div class="carte '+(vide?'vide':'')+'">'+
-      '<div class="emoji">⚙️</div>'+
+      '<img class="emoji-cube" src="icones/'+icone+'.png" alt="" width="56" height="56"'+(vide?' style="opacity:.4"':'')+'>'+
       '<div class="nom">CUBE CPU '+niveau+'</div>'+
       '<div class="seuil">'+seuil+' shares acceptées</div>'+
       (vide
