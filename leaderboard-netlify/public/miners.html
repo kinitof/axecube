@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>AXECUBE — Classement communautaire</title>
+<title>AXECUBE — Mineurs</title>
 <style>
   :root{
     --bg:#060907; --panel:#0d1210; --panel2:#111811; --line:#1d2b1e;
@@ -15,33 +15,18 @@
        font-family:ui-monospace,Menlo,Consolas,monospace;min-height:100vh}
   a{color:inherit}
   .top{display:flex;align-items:center;gap:12px;padding:14px 28px;border-bottom:1px solid var(--line)}
-  .topRight{margin-left:auto}
   .logo{width:auto;height:132px}
-  .brand{font-weight:800;letter-spacing:.06em;font-size:16px;margin-right:8px}
-  .brand b{color:var(--green)}
   .navtop{display:flex;align-items:center;gap:4px;flex:1}
   .navitem{font-size:11px;letter-spacing:.04em;color:var(--mut);padding:9px 14px;
            border-radius:9px;cursor:default;white-space:nowrap;text-decoration:none;display:inline-flex;align-items:center}
   a.navitem:hover{color:var(--green);cursor:pointer}
   .navitem.on{color:var(--green);background:rgba(140,255,46,.08);
               box-shadow:inset 0 -2px 0 var(--green)}
-  .topRight{display:flex;align-items:center;gap:18px;white-space:nowrap}
+  .topRight{display:flex;align-items:center;gap:18px;white-space:nowrap;margin-left:auto}
   .statut{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--mut)}
   .statut .dot{width:7px;height:7px;border-radius:50%;background:#556;display:inline-block}
   .statut.ok .dot{background:var(--green);box-shadow:0 0 6px rgba(140,255,46,.8)}
   .statut.ko .dot{background:#e05a5a}
-  .compte{display:flex;align-items:center;gap:8px;font-size:11.5px;font-weight:700;
-          border:1px solid var(--line);border-radius:11px;padding:8px 14px;color:var(--text);
-          position:relative;cursor:pointer;user-select:none}
-  .compte:hover{border-color:var(--green-dim)}
-  .menuCompte{display:none;position:absolute;top:calc(100% + 8px);right:0;min-width:200px;
-              background:var(--panel);border:1px solid var(--line);border-radius:12px;
-              box-shadow:0 12px 30px rgba(0,0,0,.5);padding:6px;z-index:50;font-weight:600}
-  .menuCompte.ouvert{display:block}
-  .menuItem{padding:10px 12px;border-radius:8px;font-size:12px;color:var(--text);white-space:nowrap}
-  .menuItem:hover{background:rgba(140,255,46,.08);color:var(--green)}
-  .menuItem.menuOut:hover{background:rgba(224,90,90,.1);color:#e05a5a}
-  .menuSep{height:1px;background:var(--line);margin:6px 4px}
   .wrap{max-width:1440px;margin:0 auto;padding:24px 24px 60px}
 
   .hero{position:relative;overflow:hidden;border-bottom:1px solid var(--line);
@@ -52,8 +37,7 @@
   .hero-titre h1 .w{color:#fff}
   .hero-titre h1 .g{color:var(--green);text-shadow:0 0 18px rgba(140,255,46,.4)}
   .hero-titre p{margin:6px 0 0;color:var(--mut);font-size:12.5px}
-  .cube{justify-self:center;width:135px;height:146px;opacity:.95;
-        object-fit:contain;
+  .cube{justify-self:center;width:135px;height:146px;opacity:.95;object-fit:contain;
         filter:drop-shadow(0 0 22px rgba(140,255,46,.45))}
   .stats{justify-self:end;display:flex;gap:22px;flex-wrap:wrap;
          border:1px solid var(--line);border-radius:14px;background:rgba(5,8,5,.55);
@@ -69,11 +53,6 @@
                padding:8px 16px;border-radius:9px;cursor:pointer;letter-spacing:.03em}
   .cats button.on{background:rgba(140,255,46,.12);color:var(--green);
                    box-shadow:inset 0 0 0 1px rgba(140,255,46,.5)}
-  .fens{display:flex;gap:4px;background:var(--panel);border:1px solid var(--line);
-        border-radius:12px;padding:5px}
-  .fens button{background:none;border:none;color:var(--mut);font-family:inherit;font-size:11px;
-               padding:8px 14px;border-radius:8px;cursor:pointer}
-  .fens button.on{color:var(--green);box-shadow:inset 0 0 0 1px rgba(140,255,46,.4)}
   .recherche{flex:1;min-width:180px;position:relative}
   .recherche input{width:100%;background:var(--panel);border:1px solid var(--line);color:var(--text);
                     border-radius:12px;padding:11px 14px 11px 34px;font-family:inherit;font-size:12px}
@@ -91,7 +70,6 @@
      padding:12px 16px;border-bottom:1px solid var(--line);background:var(--panel2)}
   td{padding:14px 16px;border-bottom:1px solid rgba(140,255,46,.06);vertical-align:middle}
   tr:last-child td{border-bottom:none}
-  tr.moi{background:rgba(140,255,46,.05)}
   .rang{width:42px;height:42px;border-radius:10px;display:flex;align-items:center;justify-content:center;
         font-weight:800;font-size:14px;background:var(--panel2);color:var(--mut)}
   .rang.or{background:rgba(242,185,12,.15);color:var(--gold);box-shadow:inset 0 0 0 1px rgba(242,185,12,.4)}
@@ -102,14 +80,9 @@
   .mineur .nom{font-weight:700;font-size:14px}
   .mineur .sous{font-size:10px;color:var(--mut);margin-top:1px}
   .machine .cpu{font-size:13px}
-  .machine .cœurs{font-size:10px;color:var(--mut);margin-top:1px}
   .poolCell{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--mut)}
   .diffCell{text-align:right}
   .diffCell .v{font-size:16px;font-weight:800;color:var(--green);font-variant-numeric:tabular-nums}
-  .neuf{display:inline-block;margin-top:3px;font-size:8.5px;letter-spacing:.05em;color:var(--green);
-        background:rgba(140,255,46,.1);border:1px solid rgba(140,255,46,.4);border-radius:999px;
-        padding:2px 8px}
-  .diffLigne{display:flex;align-items:center;justify-content:flex-end;gap:12px}
   .empty,.err{padding:30px;text-align:center;color:var(--mut)}
 
   .pagi{display:flex;align-items:center;justify-content:space-between;margin-top:16px;
@@ -126,14 +99,11 @@
   .foot a{color:var(--mut)}
   .foot a:hover{color:var(--green)}
 
-  @media(max-width:900px){
-    .navtop{display:none}
-  }
+  @media(max-width:900px){ .navtop{display:none} }
   @media(max-width:700px){
     .hero-inner{padding:24px 20px;grid-template-columns:1fr;justify-items:center;text-align:center}
     .cube{display:none}
     .stats{justify-self:center}
-    .topRight .compte span:last-child{display:none}
     table thead{display:none}
     tr{display:block;padding:12px 0;border-bottom:1px solid var(--line)}
     td{display:flex;justify-content:space-between;padding:5px 16px;border:none}
@@ -143,11 +113,11 @@
 </head>
 <body>
 <div class="top">
-  <img class="logo" src="icones/logo-complet.png?v=3" alt="AxeCube — Mineur Lottery" height="132" style="width:auto">
+  <a href="/" id="lienLogo"><img class="logo" src="icones/logo-complet.png?v=3" alt="AxeCube — Mineur Lottery" height="132" style="width:auto"></a>
   <nav class="navtop">
     <a class="navitem" id="lienTableauBord" href="/">📊 TABLEAU DE BORD</a>
-    <a class="navitem" id="lienMiners" href="/miners.html">🔗 MINERS</a>
-    <span class="navitem on"><img src="icones/icone-trophee.png" width="16" height="16" style="vertical-align:-3px;margin-right:4px"> CLASSEMENT</span>
+    <span class="navitem on">🔗 MINERS</span>
+    <a class="navitem" id="lienClassement" href="/"><img src="icones/icone-trophee.png" width="16" height="16" style="vertical-align:-3px;margin-right:4px"> CLASSEMENT</a>
     <a class="navitem" id="lienRecompenses" href="/recompenses.html">📦 RÉCOMPENSES</a>
     <span class="navitem" title="Bientôt disponible">⚙️ PARAMÈTRES</span>
   </nav>
@@ -155,31 +125,20 @@
     <a id="retourMineur" href="#" style="display:none;font-size:11px;color:var(--green);text-decoration:none;
        border:1px solid var(--green-dim);border-radius:9px;padding:8px 12px;white-space:nowrap">‹ Retour au mineur</a>
     <div class="statut" id="statutLigne"><span class="dot"></span> —</div>
-    <div class="compte" id="compteBtn">
-      <img id="compteCube" src="icones/cube-p01.png" alt="" width="30" height="30">
-      <span id="compteNom">AXECUBE001</span> <span style="opacity:.5">▾</span>
-      <div class="menuCompte" id="menuCompte">
-        <div class="menuItem" data-action="profil">👤 Mon compte</div>
-        <div class="menuItem" data-action="machines">🖥️ Changer de machine</div>
-        <div class="menuItem" data-action="parametres">⚙️ Paramètres</div>
-        <div class="menuSep"></div>
-        <div class="menuItem menuOut" data-action="deconnexion">🚪 Déconnexion</div>
-      </div>
-    </div>
   </div>
 </div>
 
 <div class="hero">
   <div class="hero-inner">
     <div class="hero-titre">
-      <h1><span class="w">CLASSEMENT</span> <span class="g">AXECUBE</span></h1>
-      <p>Les meilleurs mineurs par meilleure difficulté</p>
+      <h1><span class="w">MINEURS</span> <span class="g">AXECUBE</span></h1>
+      <p>La classification définitive -- toujours le vrai record de toujours, quel que soit le moment consulté</p>
     </div>
     <img class="cube" src="icones/cube-header.png" alt="">
     <div class="stats">
-      <div class="stat"><div class="l"><img src="icones/icone-mineurs-actifs.png" width="13" height="13" style="vertical-align:-2px"> MINEURS ACTIFS</div><div class="v" id="statActifs">—</div></div>
-      <div class="stat"><div class="l"><img src="icones/icone-meilleure-diff.png" width="13" height="13" style="vertical-align:-2px"> MEILLEURE DIFF</div><div class="v green" id="statMeilleure">—</div></div>
-      <div class="stat"><div class="l"><img src="icones/icone-mise-a-jour.png" width="13" height="13" style="vertical-align:-2px"> MISE À JOUR</div><div class="v" id="statMaj" style="font-size:13px">—</div></div>
+      <div class="stat"><div class="l">MINEURS ACTIFS</div><div class="v" id="statActifs">—</div></div>
+      <div class="stat"><div class="l">MEILLEURE DIFF</div><div class="v green" id="statMeilleure">—</div></div>
+      <div class="stat"><div class="l">MISE À JOUR</div><div class="v" id="statMaj" style="font-size:13px">—</div></div>
     </div>
   </div>
 </div>
@@ -190,12 +149,6 @@
       <button class="on" data-cat="cpu"><img src="icones/icone-cpu.png" width="28" height="22" style="vertical-align:-6px;margin-right:6px"> CPU</button>
       <button data-cat="asic"><img src="icones/icone-asic.png" width="16" height="22" style="vertical-align:-6px;margin-right:6px"> ASIC / BITAXE</button>
     </div>
-    <div class="fens" id="fens">
-      <button class="on" data-fen="jour">JOUR</button>
-      <button data-fen="semaine">SEMAINE</button>
-      <button data-fen="mois">MOIS</button>
-      <button data-fen="allTime">TOUJOURS</button>
-    </div>
     <div class="recherche">
       <span class="ic">🔍</span>
       <input id="recherche" placeholder="Rechercher un mineur ou une machine…">
@@ -205,7 +158,7 @@
 
   <table>
     <thead><tr>
-      <th style="width:44px">#</th><th>MINEUR</th><th>MACHINE</th><th>POOL ACTUEL</th><th>POOL RECORD</th><th style="text-align:right">MEILLEURE DIFFICULTÉ</th>
+      <th style="width:44px">#</th><th>MINEUR</th><th>MACHINE</th><th>POOL ACTUEL</th><th>POOL RECORD</th><th style="text-align:right">MEILLEURE DIFFICULTÉ (TOUJOURS)</th>
     </tr></thead>
     <tbody id="corps"><tr><td colspan="6" class="empty">Chargement…</td></tr></tbody>
   </table>
@@ -228,11 +181,12 @@
 </div>
 
 <script>
-let data=null, cat='cpu', fen='jour', page=1, taillePage=25, filtre='';
+// Page MINERS : contrairement à CLASSEMENT (qui a des onglets JOUR/SEMAINE/MOIS/TOUJOURS,
+// donc dont le cube affiché suit la période consultée), cette page n'affiche QUE le
+// classement all-time -- le cube de chaque mineur reflète donc toujours son vrai record
+// de toujours, jamais une valeur de période qui varierait selon ce qu'on regarde.
+let data=null, cat='cpu', page=1, taillePage=25, filtre='';
 
-// Lien de retour vers le mineur : présent seulement si on est arrivé ici depuis le
-// dashboard local (qui ajoute ?back=... à l'URL) -- absent pour un visiteur classique
-// du site public, qui n'a pas de mineur local vers lequel revenir.
 (function initRetourMineur(){
   const back=new URLSearchParams(location.search).get('back');
   if(!back) return;
@@ -241,16 +195,13 @@ let data=null, cat='cpu', fen='jour', page=1, taillePage=25, filtre='';
   lien.style.display='inline-block';
 })();
 
-// Propage la chaîne de requête actuelle (?back=...&token=...) vers la page RÉCOMPENSES
-// et le lien TABLEAU DE BORD, sinon ce contexte de retour se perd en changeant de page.
-(function propagerQueryVersRecompenses(){
+(function propagerQuery(){
   if(!location.search) return;
+  ['lienLogo','lienTableauBord','lienClassement'].forEach(id=>{
+    const l=document.getElementById(id); if(l) l.href='/'+location.search;
+  });
   const r=document.getElementById('lienRecompenses');
   if(r) r.href='/recompenses.html'+location.search;
-  const t=document.getElementById('lienTableauBord');
-  if(t) t.href='/'+location.search;
-  const m=document.getElementById('lienMiners');
-  if(m) m.href='/miners.html'+location.search;
 })();
 
 function fmtD(d){
@@ -268,47 +219,22 @@ function fmtRelatif(ms){
   if(s<86400) return 'il y a '+Math.round(s/3600)+' h';
   return 'il y a '+Math.round(s/86400)+' j';
 }
-// Cube attribué de façon déterministe à chaque mineur (le même nom obtient toujours
-// le même cube, sans avoir besoin de stocker quoi que ce soit côté serveur)
-// Cube de chaque ligne du tableau : reflète désormais le palier de difficulté du mineur
-// (même logique que le cube du compte), et non plus une couleur aléatoire par nom.
-function avatar(bestDiff){
-  const cube=cubeSelonPalier(bestDiff);
-  return '<img class="avatar" src="icones/'+cube+'.png" alt="" width="60" height="60">';
-}
 
-// Cube du badge compte (haut à droite) : contrairement à l'avatar ci-dessus (couleur
-// aléatoire par mineur), celui-ci reflète une vraie progression -- un palier tous les 200
-// de meilleure difficulté. Palier 0 (0-199) = cube vert par défaut pour un mineur qui
-// débute. Au-delà du dernier palier défini ci-dessous (faute de nouvelles couleurs créées
-// pour l'instant), le mineur conserve simplement le dernier palier en attendant.
+// Même échelle que le badge de compte sur CLASSEMENT (palier tous les 200 de difficulté,
+// 22 cubes) -- reprise ici à l'identique pour que le badge d'un mineur soit cohérent
+// partout sur le site.
 const PALIERS_CUBE=['cube-p01','cube-p02','cube-p03','cube-p04','cube-p05','cube-p06',
                      'cube-p07','cube-p08','cube-p09','cube-p10','cube-p11','cube-p12',
                      'cube-p13','cube-p14','cube-p15','cube-p16','cube-p17','cube-p18',
                      'cube-p19','cube-p20','cube-p21','cube-p22'];
-// Mêmes bornes que les 6 cubes de difficulté (100 -> 10M, Bronze -> Légende), avec 22
-// paliers intermédiaires répartis logarithmiquement -- c'est la même récompense, avec
-// plus de gradations. axecube001 (bestDiff 4.75k, "ARGENT") tombe ainsi vers le milieu
-// de l'échelle plutôt qu'au tout dernier cube comme avec l'ancien pas fixe de 200.
-const SEUILS_CUBE=[100,173,299,518,896,1551,2683,4642,8031,13895,24041,41596,
-                    71969,124520,215443,372759,644947,1115884,1930698,3340485,
-                    5779693,10000000];
+const PALIER_PAS=200;
 function cubeSelonPalier(bestDiff){
-  let idx=0;
-  for(let i=0;i<SEUILS_CUBE.length;i++){ if((bestDiff||0)>=SEUILS_CUBE[i]) idx=i; }
-  return PALIERS_CUBE[idx];
+  const p=Math.floor(Math.max(bestDiff||0,0)/PALIER_PAS);
+  return PALIERS_CUBE[Math.min(p,PALIERS_CUBE.length-1)];
 }
-// Met à jour le cube du badge compte selon la meilleure difficulté du mineur affiché.
-// Provisoire : sans vrai système de compte/identité machine, on retrouve "mon" entrée en
-// cherchant le nom affiché (compteNom) dans les données déjà chargées -- à remplacer par
-// une vraie correspondance via machineId quand la gestion de compte existera.
-function majCubeCompte(){
-  if(!data) return;
-  const nom=(document.getElementById('compteNom').textContent||'').trim();
-  const toutes=[...(data.cpu.allTime||[]), ...(data.asic.allTime||[])];
-  const moi=toutes.find(e=>e.worker===nom);
-  const cube=cubeSelonPalier(moi?moi.bestDiff:0);
-  document.getElementById('compteCube').src='icones/'+cube+'.png';
+function avatar(bestDiff){
+  const cube=cubeSelonPalier(bestDiff);
+  return '<img class="avatar" src="icones/'+cube+'.png" alt="" width="60" height="60">';
 }
 function sparkSvg(vals){
   if(!vals || vals.length<2) return '';
@@ -328,13 +254,12 @@ async function charger(bouton){
     const r=await fetch('/top');
     const j=await r.json();
     data={
-      cpu: j.cpu || {jour:[],semaine:[],mois:[],allTime:j.top||[],total:0,actifs:0},
-      asic: j.asic || {jour:[],semaine:[],mois:[],allTime:[],total:0,actifs:0},
+      cpu: j.cpu || {allTime:j.top||[],actifs:0},
+      asic: j.asic || {allTime:[],actifs:0},
       misAJour: j.misAJour || Date.now(),
     };
     statutEl.className='statut ok'; statutEl.innerHTML='<span class="dot"></span> EN LIGNE';
     rendre();
-    majCubeCompte();
   }catch(e){
     statutEl.className='statut ko'; statutEl.innerHTML='<span class="dot"></span> HORS LIGNE';
     document.getElementById('corps').innerHTML='<tr><td colspan="6" class="err">Serveur injoignable pour le moment.</td></tr>';
@@ -342,7 +267,7 @@ async function charger(bouton){
 }
 
 function listeCourante(){
-  const bloc=(data && data[cat] && data[cat][fen]) || [];
+  const bloc=(data && data[cat] && data[cat].allTime) || [];
   if(!filtre) return bloc;
   const f=filtre.toLowerCase();
   return bloc.filter(e=>(e.worker||'').toLowerCase().includes(f) || (e.cpu||'').toLowerCase().includes(f));
@@ -366,31 +291,22 @@ function rendre(){
   const corps=document.getElementById('corps');
   if(!pageListe.length){
     corps.innerHTML='<tr><td colspan="6" class="empty">'+
-      (filtre?'Aucun mineur ne correspond à « '+filtre+' ».':'Aucun record sur cette période pour l\'instant.')+
+      (filtre?'Aucun mineur ne correspond à « '+filtre+' ».':'Aucun mineur pour l\'instant.')+
       '</td></tr>';
   } else {
     corps.innerHTML=pageListe.map((e,i)=>{
       const rang=debut+i+1;
       const classeRang=rang===1?'or':rang===2?'argent':rang===3?'bronze':'';
-      const medaille=rang===1?'<img src="icones/icone-podium-or.png" width="32" height="32" alt="1er">'
-        :rang===2?'<img src="icones/icone-podium-argent.png" width="32" height="32" alt="2e">'
-        :rang===3?'<img src="icones/icone-podium-bronze.png" width="32" height="32" alt="3e">'
-        :rang;
-      const neuf=(rang===1 && e.vu && (Date.now()-e.vu)<24*3600e3)
-        ? '<div class="neuf">🔥 nouveau record</div>' : '';
       return '<tr>'+
-        '<td><div class="rang '+classeRang+'">'+medaille+'</div></td>'+
+        '<td><div class="rang '+classeRang+'">'+rang+'</div></td>'+
         '<td class="mineurCol"><div class="mineur">'+avatar(e.bestDiff)+
           '<div><div class="nom">'+(e.worker||'anon')+'</div>'+
           '<div class="sous">'+(e.hashrate?Math.round(e.hashrate/1e6*100)/100+' MH/s':'—')+'</div></div></div></td>'+
-        '<td class="machine"><div class="cpu"><img src="icones/icone-machine.png" width="30" height="30" '+
-          'style="vertical-align:-8px;margin-right:9px;opacity:.85">'+(e.cpu||'—')+'</div></td>'+
-        '<td><div class="poolCell"><img src="icones/icone-pool.png" width="28" height="28" '+
-          'style="vertical-align:-7px;margin-right:9px;opacity:.85">'+(e.poolActuel||'—')+'</div></td>'+
-        '<td><div class="poolCell"><img src="icones/icone-pool.png" width="28" height="28" '+
-          'style="vertical-align:-7px;margin-right:9px;opacity:.85">'+(e.poolRecord||'—')+'</div></td>'+
-        '<td class="diffCell"><div class="diffLigne">'+sparkSvg(e.spark)+
-          '<div><div class="v">'+fmtD(e.bestDiff)+'</div>'+neuf+'</div></div></td>'+
+        '<td class="machine"><div class="cpu">'+(e.cpu||'—')+'</div></td>'+
+        '<td><div class="poolCell">'+(e.poolActuel||'—')+'</div></td>'+
+        '<td><div class="poolCell">'+(e.poolRecord||'—')+'</div></td>'+
+        '<td class="diffCell"><div class="diffLigne" style="display:flex;align-items:center;justify-content:flex-end;gap:12px">'+sparkSvg(e.spark)+
+          '<div class="v">'+fmtD(e.bestDiff)+'</div></div></td>'+
         '</tr>';
     }).join('');
   }
@@ -419,11 +335,6 @@ document.getElementById('cats').addEventListener('click',e=>{
   document.querySelectorAll('#cats button').forEach(x=>x.classList.remove('on'));
   b.classList.add('on'); cat=b.dataset.cat; page=1; rendre();
 });
-document.getElementById('fens').addEventListener('click',e=>{
-  const b=e.target.closest('button'); if(!b) return;
-  document.querySelectorAll('#fens button').forEach(x=>x.classList.remove('on'));
-  b.classList.add('on'); fen=b.dataset.fen; page=1; rendre();
-});
 document.getElementById('recherche').addEventListener('input',e=>{
   filtre=e.target.value.trim(); page=1; rendre();
 });
@@ -431,25 +342,6 @@ document.getElementById('tailleP').addEventListener('change',e=>{
   taillePage=Number(e.target.value); page=1; rendre();
 });
 document.getElementById('rafraichir').addEventListener('click',e=>charger(e.currentTarget));
-
-// Menu déroulant du compte : ouverture au clic, fermeture au clic extérieur.
-// Les actions sont pour l'instant des points d'ancrage (aucun back-end de compte
-// n'existe encore) -- prêtes à être branchées quand la gestion de compte sera ajoutée.
-const compteBtn=document.getElementById('compteBtn');
-const menuCompte=document.getElementById('menuCompte');
-compteBtn.addEventListener('click',e=>{
-  e.stopPropagation();
-  menuCompte.classList.toggle('ouvert');
-});
-document.addEventListener('click',()=>menuCompte.classList.remove('ouvert'));
-menuCompte.addEventListener('click',e=>e.stopPropagation());
-menuCompte.querySelectorAll('.menuItem').forEach(item=>{
-  item.addEventListener('click',()=>{
-    menuCompte.classList.remove('ouvert');
-    // TODO: brancher chaque action sur la vraie gestion de compte une fois disponible.
-    console.log('Action compte demandée :', item.dataset.action);
-  });
-});
 
 charger();
 setInterval(()=>charger(),30000);

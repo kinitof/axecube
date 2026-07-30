@@ -105,7 +105,7 @@
   <a id="lienLogo" href="/"><img class="logo" src="icones/logo-complet.png?v=3" alt="AxeCube — Mineur Lottery" height="132" style="width:auto"></a>
   <nav class="navtop">
     <a class="navitem" id="lienTableauBord" href="/">📊 TABLEAU DE BORD</a>
-    <span class="navitem" title="Bientôt disponible">🔗 MINERS</span>
+    <a class="navitem" id="lienMiners" href="/miners.html">🔗 MINERS</a>
     <a class="navitem actif" id="lienClassementNav" href="/"><img src="icones/icone-trophee.png" width="16" height="16" style="vertical-align:-3px;margin-right:4px"> CLASSEMENT</a>
     <span class="navitem on">📦 RÉCOMPENSES</span>
     <span class="navitem" title="Bientôt disponible">⚙️ PARAMÈTRES</span>
@@ -252,6 +252,8 @@ function fmtD(d){
     const lien=document.getElementById(id);
     if(lien) lien.href='/'+location.search;
   });
+  const m=document.getElementById('lienMiners');
+  if(m) m.href='/miners.html'+location.search;
 })();
 
 /** Pour chaque mineur, détermine le palier de difficulté le plus haut atteint (ou -1). */
