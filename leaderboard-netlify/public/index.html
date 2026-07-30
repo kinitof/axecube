@@ -156,7 +156,7 @@
        border:1px solid var(--green-dim);border-radius:9px;padding:8px 12px;white-space:nowrap">‹ Retour au mineur</a>
     <div class="statut" id="statutLigne"><span class="dot"></span> —</div>
     <div class="compte" id="compteBtn">
-      <img id="compteCube" src="icones/cube-01-vert.png" alt="" width="30" height="30">
+      <img id="compteCube" src="icones/cube-p01.png" alt="" width="30" height="30">
       <span id="compteNom">AXECUBE001</span> <span style="opacity:.5">▾</span>
       <div class="menuCompte" id="menuCompte">
         <div class="menuItem" data-action="profil">👤 Mon compte</div>
@@ -280,9 +280,10 @@ function avatar(bestDiff){
 // de meilleure difficulté. Palier 0 (0-199) = cube vert par défaut pour un mineur qui
 // débute. Au-delà du dernier palier défini ci-dessous (faute de nouvelles couleurs créées
 // pour l'instant), le mineur conserve simplement le dernier palier en attendant.
-const PALIERS_CUBE=['cube-01-vert','cube-08-cyan','cube-03-bleu','cube-07-bleu2',
-                     'cube-04-violet','cube-09-cyanrose','cube-02-rouge','cube-06-orange',
-                     'cube-05-or','cube-11-arcenciel1','cube-10-arcenciel2'];
+const PALIERS_CUBE=['cube-p01','cube-p02','cube-p03','cube-p04','cube-p05','cube-p06',
+                     'cube-p07','cube-p08','cube-p09','cube-p10','cube-p11','cube-p12',
+                     'cube-p13','cube-p14','cube-p15','cube-p16','cube-p17','cube-p18',
+                     'cube-p19','cube-p20','cube-p21','cube-p22'];
 const PALIER_PAS=200;
 function cubeSelonPalier(bestDiff){
   const p=Math.floor(Math.max(bestDiff||0,0)/PALIER_PAS);
