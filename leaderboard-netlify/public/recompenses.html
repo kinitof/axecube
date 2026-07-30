@@ -65,6 +65,7 @@
   .carte{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;
          position:relative;overflow:hidden;text-align:center}
   .carte.vide{opacity:.45}
+  .carte.debloque{filter:drop-shadow(0 0 14px rgba(140,255,46,.5));background:#131c12}
   .carte{transition:transform .15s ease, box-shadow .15s ease, background .15s ease}
   .carte:not(.vide):hover{transform:translateY(-3px);background:#131c12;
                           box-shadow:inset 0 0 0 1px rgba(140,255,46,.5), 0 8px 24px rgba(0,0,0,.4)}
@@ -278,7 +279,7 @@ function rendrePioches(mineurs){
     const vide=tenants.length===0;
     if(!vide) debloquesTotal++;
     const meilleur=tenants[0];
-    return '<div class="carte '+(vide?'vide':'')+'" style="box-shadow:inset 0 0 0 1px '+p.couleur+(vide?'55':'aa')+'">'+
+    return '<div class="carte '+(vide?'vide':'debloque')+'" style="box-shadow:inset 0 0 0 1px '+p.couleur+(vide?'55':'aa')+'">'+
       '<div class="emoji">⛏️</div>'+
       '<div class="nom" style="color:'+p.couleur+'">'+p.nom+'</div>'+
       '<div class="seuil">Travail cumulé ≥ '+fmtH(p.seuil)+' hachages</div>'+
@@ -307,7 +308,7 @@ function rendreDifficulte(mineurs){
     const vide=tenants.length===0;
     if(!vide) debloquesTotal++;
     const meilleur=tenants[0];
-    return '<div class="carte '+(vide?'vide ':'')+p.classe+'">'+
+    return '<div class="carte '+(vide?'vide ':'debloque ')+p.classe+'">'+
       '<div class="emoji">'+p.emoji+'</div>'+
       '<div class="nom">'+p.nom+'</div>'+
       '<div class="seuil">Difficulté ≥ '+fmtD(p.seuil)+'</div>'+
@@ -342,7 +343,7 @@ function rendreCpu(mineurs){
     const meilleur=tenants[0];
     const iconeIdx=Math.min(niveau,22);
     const icone='cube-p'+String(iconeIdx).padStart(2,'0');
-    return '<div class="carte '+(vide?'vide':'')+'">'+
+    return '<div class="carte '+(vide?'vide':'debloque')+'">'+
       '<img class="emoji-cube" src="icones/'+icone+'.png" alt="" width="224" height="224"'+(vide?' style="opacity:.4"':'')+'>'+
       '<div class="nom">CUBE CPU '+niveau+'</div>'+
       '<div class="seuil">'+seuil+' shares acceptées</div>'+
@@ -407,18 +408,19 @@ document.getElementById('filtres').addEventListener('click',e=>{
 charger();
 setInterval(charger,30000);
 
-// Vrai cube 3D (Three.js) -- tourne en continu dans l'espace. Les 6 faces affichent
-// 6 designs DIFFÉRENTS parmi les 22 (sinon la rotation d'un cube qui montre partout
-// la même image passe quasi inaperçue à l'œil) -- la fenêtre de 6 avance d'un cran
-// toutes les 5 secondes, donc l'ensemble des 22 designs défile progressivement.
+// Le cube héros tourne comme une carte/pièce dans l'espace (un plan plat, pas un vrai
+// cube à 6 faces) -- chaque design est déjà un dessin en fausse perspective 3D isométrique,
+// donc le coller sur les faces d'un VRAI cube qui tourne créait une double perspective qui
+// déformait tout en hexagones étirés dédoublés. Un seul plan plat, une vraie caméra en
+// perspective : ça rétrécit naturellement en tournant, sans jamais déformer le dessin.
 (function initCubeHero3D(){
   const conteneur=document.getElementById('cubeHero3D');
   if(!conteneur || typeof THREE==='undefined') return;
 
   const taille=280;
   const scene=new THREE.Scene();
-  const camera=new THREE.PerspectiveCamera(35, 1, 0.1, 100);
-  camera.position.z=4.6;
+  const camera=new THREE.PerspectiveCamera(30, 1, 0.1, 100);
+  camera.position.z=5;
 
   const renderer=new THREE.WebGLRenderer({alpha:true, antialias:true});
   renderer.setSize(taille, taille);
@@ -426,36 +428,30 @@ setInterval(charger,30000);
   renderer.setClearColor(0x000000, 0);
   conteneur.appendChild(renderer.domElement);
 
-  const geometrie=new THREE.BoxGeometry(2.3, 2.3, 2.3);
-  const chargeur=new THREE.TextureLoader();
-  // Un matériau par face (ordre BoxGeometry : droite, gauche, dessus, dessous, avant, arrière).
-  const materiaux=Array.from({length:6}, () => new THREE.MeshBasicMaterial({transparent:true}));
-  const cube=new THREE.Mesh(geometrie, materiaux);
-  scene.add(cube);
+  const geometrie=new THREE.PlaneGeometry(2.6, 2.6);
+  const materiau=new THREE.MeshBasicMaterial({transparent:true, side:THREE.DoubleSide});
+  const plan=new THREE.Mesh(geometrie, materiau);
+  scene.add(plan);
 
-  function texturePour(n){
-    return 'icones/cube-p'+String(((n-1)%22)+1).padStart(2,'0')+'.png';
+  const chargeur=new THREE.TextureLoader();
+  function chargerTexture(n){
+    chargeur.load('icones/cube-p'+String(n).padStart(2,'0')+'.png', (tex)=>{
+      materiau.map=tex;
+      materiau.needsUpdate=true;
+    });
   }
-  function appliquerFenetre(depart){
-    for(let i=0;i<6;i++){
-      chargeur.load(texturePour(depart+i), (tex)=>{
-        materiaux[i].map=tex;
-        materiaux[i].needsUpdate=true;
-      });
-    }
-  }
-  let depart=1;
-  appliquerFenetre(depart);
-  setInterval(()=>{ depart=(depart%22)+1; appliquerFenetre(depart); }, 5000);
+  let n=1;
+  chargerTexture(n);
+  setInterval(()=>{ n=(n%22)+1; chargerTexture(n); }, 5000);
 
   function animer(){
     requestAnimationFrame(animer);
-    cube.rotation.y+=0.014;
-    cube.rotation.x=Math.sin(Date.now()*0.0006)*0.22;
+    plan.rotation.y+=0.014;
     renderer.render(scene, camera);
   }
   animer();
 })();
 </script>
+
 </body>
 </html>
