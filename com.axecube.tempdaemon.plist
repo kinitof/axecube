@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  AXECUBE — LaunchDaemon pour le démon de pression thermique.
+
+  Installation (UNE SEULE FOIS, dans Terminal) :
+
+    sudo cp axecube-temp-daemon.sh /usr/local/bin/axecube-temp-daemon.sh
+    sudo chmod +x /usr/local/bin/axecube-temp-daemon.sh
+    sudo cp com.axecube.tempdaemon.plist /Library/LaunchDaemons/
+    sudo chown root:wheel /Library/LaunchDaemons/com.axecube.tempdaemon.plist
+    sudo chmod 644 /Library/LaunchDaemons/com.axecube.tempdaemon.plist
+    sudo launchctl load -w /Library/LaunchDaemons/com.axecube.tempdaemon.plist
+
+  À partir de là, le démon tourne automatiquement en root à chaque démarrage du Mac,
+  sans jamais redemander de mot de passe : /tmp/axecube-temp.log se remplit tout seul.
+
+  Pour désinstaller :
+    sudo launchctl unload /Library/LaunchDaemons/com.axecube.tempdaemon.plist
+    sudo rm /Library/LaunchDaemons/com.axecube.tempdaemon.plist
+    sudo rm /usr/local/bin/axecube-temp-daemon.sh
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.axecube.tempdaemon</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/usr/local/bin/axecube-temp-daemon.sh</string>
+    </array>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/tmp/axecube-temp-daemon.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/axecube-temp-daemon.err.log</string>
+</dict>
+</plist>

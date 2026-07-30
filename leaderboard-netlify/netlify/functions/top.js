@@ -69,7 +69,7 @@ exports.handler = async (event) => {
     return entrees
       .map(e => ({
         worker: e.worker, cpu: e.cpu, hashrate: e.hashrate, poolRecord: e.poolRecord || null,
-        poolActuel: e.poolActuel || null,
+        poolActuel: e.poolActuel || null, accepted: e.accepted || 0, totalHashes: e.totalHashes || 0,
         bestDiff: cle === 'jour' ? valeurPeriode(e.periodes && e.periodes.jour, labelJour)
                 : cle === 'semaine' ? valeurPeriode(e.periodes && e.periodes.semaine, labelSemaine)
                 : cle === 'mois' ? valeurPeriode(e.periodes && e.periodes.mois, labelMois)

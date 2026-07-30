@@ -82,6 +82,8 @@ exports.handler = async (event) => {
   const headerHex = typeof j.headerHex === 'string' ? j.headerHex : null;
   const diffPeriodeAnnonce = Number(j.diffPeriode) || 0;
   const headerHexPeriode = typeof j.headerHexPeriode === 'string' ? j.headerHexPeriode : null;
+  const acceptedAnnonce = Math.max(0, Math.floor(Number(j.accepted) || 0));
+  const totalHashesAnnonce = Math.max(0, Number(j.totalHashes) || 0);
   if (bestDiffAnnonce <= 0) return { statusCode: 400, headers: cors, body: '{}' };
 
   // Vérification cryptographique : sans preuve valide correspondant à la difficulté
@@ -163,6 +165,15 @@ exports.handler = async (event) => {
   const entree = {
     worker, cpu, hashrate, categorie,
     bestDiff: Math.max(bestDiffVerifie, bestDiffPrecedent), // record all-time (jamais abaissé par un ping non prouvé)
+    // Nombre de shares acceptées cumulées -- simple compteur d'assiduité affiché (page
+    // RÉCOMPENSES, cubes de progression CPU), jamais utilisé pour un classement compétitif,
+    // donc pas besoin de preuve cryptographique. Gardé monotone par précaution (comme
+    // bestDiff) pour qu'un redémarrage ou un aléa d'envoi ne fasse jamais redescendre le total.
+    accepted: Math.max(acceptedAnnonce, precedent ? (precedent.accepted || 0) : 0),
+    // Travail réel cumulé (hachages calculés), indépendant du pool utilisé -- contrairement
+    // à "accepted" (nombre de shares), ce chiffre n'avantage jamais un mineur qui choisirait
+    // un pool à difficulté minimale plus basse. C'est la base du système "Pioches & Titres".
+    totalHashes: Math.max(totalHashesAnnonce, precedent ? (precedent.totalHashes || 0) : 0),
     // Le pool "record" n'est attaché que quand le record s'améliore vraiment (donc prouvé) --
     // sinon une resynchro depuis un autre pool écraserait à tort le pool où le vrai record a
     // été trouvé. Le pool "actuel", lui, reflète l'état live et se met à jour à chaque ping,

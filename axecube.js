@@ -857,6 +857,29 @@ maj(); setInterval(maj, 2000);
 
 /* --------------------------------- Main ----------------------------------- */
 
+/** Sur macOS, si axecube-temp-daemon.sh tourne (voir ce script), lit la donnée thermique
+ *  réelle qu'il écrit dans /tmp/axecube-temp.log -- soit une température en °C (Mac Intel),
+ *  soit un niveau de pression thermique qualitatif (Apple Silicon). Renvoie null si le
+ *  démon n'est pas installé/lancé -- entièrement optionnel, jamais bloquant. */
+function lireEtatThermiqueReel() {
+  if (process.platform !== 'darwin') return null;
+  try {
+    const contenu = fs.readFileSync('/tmp/axecube-temp.log', 'utf8');
+    for (const ligne of contenu.split('\n')) {
+      const l = ligne.toLowerCase();
+      if (l.includes('temperature')) {
+        const m = ligne.match(/([0-9]+\.?[0-9]*)\s*C\b/);
+        if (m) return { type: 'temperature', valeur: parseFloat(m[1]) };
+      }
+      if (l.includes('current pressure level')) {
+        const parties = ligne.split(':');
+        if (parties.length >= 2) return { type: 'pression', valeur: parties[1].trim() };
+      }
+    }
+  } catch { /* fichier absent -- démon non installé, fonctionnalité optionnelle */ }
+  return null;
+}
+
 function main() {
   const args = parseArgs(process.argv);
   if (args.version) { console.log(AXECUBE_VERSION); process.exit(0); }
@@ -1316,6 +1339,7 @@ function main() {
         worker: workerName, bestDiff: state.bestDiff, hashrate: state.hashrate, machineId, pool: poolLabel,
         cpu: cpuModel, headerHex: state.bestProofHeader || null,
         diffPeriode: state.bestDiffRecent || 0, headerHexPeriode: state.bestProofHeaderRecent || null,
+        accepted: state.accepted || 0, totalHashes: state.totalHashes || 0,
       });
       const urlObj = new URL(base + '/submit');
       const req = https.request(urlObj, {
@@ -1655,6 +1679,42 @@ function main() {
   }
 
   for (let i = 0; i < threads; i++) spawnWorker(i);
+
+  // Régulation thermique automatique : si le démon de température tourne (voir
+  // axecube-temp-daemon.sh) et détecte une vraie pression thermique élevée, on réduit
+  // automatiquement le nombre de threads d'un cran pour laisser la puce respirer --
+  // et on remonte progressivement vers la cible d'origine (${threads}) une fois que
+  // la situation redevient normale pendant plusieurs vérifications d'affilée.
+  // Entièrement silencieux/inactif si le démon n'est pas installé (lireEtatThermiqueReel
+  // renvoie alors null à chaque fois).
+  const SEUIL_TEMP_REDUCTION_C = 85;
+  let normalConsecutif = 0;
+  setInterval(() => {
+    if (!state.actif) return; // en pause, rien à ajuster
+    const etat = lireEtatThermiqueReel();
+    if (!etat) return;
+    const chaud = etat.type === 'temperature'
+      ? etat.valeur >= SEUIL_TEMP_REDUCTION_C
+      : etat.valeur.toLowerCase() !== 'nominal';
+    const libelle = etat.type === 'temperature' ? etat.valeur.toFixed(0) + '°C' : etat.valeur;
+
+    if (chaud) {
+      normalConsecutif = 0;
+      if (state.threads > 1) {
+        setThreads(state.threads - 1);
+        log('warn', `🌡️ Pression thermique élevée (${libelle}) — réduction automatique à ${state.threads} thread(s) pour protéger le matériel.`);
+        saveState();
+      }
+    } else {
+      normalConsecutif++;
+      if (normalConsecutif >= 3 && state.threads < threads) {
+        setThreads(state.threads + 1);
+        log('info', `🌡️ Pression thermique redevenue normale (${libelle}) — remontée progressive à ${state.threads} thread(s).`);
+        normalConsecutif = 0;
+        saveState();
+      }
+    }
+  }, 60000);
 
   function broadcast(msg) { for (const w of workers.values()) w.postMessage(msg); }
 
@@ -2299,8 +2359,12 @@ function main() {
       <div class="calibbox" id="calibbox" style="display:none"></div>
       <div class="row"><span class="k">${t.ui.uptime}</span>
         <span class="v" id="uptime">—</span></div>
-      <div class="row" id="rowthr"><span class="k">${t.ui.throttle}</span>
+      <div class="row" id="rowthr"><span class="k">${t.ui.throttle}
+        <span title="Échelle macOS (du meilleur au pire) :&#10;🟢 Nominal — aucune contrainte, pleine puissance&#10;🟡 Fair/Moderate — léger réchauffement, impact quasi invisible&#10;🔴 Heavy — le système réduit activement la fréquence pour gérer la chaleur, perte de perf réelle&#10;🔴 Trapping — restrictions plus agressives&#10;🔴 Sleeping — niveau extrême, mise en veille forcée de composants" style="cursor:help;opacity:.6">ⓘ</span></span>
         <span class="v" id="thr">—</span></div>
+      <div class="row" style="margin-top:-4px" id="thrExpliqueLigne">
+        <span class="k" style="opacity:0"></span>
+        <span class="v" id="thrExplique" style="font-size:9px;color:var(--white-dim);font-weight:normal"></span></div>
       <div class="row" id="rowbtc" style="display:none"><span class="k">${t.ui.cours}</span>
         <span class="v" id="btcprice">—</span></div>
       <div class="row" id="rowpay" style="display:none"><span class="k">${t.ui.paiement}</span>
@@ -2610,7 +2674,8 @@ async function majLead(s){
     fetch(base+'/submit',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({worker:s.worker,bestDiff:s.bestDiff,hashrate:s.hashrate,cpu:s.cpuModel,machineId:s.machineId,pool:s.pool,
                             headerHex:s.bestProofHeader||null,
-                            diffPeriode:s.bestDiffRecent||0,headerHexPeriode:s.bestProofHeaderRecent||null})}).catch(()=>{});
+                            diffPeriode:s.bestDiffRecent||0,headerHexPeriode:s.bestProofHeaderRecent||null,
+                            accepted:s.accepted||0,totalHashes:s.totalHashes||0})}).catch(()=>{});
     const j=await(await fetch(base+'/top')).json();
     const list=(j.top||j||[]).slice(0,3);
     if(!list.length){box.style.display='none';return;}
@@ -2745,13 +2810,31 @@ async function tick(){try{
   document.getElementById('nethash').textContent=s.netHashrate?fmtHR(s.netHashrate):'—';
   document.getElementById('threads').textContent=s.threads+'/'+s.maxThreads;
   document.getElementById('uptime').textContent=fmtUp(s.uptime);
-  // Indicateur thermique (throttling)
+  // Indicateur thermique : donnée matérielle réelle si le démon est installé, sinon
+  // repli sur l'estimation logicielle par dégradation du hashrate (comme avant).
   {
     document.getElementById('rowthr').style.display='';
-    const e=document.getElementById('thr'),pct=Math.round((s.throttle||0)*100);
-    if(pct<3){e.innerHTML='🟢 '+L.thrOk;e.style.color='';}
-    else if(pct<15){e.innerHTML='🟡 '+L.thrLeger+' (−'+pct+'%)';e.style.color='#ffd166';}
-    else{e.innerHTML='🔴 '+L.thrFort+' (−'+pct+'%)';e.style.color='#ff6a78';}
+    const e=document.getElementById('thr'), expl=document.getElementById('thrExplique');
+    if(s.thermalReel){
+      const tr=s.thermalReel;
+      if(tr.type==='temperature'){
+        const v=tr.valeur;
+        if(v<70){e.innerHTML='🟢 '+v.toFixed(0)+'°C';e.style.color='';expl.textContent='Aucune contrainte, pleine puissance.';}
+        else if(v<85){e.innerHTML='🟡 '+v.toFixed(0)+'°C';e.style.color='#ffd166';expl.textContent='Léger réchauffement, impact quasi invisible.';}
+        else{e.innerHTML='🔴 '+v.toFixed(0)+'°C';e.style.color='#ff6a78';expl.textContent='Le système réduit la fréquence pour gérer la chaleur -- baisse de perf réelle.';}
+      } else {
+        const p=tr.valeur, pl=p.toLowerCase();
+        if(pl==='nominal'){e.innerHTML='🟢 '+p;e.style.color='';expl.textContent='Aucune contrainte, pleine puissance.';}
+        else if(pl==='fair'||pl==='moderate'){e.innerHTML='🟡 '+p;e.style.color='#ffd166';expl.textContent='Léger réchauffement, impact quasi invisible.';}
+        else{e.innerHTML='🔴 '+p;e.style.color='#ff6a78';expl.textContent='Le système réduit la fréquence pour gérer la chaleur -- baisse de perf réelle. Réduction auto des threads si ça persiste.';}
+      }
+    } else {
+      const pct=Math.round((s.throttle||0)*100);
+      expl.textContent='';
+      if(pct<3){e.innerHTML='🟢 '+L.thrOk;e.style.color='';}
+      else if(pct<15){e.innerHTML='🟡 '+L.thrLeger+' (−'+pct+'%)';e.style.color='#ffd166';}
+      else{e.innerHTML='🔴 '+L.thrFort+' (−'+pct+'%)';e.style.color='#ff6a78';}
+    }
   }
   // Bouton et résultats de calibration
   const cb=document.getElementById('calibbtn');
@@ -3162,7 +3245,14 @@ async function charger(){
   document.getElementById('d_sh').innerHTML=d.loterie.accepted+' <span style="color:var(--mut);font-size:12px">acc.</span> · '+d.loterie.rejected+' <span style="color:var(--mut);font-size:12px">rej.</span>';
   document.getElementById('d_shsub').textContent='depuis ce lancement';
   const thr=Math.round((d.perf.throttle||0)*100);
-  document.getElementById('d_thr').innerHTML=thr>2?('−'+thr+'%'):'<span style="color:var(--amber)">nominal</span>';
+  if(d.perf.thermalReel){
+    const tr=d.perf.thermalReel;
+    document.getElementById('d_thr').innerHTML=tr.type==='temperature'
+      ? tr.valeur.toFixed(0)+'°C'
+      : tr.valeur;
+  } else {
+    document.getElementById('d_thr').innerHTML=thr>2?('−'+thr+'%'):'<span style="color:var(--amber)">nominal</span>';
+  }
   document.getElementById('d_tot').textContent=fmtHR(d.perf.totalHashes).replace('/s','');
   document.getElementById('d_up').textContent=fmtUp(d.uptime);
 
@@ -3326,7 +3416,8 @@ async function chargerLeader(d){
     await fetch(base+'/submit',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({worker:d.worker,bestDiff:d.loterie.bestDiff,hashrate:d.perf.hashrate,cpu:d.machine.cpu,machineId:d.machineId,pool:d.pool.nom,
                             headerHex:d.loterie.bestProofHeader||null,
-                            diffPeriode:d.loterie.bestDiffRecent||0,headerHexPeriode:d.loterie.bestProofHeaderRecent||null})}).catch(()=>{});
+                            diffPeriode:d.loterie.bestDiffRecent||0,headerHexPeriode:d.loterie.bestProofHeaderRecent||null,
+                            accepted:d.loterie.accepted||0,totalHashes:d.perf.totalHashes||0})}).catch(()=>{});
     const j=await(await fetch(base+'/top')).json();
     leaderData={
       cpu: j.cpu || {jour:j.jour||[],semaine:j.semaine||[],mois:j.mois||[],allTime:j.allTime||j.top||j||[]},
@@ -3400,6 +3491,7 @@ charger();setInterval(charger,5000);
         histHash: state.histHash.slice(-50).map(p => p.v),
         bestDiff: state.bestDiff, bestProofHeader: state.bestProofHeader || null,
         bestDiffRecent: state.bestDiffRecent || 0, bestProofHeaderRecent: state.bestProofHeaderRecent || null,
+        thermalReel: lireEtatThermiqueReel(),
         recordExterne: state.recordExterne || 0,
         paliersAtteints: state.paliersAtteints || {},
         poolDiff: state.poolDiff, netDiff: state.netDiff,
@@ -3432,7 +3524,7 @@ charger();setInterval(charger,5000);
         machine: { cpu: cpuModel, coeursMax: maxThreads, coeursActifs: state.threads },
         perf: {
           hashrate: state.hashrate, perThread: [...workers.keys()].sort((a,b)=>a-b).map(id=>({id,rate:workerRate(id)})),
-          throttle: state.throttle, totalHashes: state.totalHashes,
+          throttle: state.throttle, totalHashes: state.totalHashes, thermalReel: lireEtatThermiqueReel(),
         },
         loterie: {
           bestDiff: state.bestDiff, bestProofHeader: state.bestProofHeader || null,
