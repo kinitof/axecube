@@ -32,15 +32,24 @@
 
   .hero{position:relative;overflow:hidden;border-bottom:1px solid var(--line);
         background:#050705 url('icones/bandeau-header.jpg') center bottom/cover no-repeat}
-  .hero-inner{position:relative;max-width:1440px;margin:0 auto;padding:26px 24px;
-              display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:18px}
   .hero-titre h1{margin:0;font-size:23px;letter-spacing:.02em}
   .hero-titre h1 .w{color:#fff}
   .hero-titre h1 .g{color:var(--green);text-shadow:0 0 18px rgba(140,255,46,.4)}
   .hero-titre p{margin:6px 0 0;color:var(--mut);font-size:12.5px}
+  .hero-inner{position:relative;max-width:1440px;margin:0 auto;padding:26px 24px;
+              display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:18px;
+              perspective:900px}
+              perspective:900px}
   .cube{justify-self:center;width:189px;height:204px;opacity:.95;object-fit:contain;
+        transform-style:preserve-3d;backface-visibility:visible;
         filter:drop-shadow(0 0 22px rgba(140,255,46,.45));animation:tourneCube 6s linear infinite}
-  @keyframes tourneCube{from{transform:rotateY(0deg)}to{transform:rotateY(360deg)}}
+  @keyframes tourneCube{
+    0%{transform:rotateY(0deg) rotateX(0deg)}
+    25%{transform:rotateY(90deg) rotateX(6deg)}
+    50%{transform:rotateY(180deg) rotateX(0deg)}
+    75%{transform:rotateY(270deg) rotateX(-6deg)}
+    100%{transform:rotateY(360deg) rotateX(0deg)}
+  }
   .stats{justify-self:end;display:flex;gap:22px;flex-wrap:wrap;
          border:1px solid var(--line);border-radius:14px;background:rgba(5,8,5,.55);
          padding:12px 20px}
@@ -193,7 +202,7 @@ const PALIERS=[
   {cle:'legende', nom:'LÉGENDE', emoji:'🔥', seuil:10000000, classe:''},
 ];
 const SEUIL_CPU=200; // une tranche = 200 shares acceptées cumulées
-const NIVEAUX_CPU_MIN=11; // au moins 11 cartes affichées même si personne n'a encore atteint ce niveau
+const NIVEAUX_CPU_MIN=22; // au moins 22 cartes affichées -- correspond aux 22 cubes disponibles
 
 // Titres "Pioche", basés sur le travail réel cumulé (totalHashes) -- volontairement
 // indépendant du pool utilisé (contrairement à un nombre brut de shares, qui avantagerait
