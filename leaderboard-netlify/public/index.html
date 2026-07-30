@@ -145,10 +145,10 @@
 <div class="top">
   <img class="logo" src="icones/logo-complet.png?v=3" alt="AxeCube — Mineur Lottery" height="132" style="width:auto">
   <nav class="navtop">
-    <span class="navitem" title="Bientôt disponible">📊 TABLEAU DE BORD</span>
+    <a class="navitem" id="lienTableauBord" href="/">📊 TABLEAU DE BORD</a>
     <span class="navitem" title="Bientôt disponible">🔗 MINERS</span>
     <span class="navitem on"><img src="icones/icone-trophee.png" width="16" height="16" style="vertical-align:-3px;margin-right:4px"> CLASSEMENT</span>
-    <a class="navitem" href="/recompenses.html">📦 RÉCOMPENSES</a>
+    <a class="navitem" id="lienRecompenses" href="/recompenses.html">📦 RÉCOMPENSES</a>
     <span class="navitem" title="Bientôt disponible">⚙️ PARAMÈTRES</span>
   </nav>
   <div class="topRight">
@@ -239,6 +239,16 @@ let data=null, cat='cpu', fen='jour', page=1, taillePage=25, filtre='';
   const lien=document.getElementById('retourMineur');
   lien.href=back;
   lien.style.display='inline-block';
+})();
+
+// Propage la chaîne de requête actuelle (?back=...&token=...) vers la page RÉCOMPENSES
+// et le lien TABLEAU DE BORD, sinon ce contexte de retour se perd en changeant de page.
+(function propagerQueryVersRecompenses(){
+  if(!location.search) return;
+  const r=document.getElementById('lienRecompenses');
+  if(r) r.href='/recompenses.html'+location.search;
+  const t=document.getElementById('lienTableauBord');
+  if(t) t.href='/'+location.search;
 })();
 
 function fmtD(d){

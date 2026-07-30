@@ -2311,7 +2311,7 @@ function main() {
     <canvas id="spark" width="360" height="44"></canvas>
     <div class="record">
       <div class="lbl">${t.ui.record}</div>
-      <div class="val"><span id="best">—</span><span class="cup-big">🏆</span><span class="planete" id="planeteBtn" onclick="location.href='/details'+Q+'#classement'" title="Voir le classement communautaire" style="display:none">🌍</span></div>
+      <div class="val"><span id="best">—</span><span class="cup-big">🏆</span><span class="planete" id="planeteBtn" onclick="location.href=LEADER_URL+'/recompenses.html?back='+encodeURIComponent(location.origin+'/details'+Q)" title="Voir la vitrine des récompenses" style="display:none">🌍</span></div>
     </div>
     <button class="badgeChip" id="badgeChip" style="display:none" onclick="ouvrirPopupPalier(PALIERS_CLIENT[dernierPalierIdx],true)">
       <span id="badgeChipIcone">🥉</span>
