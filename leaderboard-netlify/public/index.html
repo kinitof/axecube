@@ -274,29 +274,36 @@ function fmtRelatif(ms){
 // (même logique que le cube du compte), et non plus une couleur aléatoire par nom.
 function avatar(bestDiff){
   const cube=cubeSelonPalier(bestDiff);
-  return '<img class="avatar" src="icones/'+cube+'.png" alt="" width="60" height="60">';
+  const nom=nomCubeSelonPalier(bestDiff);
+  return '<img class="avatar" src="icones/'+cube+'.png" alt="'+nom+'" title="'+nom+'" width="60" height="60">';
 }
 
 // Cube du badge compte (haut à droite) : contrairement à l'avatar ci-dessus (couleur
 // aléatoire par mineur), celui-ci reflète une vraie progression -- un palier tous les 200
-// de meilleure difficulté. Palier 0 (0-199) = cube vert par défaut pour un mineur qui
-// débute. Au-delà du dernier palier défini ci-dessous (faute de nouvelles couleurs créées
-// pour l'instant), le mineur conserve simplement le dernier palier en attendant.
-const PALIERS_CUBE=['cube-p01','cube-p02','cube-p03','cube-p04','cube-p05','cube-p06',
-                     'cube-p07','cube-p08','cube-p09','cube-p10','cube-p11','cube-p12',
-                     'cube-p13','cube-p14','cube-p15','cube-p16','cube-p17','cube-p18',
-                     'cube-p19','cube-p20','cube-p21','cube-p22'];
-// Mêmes bornes que les 6 cubes de difficulté (100 -> 10M, Bronze -> Légende), avec 22
-// paliers intermédiaires répartis logarithmiquement -- c'est la même récompense, avec
-// plus de gradations. axecube001 (bestDiff 4.75k, "ARGENT") tombe ainsi vers le milieu
-// de l'échelle plutôt qu'au tout dernier cube comme avec l'ancien pas fixe de 200.
-const SEUILS_CUBE=[100,173,299,518,896,1551,2683,4642,8031,13895,24041,41596,
-                    71969,124520,215443,372759,644947,1115884,1930698,3340485,
-                    5779693,10000000];
+// de meilleure difficulté (loterie). En dessous du premier palier (0-199), on affiche le
+// cube-p01 comme cube de départ. Même pas (200) et même plafond (22 -> 4400) que les 22
+// Cubes CPU de recompenses.html -- à garder synchronisé si l'échelle change un jour.
+const SEUIL_CUBE_PAS=200;
+const NIVEAUX_CUBE_MAX=22;
+// Mêmes noms que sur recompenses.html -- à garder synchronisés si l'échelle ou les noms changent.
+const NOMS_CUBE=[
+  'Néon I','Néon II','Néon III','Néon IV','Néon V','Néon VI','Néon VII','Néon VIII',
+  'Néon Bicolore I','Néon Bicolore II','Néon Bicolore III','Néon Bicolore IV','Néon Bicolore V',
+  'Néon Tricolore',
+  'Néon Multicolore I','Néon Multicolore II',
+  'Cube Diamant',
+  'Diamant Émeraude','Diamant Saphir','Diamant Ruby',
+  'Diamant Multi-Gemmes I','Diamant Multi-Gemmes II'
+];
+function nomCubeSelonPalier(bestDiff){
+  const niveau=Math.min(NIVEAUX_CUBE_MAX, Math.floor((bestDiff||0)/SEUIL_CUBE_PAS));
+  const idx=Math.max(1, niveau);
+  return NOMS_CUBE[idx-1];
+}
 function cubeSelonPalier(bestDiff){
-  let idx=0;
-  for(let i=0;i<SEUILS_CUBE.length;i++){ if((bestDiff||0)>=SEUILS_CUBE[i]) idx=i; }
-  return PALIERS_CUBE[idx];
+  const niveau=Math.min(NIVEAUX_CUBE_MAX, Math.floor((bestDiff||0)/SEUIL_CUBE_PAS));
+  const idx=Math.max(1, niveau);
+  return 'cube-p'+String(idx).padStart(2,'0');
 }
 // Met à jour le cube du badge compte selon la meilleure difficulté du mineur affiché.
 // Provisoire : sans vrai système de compte/identité machine, on retrouve "mon" entrée en
@@ -309,6 +316,7 @@ function majCubeCompte(){
   const moi=toutes.find(e=>e.worker===nom);
   const cube=cubeSelonPalier(moi?moi.bestDiff:0);
   document.getElementById('compteCube').src='icones/'+cube+'.png';
+  document.getElementById('compteCube').title=nomCubeSelonPalier(moi?moi.bestDiff:0);
 }
 function sparkSvg(vals){
   if(!vals || vals.length<2) return '';

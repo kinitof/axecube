@@ -151,7 +151,7 @@
   <div id="blocDifficulte">
     <div class="section-titre">
       <h2>🏆 CUBES DE DIFFICULTÉ</h2>
-      <p>Débloqués selon le meilleur record de difficulté jamais atteint — les plus rares, ils représentent votre exploit ponctuel. Système inchangé, affiché ici uniquement en rappel.</p>
+      <p>Débloqués selon le nombre total de shares acceptées cumulées — récompense l'assiduité, peu importe la chance.</p>
     </div>
     <div class="grille" id="grilleDifficulte"></div>
   </div>
@@ -159,7 +159,7 @@
   <div id="blocCpu">
     <div class="section-titre">
       <h2>⚙️ PROGRESSION CPU</h2>
-      <p>Un nouveau cube débloqué toutes les 200 shares acceptées — récompense l'assiduité, peu importe la chance.</p>
+      <p>Un nouveau cube débloqué à chaque tranche de 200 en meilleure difficulté atteinte — la loterie, un seul bon tirage suffit.</p>
     </div>
     <div class="grille" id="grilleCpu"></div>
   </div>
@@ -187,9 +187,9 @@
 </div>
 
 <script>
-// Les 6 paliers de difficulté existants dans axecube.js (state.paliersAtteints) --
-// gardés strictement identiques (mêmes clés/seuils/noms) pour ne jamais créer un
-// deuxième système de badges qui entrerait en conflit avec celui déjà en place.
+// Les 6 paliers de progression -- basés sur le CUMUL de shares acceptées (assiduité),
+// pas sur la chance. Gardés strictement identiques (mêmes clés/seuils/noms) pour ne
+// jamais créer un deuxième système de badges qui entrerait en conflit avec l'existant.
 const PALIERS=[
   {cle:'bronze', nom:'BRONZE', emoji:'🥉', seuil:100, classe:'bronze'},
   {cle:'argent', nom:'ARGENT', emoji:'🥈', seuil:1000, classe:'argent'},
@@ -198,8 +198,18 @@ const PALIERS=[
   {cle:'diamant', nom:'DIAMANT', emoji:'💎', seuil:1000000, classe:''},
   {cle:'legende', nom:'LÉGENDE', emoji:'🔥', seuil:10000000, classe:''},
 ];
-const SEUIL_CPU=200; // une tranche = 200 shares acceptées cumulées
-const NIVEAUX_CPU_MIN=22; // au moins 22 cartes affichées -- correspond aux 22 cubes disponibles
+const SEUIL_CPU=200; // une tranche = 200 de MEILLEURE DIFFICULTÉ (bestDiff) -- système loterie
+const NIVEAUX_CPU=22; // fixe : 22 cubes disponibles (icones cube-p01..p22), plafond à 22*200=4400
+// Noms des 22 cubes CPU, du plus commun (Néon I) au plus rare (Diamant Multi-Gemmes II).
+const NOMS_CUBE=[
+  'Néon I','Néon II','Néon III','Néon IV','Néon V','Néon VI','Néon VII','Néon VIII',
+  'Néon Bicolore I','Néon Bicolore II','Néon Bicolore III','Néon Bicolore IV','Néon Bicolore V',
+  'Néon Tricolore',
+  'Néon Multicolore I','Néon Multicolore II',
+  'Cube Diamant',
+  'Diamant Émeraude','Diamant Saphir','Diamant Ruby',
+  'Diamant Multi-Gemmes I','Diamant Multi-Gemmes II'
+];
 
 // Titres "Pioche", basés sur le travail réel cumulé (totalHashes) -- volontairement
 // indépendant du pool utilisé (contrairement à un nombre brut de shares, qui avantagerait
@@ -256,10 +266,10 @@ function fmtD(d){
   if(m) m.href='/miners.html'+location.search;
 })();
 
-/** Pour chaque mineur, détermine le palier de difficulté le plus haut atteint (ou -1). */
-function palierDe(bestDiff){
+/** Pour chaque mineur, détermine le palier (cumul de shares) le plus haut atteint (ou -1). */
+function palierDe(accepted){
   let idx=-1;
-  for(let i=0;i<PALIERS.length;i++) if(bestDiff>=PALIERS[i].seuil) idx=i;
+  for(let i=0;i<PALIERS.length;i++) if(accepted>=PALIERS[i].seuil) idx=i;
   return idx;
 }
 
@@ -301,23 +311,23 @@ function rendreDifficulte(mineurs){
   // "dépassé au passage"), pour représenter fidèlement quel badge chaque mineur affiche.
   const parPalier=PALIERS.map(()=>[]);
   for(const m of mineurs){
-    const idx=palierDe(m.bestDiff);
+    const idx=palierDe(m.accepted);
     if(idx>=0) parPalier[idx].push(m);
   }
   let debloquesTotal=0;
   const html=PALIERS.map((p,i)=>{
-    const tenants=parPalier[i].sort((a,b)=>b.bestDiff-a.bestDiff);
+    const tenants=parPalier[i].sort((a,b)=>(b.accepted||0)-(a.accepted||0));
     const vide=tenants.length===0;
     if(!vide) debloquesTotal++;
     const meilleur=tenants[0];
     return '<div class="carte '+(vide?'vide ':'debloque ')+p.classe+'">'+
       '<div class="emoji">'+p.emoji+'</div>'+
       '<div class="nom">'+p.nom+'</div>'+
-      '<div class="seuil">Difficulté ≥ '+fmtD(p.seuil)+'</div>'+
+      '<div class="seuil">'+p.seuil+' shares acceptées</div>'+
       (vide
         ? '<div class="compteur zero">Aucun mineur pour l\'instant</div>'
         : '<div class="compteur">'+tenants.length+' mineur'+(tenants.length>1?'s':'')+'</div>'+
-          '<div class="meilleur">Meilleur : <b>'+(meilleur.worker||'anon')+'</b> ('+fmtD(meilleur.bestDiff)+')</div>')+
+          '<div class="meilleur">Meilleur : <b>'+(meilleur.worker||'anon')+'</b> ('+(meilleur.accepted||0)+')</div>')+
       '</div>';
   }).join('');
   document.getElementById('grilleDifficulte').innerHTML=html;
@@ -326,33 +336,33 @@ function rendreDifficulte(mineurs){
 }
 
 function rendreCpu(mineurs){
-  const niveauDe=(accepted)=>Math.floor((accepted||0)/SEUIL_CPU);
-  let niveauMax=0;
-  for(const m of mineurs) niveauMax=Math.max(niveauMax, niveauDe(m.accepted));
-  const nbNiveaux=Math.max(NIVEAUX_CPU_MIN, niveauMax+1);
+  // Système loterie : le niveau dépend du meilleur tirage (bestDiff), pas du volume miné.
+  // Plafonné à 22 niveaux fixes (22 icônes disponibles, seuil max = 22*200 = 4400 de difficulté) --
+  // un bestDiff au-delà de 4400 reste affiché au niveau 22, pas de niveau 23+ fantôme.
+  const niveauDe=(bestDiff)=>Math.min(NIVEAUX_CPU, Math.floor((bestDiff||0)/SEUIL_CPU));
+  const nbNiveaux=NIVEAUX_CPU;
 
   const parNiveau=Array.from({length:nbNiveaux},()=>[]);
   for(const m of mineurs){
-    const n=niveauDe(m.accepted);
+    const n=niveauDe(m.bestDiff);
     if(n>=1 && n<=nbNiveaux) parNiveau[n-1].push(m);
   }
   let debloquesTotal=0;
   const html=Array.from({length:nbNiveaux},(_,i)=>{
     const niveau=i+1, seuil=niveau*SEUIL_CPU;
-    const tenants=parNiveau[i].sort((a,b)=>(b.accepted||0)-(a.accepted||0));
+    const tenants=parNiveau[i].sort((a,b)=>(b.bestDiff||0)-(a.bestDiff||0));
     const vide=tenants.length===0;
     if(!vide) debloquesTotal++;
     const meilleur=tenants[0];
-    const iconeIdx=Math.min(niveau,22);
-    const icone='cube-p'+String(iconeIdx).padStart(2,'0');
+    const icone='cube-p'+String(niveau).padStart(2,'0');
     return '<div class="carte '+(vide?'vide':'debloque')+'">'+
       '<img class="emoji-cube" src="icones/'+icone+'.png" alt="" width="224" height="224"'+(vide?' style="opacity:.4"':'')+'>'+
-      '<div class="nom">CUBE CPU '+niveau+'</div>'+
-      '<div class="seuil">'+seuil+' shares acceptées</div>'+
+      '<div class="nom">'+NOMS_CUBE[i]+'</div>'+
+      '<div class="seuil">Difficulté ≥ '+fmtD(seuil)+'</div>'+
       (vide
         ? '<div class="compteur zero">Aucun mineur pour l\'instant</div>'
         : '<div class="compteur">'+tenants.length+' mineur'+(tenants.length>1?'s':'')+'</div>'+
-          '<div class="meilleur">Meilleur : <b>'+(meilleur.worker||'anon')+'</b> ('+(meilleur.accepted||0)+')</div>')+
+          '<div class="meilleur">Meilleur : <b>'+(meilleur.worker||'anon')+'</b> ('+fmtD(meilleur.bestDiff)+')</div>')+
       '</div>';
   }).join('');
   document.getElementById('grilleCpu').innerHTML=html;
@@ -370,7 +380,7 @@ function rendre(){
 
   const ensembleMineurs=new Set();
   mineurs.forEach(m=>{
-    if(palierDe(m.bestDiff)>=0 || Math.floor((m.accepted||0)/SEUIL_CPU)>=1 || palierPiocheDe(m.totalHashes)>=0) ensembleMineurs.add(m.worker);
+    if(palierDe(m.accepted)>=0 || Math.floor((m.bestDiff||0)/SEUIL_CPU)>=1 || palierPiocheDe(m.totalHashes)>=0) ensembleMineurs.add(m.worker);
   });
   document.getElementById('statMineurs').textContent=ensembleMineurs.size;
 
