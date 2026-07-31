@@ -85,6 +85,21 @@ exports.handler = async (event) => {
     const siteUrl = process.env.SITE_URL || 'https://axecube-leaderboard.netlify.app';
     const imageUrl = siteUrl + '/icones/' + icone + '.png';
 
+    // Le champ "name" ON-CHAIN a une limite stricte de 32 octets (contrainte du
+    // programme Token Metadata Solana) -- le nom complet, lui, va sans limite dans
+    // les métadonnées hors-chaîne (uploadMetadata ci-dessous), c'est là qu'il compte visuellement.
+    function nomOnChain(texte, maxOctets) {
+      const buf = Buffer.from(texte, 'utf8');
+      if (buf.length <= maxOctets) return texte;
+      let coupe = buf.slice(0, maxOctets).toString('utf8');
+      // Évite de couper au milieu d'un caractère multi-octets (UTF-8)
+      while (coupe.length && Buffer.byteLength(coupe, 'utf8') > maxOctets) {
+        coupe = coupe.slice(0, -1);
+      }
+      return coupe;
+    }
+    const nomCourt = nomOnChain(nom, 32);
+
     const { uri } = await metaplex.nfts().uploadMetadata({
       name: 'AXECUBE — ' + nom,
       description: type + ' débloqué sur AXECUBE. Rareté vérifiable on-chain via le minage réel.',
@@ -103,7 +118,7 @@ exports.handler = async (event) => {
     // --- Mint réel, envoyé directement dans le wallet de l'utilisateur ---
     const { nft } = await metaplex.nfts().create({
       uri,
-      name: 'AXECUBE — ' + nom,
+      name: nomCourt,
       sellerFeeBasisPoints: 500, // 5% de royalties sur les reventes (ajustable)
       tokenOwner: new (require('@solana/web3.js').PublicKey)(wallet),
     });
