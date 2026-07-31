@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AXECUBE — Mes récompenses gagnées</title>
+<style>
+  :root{
+    --bg:#0b0f1a; --panel:#101725; --panel2:#131c12; --border:#1e2440;
+    --green:#8cff2e; --green-dim:rgba(140,255,46,.35); --mut:#7a8399; --txt:#e8ffd0;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font-family:-apple-system,"Segoe UI",sans-serif;min-height:100vh}
+  .navtop{display:flex;gap:4px;padding:14px 20px;border-bottom:1px solid var(--border);align-items:center;flex-wrap:wrap}
+  .navitem{font-size:11px;letter-spacing:.04em;color:var(--mut);padding:9px 14px;border-radius:9px;text-decoration:none}
+  a.navitem:hover{color:var(--green);cursor:pointer}
+  .navitem.on{color:var(--green);background:rgba(140,255,46,.08)}
+
+  .conteneur{max-width:1100px;margin:0 auto;padding:30px 20px 60px}
+  h1{font-size:20px;margin:0 0 6px}
+  .sousTitre{color:var(--mut);font-size:13px;margin:0 0 26px}
+
+  .walletBox{background:var(--panel);border:1px solid var(--border);border-radius:14px;
+    padding:18px 20px;display:flex;align-items:center;justify-content:space-between;gap:16px;
+    margin-bottom:28px;flex-wrap:wrap}
+  .walletBox .info{font-size:12px;color:var(--mut)}
+  .walletBox .adresse{color:var(--green);font-family:monospace;font-size:13px}
+  .btn{background:var(--green);color:#08240a;border:none;border-radius:10px;padding:11px 20px;
+    font-weight:700;font-size:13px;letter-spacing:.02em;cursor:pointer}
+  .btn:hover{filter:brightness(1.08)}
+  .btn:disabled{opacity:.4;cursor:not-allowed}
+  .btn.secondaire{background:transparent;border:1px solid var(--green-dim);color:var(--green)}
+
+  .grille{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px}
+  .carte{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:18px;text-align:center}
+  .carte .cadre{width:140px;height:140px;margin:0 auto 12px;border-radius:14px;background:#000;
+    display:flex;align-items:center;justify-content:center;overflow:hidden}
+  .carte .cadre img{width:140px;height:140px;display:block}
+  .carte .nom{font-size:13px;font-weight:700;margin-bottom:4px}
+  .carte .type{font-size:10px;color:var(--mut);letter-spacing:.05em;text-transform:uppercase;margin-bottom:10px}
+  .carte .statutMint{font-size:11px;padding:6px 10px;border-radius:999px;display:inline-block}
+  .statutMint.a-minter{background:rgba(140,255,46,.1);color:var(--green);border:1px solid var(--green-dim)}
+  .statutMint.mint-en-cours{background:rgba(255,200,46,.1);color:#ffcc4d;border:1px solid rgba(255,200,46,.3)}
+  .statutMint.minte{background:rgba(46,155,255,.1);color:#6fb8ff;border:1px solid rgba(46,155,255,.3)}
+  .carte .btn{width:100%;margin-top:12px}
+  .lienExplorer{display:block;margin-top:8px;font-size:11px;color:var(--mut);text-decoration:underline}
+
+  .vide{text-align:center;padding:60px 20px;color:var(--mut)}
+  .badgeReseau{display:inline-block;font-size:10px;padding:3px 9px;border-radius:999px;
+    background:rgba(255,140,46,.12);color:#ffb066;border:1px solid rgba(255,140,46,.3);margin-left:8px}
+</style>
+</head>
+<body>
+
+  <nav class="navtop">
+    <a class="navitem" href="/">📊 TABLEAU DE BORD</a>
+    <a class="navitem" href="/miners.html">🔗 MINERS</a>
+    <a class="navitem" href="/"><img src="icones/icone-trophee.png" width="16" height="16" style="vertical-align:-3px;margin-right:4px"> CLASSEMENT</a>
+    <a class="navitem" href="/recompenses.html">📦 RÉCOMPENSES</a>
+    <span class="navitem on">🎁 MES RÉCOMPENSES GAGNÉES</span>
+    <span class="navitem" title="Bientôt disponible">⚙️ PARAMÈTRES</span>
+  </nav>
+
+  <div class="conteneur">
+    <h1>🎁 Mes récompenses gagnées <span class="badgeReseau">DEVNET — TEST</span></h1>
+    <p class="sousTitre">Retrouvez ici tous les cubes que vous avez débloqués. Connectez votre wallet Solana pour les transformer en NFT.</p>
+
+    <div class="walletBox">
+      <div>
+        <div class="info" id="walletStatutTexte">Wallet non connecté</div>
+        <div class="adresse" id="walletAdresse" style="display:none"></div>
+      </div>
+      <button class="btn" id="btnWallet">👻 Connecter Phantom</button>
+    </div>
+
+    <div class="grille" id="grilleMesCubes">
+      <div class="vide">Chargement de vos récompenses…</div>
+    </div>
+  </div>
+
+<script>
+// ============================================================================
+// Config -- à synchroniser avec recompenses.html si l'échelle ou les noms changent.
+// ============================================================================
+const SEUIL_CPU=200, NIVEAUX_CPU=22;
+const PALIERS=[
+  {cle:'bronze', nom:'BRONZE', seuil:100},
+  {cle:'argent', nom:'ARGENT', seuil:1000},
+  {cle:'or', nom:'OR', seuil:10000},
+  {cle:'platine', nom:'PLATINE', seuil:100000},
+  {cle:'diamant', nom:'DIAMANT', seuil:1000000},
+  {cle:'legende', nom:'LÉGENDE', seuil:10000000},
+];
+const NOMS_CUBE=[
+  'Néon I','Néon II','Néon III','Néon IV','Néon V','Néon VI','Néon VII','Néon VIII',
+  'Néon Bicolore I','Néon Bicolore II','Néon Bicolore III','Néon Bicolore IV','Néon Bicolore V',
+  'Néon Tricolore','Néon Multicolore I','Néon Multicolore II','Cube Diamant',
+  'Diamant Émeraude','Diamant Saphir','Diamant Ruby','Diamant Multi-Gemmes I','Diamant Multi-Gemmes II'
+];
+
+let walletPubkey=null;
+let mesCubes=[]; // liste des cubes débloqués, remplie par chargerMesCubes()
+
+// ============================================================================
+// Connexion Phantom (client Solana injecté par l'extension navigateur)
+// ============================================================================
+async function connecterWallet(){
+  if(!window.solana || !window.solana.isPhantom){
+    alert('Phantom non détecté. Installez l\'extension : https://phantom.app');
+    window.open('https://phantom.app','_blank');
+    return;
+  }
+  try{
+    const resp=await window.solana.connect();
+    walletPubkey=resp.publicKey.toString();
+    document.getElementById('walletStatutTexte').textContent='Wallet connecté';
+    const adr=document.getElementById('walletAdresse');
+    adr.style.display='block';
+    adr.textContent=walletPubkey.slice(0,4)+'…'+walletPubkey.slice(-4);
+    document.getElementById('btnWallet').textContent='✅ Connecté';
+    document.getElementById('btnWallet').disabled=true;
+    rendreCubes(); // ré-affiche pour activer les boutons Mint
+  }catch(e){
+    console.error('Connexion Phantom refusée ou échouée :', e);
+  }
+}
+document.getElementById('btnWallet').addEventListener('click', connecterWallet);
+
+// ============================================================================
+// Récupération de mes cubes débloqués (même source que le classement : /top)
+// ============================================================================
+async function chargerMesCubes(){
+  try{
+    const r=await fetch('/top');
+    const j=await r.json();
+    const toutes=[...(j.cpu?.allTime||j.top||[]), ...(j.asic?.allTime||[])];
+    // Provisoire : identité par nom affiché, comme sur index.html/recompenses.html --
+    // à remplacer par une vraie correspondance machineId/compte quand ce système existera.
+    const nomCompte=(localStorage.getItem('axecube_nom')||'AXECUBE001').trim();
+    const moi=toutes.find(e=>e.worker===nomCompte);
+    if(!moi){ mesCubes=[]; rendreCubes(); return; }
+
+    mesCubes=[];
+    // 22 cubes CPU (loterie / bestDiff)
+    const niveauMax=Math.min(NIVEAUX_CPU, Math.floor((moi.bestDiff||0)/SEUIL_CPU)+1);
+    if((moi.bestDiff||0)>=0 && niveauMax>=1){
+      for(let n=1;n<=niveauMax;n++){
+        mesCubes.push({
+          id:'cpu-'+n,
+          type:'Cube CPU (loterie)',
+          nom:NOMS_CUBE[n-1],
+          icone:'cube-p'+String(n).padStart(2,'0'),
+          seuilAtteint:(n-1)*SEUIL_CPU,
+        });
+      }
+    }
+    // 6 cubes difficulté (cumul de shares)
+    PALIERS.forEach((p,i)=>{
+      if((moi.accepted||0)>=p.seuil){
+        mesCubes.push({
+          id:'palier-'+p.cle,
+          type:'Cube Difficulté (cumul)',
+          nom:p.nom,
+          icone:'palier-'+p.cle,
+          seuilAtteint:p.seuil,
+        });
+      }
+    });
+
+    rendreCubes();
+  }catch(e){
+    console.error('Erreur chargement /top :', e);
+    document.getElementById('grilleMesCubes').innerHTML='<div class="vide">Impossible de charger vos récompenses pour le moment.</div>';
+  }
+}
+
+// ============================================================================
+// Statut de mint -- stocké en local pour l'instant (MVP). À terme, faire
+// autorité par le backend (Netlify Blobs) pour empêcher un mint en double.
+// ============================================================================
+function statutMintDe(cubeId){
+  return localStorage.getItem('mint_statut_'+cubeId) || 'a-minter';
+}
+function fixerStatutMint(cubeId, statut, extra){
+  localStorage.setItem('mint_statut_'+cubeId, statut);
+  if(extra) localStorage.setItem('mint_data_'+cubeId, JSON.stringify(extra));
+}
+
+function rendreCubes(){
+  const conteneur=document.getElementById('grilleMesCubes');
+  if(mesCubes.length===0){
+    conteneur.innerHTML='<div class="vide">Aucune récompense débloquée pour l\'instant. Continuez à miner !</div>';
+    return;
+  }
+  conteneur.innerHTML=mesCubes.map(c=>{
+    const statut=statutMintDe(c.id);
+    let statutHtml, boutonHtml;
+    if(statut==='minte'){
+      const extra=JSON.parse(localStorage.getItem('mint_data_'+c.id)||'{}');
+      statutHtml='<span class="statutMint minte">✅ Minté</span>';
+      const lienExplorer=extra.mintAddress
+        ? '<a class="lienExplorer" target="_blank" href="https://explorer.solana.com/address/'+extra.mintAddress+'?cluster=devnet">Voir sur Solana Explorer (devnet) →</a>'
+        : '';
+      boutonHtml=lienExplorer;
+    }else if(statut==='mint-en-cours'){
+      statutHtml='<span class="statutMint mint-en-cours">⏳ Mint en cours…</span>';
+      boutonHtml='<button class="btn" disabled>Patientez…</button>';
+    }else{
+      statutHtml='<span class="statutMint a-minter">💎 Prêt à minter</span>';
+      boutonHtml='<button class="btn" onclick="minterCube(\''+c.id+'\')" '+(walletPubkey?'':'disabled title="Connectez votre wallet"')+'>🪙 Mint ce cube</button>';
+    }
+    return '<div class="carte">'+
+      '<div class="cadre"><img src="icones/'+c.icone+'.png" alt=""></div>'+
+      '<div class="nom">'+c.nom+'</div>'+
+      '<div class="type">'+c.type+'</div>'+
+      statutHtml+
+      boutonHtml+
+      '</div>';
+  }).join('');
+}
+
+// ============================================================================
+// Lance le mint via la fonction serverless Netlify (mint-cube.js)
+// ============================================================================
+async function minterCube(cubeId){
+  if(!walletPubkey){ alert('Connectez votre wallet Phantom d\'abord.'); return; }
+  const cube=mesCubes.find(c=>c.id===cubeId);
+  if(!cube) return;
+
+  fixerStatutMint(cubeId, 'mint-en-cours');
+  rendreCubes();
+
+  try{
+    const r=await fetch('/.netlify/functions/mint-cube', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        wallet: walletPubkey,
+        cubeId: cube.id,
+        nom: cube.nom,
+        type: cube.type,
+        icone: cube.icone,
+      }),
+    });
+    const j=await r.json();
+    if(!r.ok || !j.mintAddress) throw new Error(j.erreur || 'Réponse invalide du serveur');
+
+    fixerStatutMint(cubeId, 'minte', {mintAddress:j.mintAddress});
+    rendreCubes();
+  }catch(e){
+    console.error('Échec du mint :', e);
+    alert('Le mint a échoué : '+e.message);
+    fixerStatutMint(cubeId, 'a-minter');
+    rendreCubes();
+  }
+}
+
+chargerMesCubes();
+</script>
+</body>
+</html>
