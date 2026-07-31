@@ -46,7 +46,19 @@ exports.handler = async (event) => {
     const rpcUrl = process.env.SOLANA_RPC_URL || clusterApiUrl('devnet');
     const connection = new Connection(rpcUrl, 'confirmed');
 
-    const secretKeyArray = JSON.parse(process.env.SOLANA_TREASURY_SECRET_KEY);
+    const rawKey = process.env.SOLANA_TREASURY_SECRET_KEY || '';
+    console.log('DEBUG longueur brute:', rawKey.length);
+    console.log('DEBUG 15 derniers caractères (codes):', JSON.stringify(rawKey.slice(-15)));
+
+    let secretKeyArray;
+    try {
+      secretKeyArray = JSON.parse(rawKey);
+    } catch (parseErr) {
+      console.log('DEBUG échec JSON.parse, tentative de nettoyage...');
+      const nettoye = rawKey.trim().replace(/[^\d,\[\]]/g, '');
+      console.log('DEBUG version nettoyée, longueur:', nettoye.length);
+      secretKeyArray = JSON.parse(nettoye);
+    }
     const tresorerie = Keypair.fromSecretKey(new Uint8Array(secretKeyArray));
 
     const metaplex = Metaplex.make(connection)
