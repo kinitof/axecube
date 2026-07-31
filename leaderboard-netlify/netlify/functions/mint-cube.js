@@ -18,7 +18,14 @@
 // le RPC public mainnet est trop limité en débit), et changer SOLANA_RPC_URL.
 
 const { Connection, Keypair, clusterApiUrl } = require('@solana/web3.js');
-const { Metaplex, keypairIdentity, bundlrStorage, toMetaplexFile } = require('@metaplex-foundation/js');
+const metaplexPkg = require('@metaplex-foundation/js');
+const { Metaplex, keypairIdentity } = metaplexPkg;
+// Bundlr a été renommé Irys -- certaines versions du SDK exposent encore
+// bundlrStorage (ancien nom), d'autres seulement irysStorage (nouveau nom).
+const storagePlugin = metaplexPkg.irysStorage || metaplexPkg.bundlrStorage;
+const storageAddress = metaplexPkg.irysStorage
+  ? 'https://devnet.irys.xyz'
+  : 'https://devnet.bundlr.network';
 
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') {
@@ -61,10 +68,15 @@ exports.handler = async (event) => {
     }
     const tresorerie = Keypair.fromSecretKey(new Uint8Array(secretKeyArray));
 
+    console.log('DEBUG plugin storage utilisé:', metaplexPkg.irysStorage ? 'irysStorage' : 'bundlrStorage');
+    if (!storagePlugin) {
+      throw new Error('Ni irysStorage ni bundlrStorage disponibles dans @metaplex-foundation/js -- vérifie la version installée');
+    }
+
     const metaplex = Metaplex.make(connection)
       .use(keypairIdentity(tresorerie))
-      .use(bundlrStorage({
-        address: 'https://devnet.bundlr.network',
+      .use(storagePlugin({
+        address: storageAddress,
         providerUrl: rpcUrl,
         timeout: 60000,
       }));
