@@ -71,7 +71,11 @@
                           box-shadow:inset 0 0 0 1px rgba(140,255,46,.5), 0 8px 24px rgba(0,0,0,.4)}
   .carte.vide:hover{opacity:.6}
   .carte .emoji{font-size:136px;line-height:1}
-  .carte .emoji-cube{display:block;margin:0 auto;width:224px;height:224px;max-width:100%}
+  .carte .cube-frame{width:180px;height:180px;margin:0 auto;border-radius:16px;
+    background:#000;display:flex;align-items:center;justify-content:center;overflow:hidden;
+    box-shadow:0 0 22px 4px rgba(140,255,46,.55), 0 0 46px 10px rgba(140,255,46,.25)}
+  .carte.vide .cube-frame{box-shadow:0 0 10px 2px rgba(140,255,46,.15)}
+  .carte .emoji-cube{display:block;width:180px;height:180px;max-width:100%}
   .carte .nom{font-weight:800;font-size:15px;margin-top:8px;letter-spacing:.03em}
   .carte .seuil{font-size:11px;color:var(--mut);margin-top:2px}
   .carte .compteur{margin-top:14px;font-size:11px;color:var(--green);font-weight:700}
@@ -339,7 +343,8 @@ function rendreCpu(mineurs){
   // Système loterie : le niveau dépend du meilleur tirage (bestDiff), pas du volume miné.
   // Plafonné à 22 niveaux fixes (22 icônes disponibles, seuil max = 22*200 = 4400 de difficulté) --
   // un bestDiff au-delà de 4400 reste affiché au niveau 22, pas de niveau 23+ fantôme.
-  const niveauDe=(bestDiff)=>Math.min(NIVEAUX_CPU, Math.floor((bestDiff||0)/SEUIL_CPU));
+  // Cube k couvre la tranche [200*(k-1), 200*k[ -- ex: cube1=0-199, cube2=200-399...
+  const niveauDe=(bestDiff)=>Math.min(NIVEAUX_CPU, Math.floor((bestDiff||0)/SEUIL_CPU)+1);
   const nbNiveaux=NIVEAUX_CPU;
 
   const parNiveau=Array.from({length:nbNiveaux},()=>[]);
@@ -349,14 +354,14 @@ function rendreCpu(mineurs){
   }
   let debloquesTotal=0;
   const html=Array.from({length:nbNiveaux},(_,i)=>{
-    const niveau=i+1, seuil=niveau*SEUIL_CPU;
+    const niveau=i+1, seuil=(niveau-1)*SEUIL_CPU;
     const tenants=parNiveau[i].sort((a,b)=>(b.bestDiff||0)-(a.bestDiff||0));
     const vide=tenants.length===0;
     if(!vide) debloquesTotal++;
     const meilleur=tenants[0];
     const icone='cube-p'+String(niveau).padStart(2,'0');
     return '<div class="carte '+(vide?'vide':'debloque')+'">'+
-      '<img class="emoji-cube" src="icones/'+icone+'.png" alt="" width="224" height="224"'+(vide?' style="opacity:.4"':'')+'>'+
+      '<div class="cube-frame"><img class="emoji-cube" src="icones/'+icone+'.png" alt=""'+(vide?' style="opacity:.4"':'')+'></div>'+
       '<div class="nom">'+NOMS_CUBE[i]+'</div>'+
       '<div class="seuil">Difficulté ≥ '+fmtD(seuil)+'</div>'+
       (vide
