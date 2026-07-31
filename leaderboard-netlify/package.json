@@ -13,5 +13,9 @@
     "@metaplex-foundation/js": "^0.20.1",
     "@netlify/blobs": "^10.7.11",
     "@solana/web3.js": "^1.98.4"
-  }
+  },
+"overrides": {
+  "uuid": "^8.3.2"
+}
+
 }
