@@ -48,6 +48,30 @@
   .vide{text-align:center;padding:60px 20px;color:var(--mut)}
   .badgeReseau{display:inline-block;font-size:10px;padding:3px 9px;border-radius:999px;
     background:rgba(255,140,46,.12);color:#ffb066;border:1px solid rgba(255,140,46,.3);margin-left:8px}
+
+  .cadre{cursor:zoom-in}
+  .cadre:hover{filter:brightness(1.15)}
+
+  .lightbox{position:fixed;inset:0;background:rgba(3,6,12,.92);z-index:1000;
+    display:none;align-items:center;justify-content:center;padding:30px}
+  .lightbox.ouverte{display:flex}
+  .lightbox .boite{text-align:center}
+  .lightbox img{width:min(70vw,480px);height:min(70vw,480px);background:#000;border-radius:20px;
+    box-shadow:0 0 60px 10px rgba(140,255,46,.25)}
+  .lightbox .titre{color:var(--txt);font-size:18px;font-weight:700;margin-top:18px}
+  .lightbox .fermer{position:absolute;top:24px;right:32px;color:var(--mut);font-size:28px;
+    cursor:pointer;background:none;border:none}
+  .lightbox .fermer:hover{color:var(--txt)}
+
+  .toastFelicitations{position:fixed;top:24px;left:50%;transform:translateX(-50%) translateY(-20px);
+    background:linear-gradient(135deg,#173a0f,#0e2a09);border:1px solid var(--green-dim);
+    border-radius:14px;padding:16px 24px;display:flex;align-items:center;gap:14px;
+    box-shadow:0 8px 30px rgba(0,0,0,.5),0 0 30px rgba(140,255,46,.2);z-index:1100;
+    opacity:0;pointer-events:none;transition:opacity .3s ease,transform .3s ease}
+  .toastFelicitations.visible{opacity:1;transform:translateX(-50%) translateY(0);pointer-events:auto}
+  .toastFelicitations .icone{font-size:28px}
+  .toastFelicitations .texte b{color:var(--green)}
+  .toastFelicitations .texte .sousTexteToast{font-size:12px;color:var(--mut);margin-top:2px}
 </style>
 </head>
 <body>
@@ -75,6 +99,22 @@
 
     <div class="grille" id="grilleMesCubes">
       <div class="vide">Chargement de vos récompenses…</div>
+    </div>
+  </div>
+
+  <div class="lightbox" id="lightbox" onclick="if(event.target===this) fermerLightbox()">
+    <button class="fermer" onclick="fermerLightbox()">✕</button>
+    <div class="boite">
+      <img id="lightboxImg" src="" alt="">
+      <div class="titre" id="lightboxTitre"></div>
+    </div>
+  </div>
+
+  <div class="toastFelicitations" id="toastFelicitations">
+    <div class="icone">🎉</div>
+    <div class="texte">
+      <div>Félicitations ! <b id="toastNomCube"></b> minté avec succès</div>
+      <div class="sousTexteToast">Votre NFT est maintenant dans votre wallet</div>
     </div>
   </div>
 
@@ -186,6 +226,29 @@ function fixerStatutMint(cubeId, statut, extra){
   if(extra) localStorage.setItem('mint_data_'+cubeId, JSON.stringify(extra));
 }
 
+// ============================================================================
+// Lightbox -- agrandir un cube au clic pour apprécier la qualité de l'image.
+// ============================================================================
+function ouvrirLightbox(icone, titre){
+  document.getElementById('lightboxImg').src='icones/'+icone+'.png';
+  document.getElementById('lightboxTitre').textContent=titre;
+  document.getElementById('lightbox').classList.add('ouverte');
+}
+function fermerLightbox(){
+  document.getElementById('lightbox').classList.remove('ouverte');
+}
+document.addEventListener('keydown', e=>{ if(e.key==='Escape') fermerLightbox(); });
+
+// ============================================================================
+// Toast de félicitations -- affiché brièvement après un mint réussi.
+// ============================================================================
+function afficherFelicitations(nomCube){
+  document.getElementById('toastNomCube').textContent=nomCube;
+  const toast=document.getElementById('toastFelicitations');
+  toast.classList.add('visible');
+  setTimeout(()=>toast.classList.remove('visible'), 4200);
+}
+
 function rendreCubes(){
   const conteneur=document.getElementById('grilleMesCubes');
   if(mesCubes.length===0){
@@ -210,7 +273,7 @@ function rendreCubes(){
       boutonHtml='<button class="btn" onclick="minterCube(\''+c.id+'\')" '+(walletPubkey?'':'disabled title="Connectez votre wallet"')+'>🪙 Mint ce cube</button>';
     }
     return '<div class="carte">'+
-      '<div class="cadre"><img src="icones/'+c.icone+'.png" alt=""></div>'+
+      '<div class="cadre" onclick="ouvrirLightbox(\''+c.icone+'\', \''+c.nom.replace(/'/g,"\\'")+'\')"><img src="icones/'+c.icone+'.png" alt=""></div>'+
       '<div class="nom">'+c.nom+'</div>'+
       '<div class="type">'+c.type+'</div>'+
       statutHtml+
@@ -247,6 +310,7 @@ async function minterCube(cubeId){
 
     fixerStatutMint(cubeId, 'minte', {mintAddress:j.mintAddress});
     rendreCubes();
+    afficherFelicitations(cube.nom);
   }catch(e){
     console.error('Échec du mint :', e);
     alert('Le mint a échoué : '+e.message);
