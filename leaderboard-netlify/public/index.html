@@ -156,7 +156,10 @@
        border:1px solid var(--green-dim);border-radius:9px;padding:8px 12px;white-space:nowrap">‹ Retour au mineur</a>
     <div class="statut" id="statutLigne"><span class="dot"></span> —</div>
     <div class="compte" id="compteBtn">
-      <img id="compteCube" src="icones/cube-p01.png" alt="" width="30" height="30">
+      <div id="compteCubeFrame" style="width:30px;height:30px;border-radius:8px;background:#000;
+           display:flex;align-items:center;justify-content:center;overflow:hidden;flex:0 0 auto">
+        <img id="compteCube" src="icones/cube-p01.png" alt="" width="30" height="30">
+      </div>
       <span id="compteNom">AXECUBE001</span> <span style="opacity:.5">▾</span>
       <div class="menuCompte" id="menuCompte">
         <div class="menuItem" data-action="profil">👤 Mon compte</div>
@@ -295,15 +298,38 @@ const NOMS_CUBE=[
   'Diamant Émeraude','Diamant Saphir','Diamant Ruby',
   'Diamant Multi-Gemmes I','Diamant Multi-Gemmes II'
 ];
+// Mêmes couleurs que sur recompenses.html -- à garder synchronisées.
+const COULEURS_CUBE=[
+  '#8cff2e','#2e9bff','#ff3b3b','#b83bff','#2effe0','#ff9c2e','#ff2ea0','#f2e92e',
+  '#2effb0','#8c2eff','#ffb02e','#ff2ee0','#c8ff2e',
+  '#e8f0ff',
+  'rainbow','rainbow',
+  '#bff5ff',
+  '#10b981','#2563eb','#e11d48',
+  '#f2b90c','rainbow'
+];
+const RAINBOW_COLORS=['#ff3b3b','#ffb02e','#f2e92e','#2eff6e','#2e9bff','#b83bff'];
+function hexToRgba(hex, alpha){
+  const h=hex.replace('#','');
+  const r=parseInt(h.substring(0,2),16), g=parseInt(h.substring(2,4),16), b=parseInt(h.substring(4,6),16);
+  return 'rgba('+r+','+g+','+b+','+alpha+')';
+}
+function haloStyle(index, tailleForte, tailleDouce, dim){
+  const couleur=COULEURS_CUBE[index]||'#8cff2e';
+  if(couleur==='rainbow'){
+    const a=dim?0.15:0.45;
+    return 'box-shadow:'+RAINBOW_COLORS.map(c=>'0 0 '+tailleForte+'px 1px '+hexToRgba(c,a)).join(', ');
+  }
+  const a1=dim?0.18:0.55, a2=dim?0.08:0.25;
+  return 'box-shadow:0 0 '+tailleForte+'px 3px '+hexToRgba(couleur,a1)+', 0 0 '+tailleDouce+'px 6px '+hexToRgba(couleur,a2);
+}
 function nomCubeSelonPalier(bestDiff){
-  const niveau=Math.min(NIVEAUX_CUBE_MAX, Math.floor((bestDiff||0)/SEUIL_CUBE_PAS));
-  const idx=Math.max(1, niveau);
-  return NOMS_CUBE[idx-1];
+  const niveau=Math.min(NIVEAUX_CUBE_MAX, Math.floor((bestDiff||0)/SEUIL_CUBE_PAS)+1);
+  return NOMS_CUBE[niveau-1];
 }
 function cubeSelonPalier(bestDiff){
-  const niveau=Math.min(NIVEAUX_CUBE_MAX, Math.floor((bestDiff||0)/SEUIL_CUBE_PAS));
-  const idx=Math.max(1, niveau);
-  return 'cube-p'+String(idx).padStart(2,'0');
+  const niveau=Math.min(NIVEAUX_CUBE_MAX, Math.floor((bestDiff||0)/SEUIL_CUBE_PAS)+1);
+  return 'cube-p'+String(niveau).padStart(2,'0');
 }
 // Met à jour le cube du badge compte selon la meilleure difficulté du mineur affiché.
 // Provisoire : sans vrai système de compte/identité machine, on retrouve "mon" entrée en
@@ -317,6 +343,10 @@ function majCubeCompte(){
   const cube=cubeSelonPalier(moi?moi.bestDiff:0);
   document.getElementById('compteCube').src='icones/'+cube+'.png';
   document.getElementById('compteCube').title=nomCubeSelonPalier(moi?moi.bestDiff:0);
+  {
+    const niveauBadge=Math.min(NIVEAUX_CUBE_MAX, Math.floor((moi?moi.bestDiff:0||0)/SEUIL_CUBE_PAS)+1);
+    document.getElementById('compteCubeFrame').style.cssText+=';'+haloStyle(niveauBadge-1, 6, 12, false);
+  }
 }
 function sparkSvg(vals){
   if(!vals || vals.length<2) return '';

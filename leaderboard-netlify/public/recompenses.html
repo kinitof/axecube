@@ -72,9 +72,7 @@
   .carte.vide:hover{opacity:.6}
   .carte .emoji{font-size:136px;line-height:1}
   .carte .cube-frame{width:180px;height:180px;margin:0 auto;border-radius:16px;
-    background:#000;display:flex;align-items:center;justify-content:center;overflow:hidden;
-    box-shadow:0 0 22px 4px rgba(140,255,46,.55), 0 0 46px 10px rgba(140,255,46,.25)}
-  .carte.vide .cube-frame{box-shadow:0 0 10px 2px rgba(140,255,46,.15)}
+    background:#000;display:flex;align-items:center;justify-content:center;overflow:hidden}
   .carte .emoji-cube{display:block;width:180px;height:180px;max-width:100%}
   .carte .nom{font-weight:800;font-size:15px;margin-top:8px;letter-spacing:.03em}
   .carte .seuil{font-size:11px;color:var(--mut);margin-top:2px}
@@ -214,6 +212,33 @@ const NOMS_CUBE=[
   'Diamant Émeraude','Diamant Saphir','Diamant Ruby',
   'Diamant Multi-Gemmes I','Diamant Multi-Gemmes II'
 ];
+// Couleur du halo par cube (même ordre que NOMS_CUBE) -- 'rainbow' = halo multicolore.
+// Ajuste librement ces valeurs pour matcher exactement la couleur réelle de tes images.
+const COULEURS_CUBE=[
+  '#8cff2e','#2e9bff','#ff3b3b','#b83bff','#2effe0','#ff9c2e','#ff2ea0','#f2e92e',
+  '#2effb0','#8c2eff','#ffb02e','#ff2ee0','#c8ff2e',
+  '#e8f0ff',
+  'rainbow','rainbow',
+  '#bff5ff',
+  '#10b981','#2563eb','#e11d48',
+  '#f2b90c','rainbow'
+];
+const RAINBOW_COLORS=['#ff3b3b','#ffb02e','#f2e92e','#2eff6e','#2e9bff','#b83bff'];
+function hexToRgba(hex, alpha){
+  const h=hex.replace('#','');
+  const r=parseInt(h.substring(0,2),16), g=parseInt(h.substring(2,4),16), b=parseInt(h.substring(4,6),16);
+  return 'rgba('+r+','+g+','+b+','+alpha+')';
+}
+/** Construit le box-shadow (halo) pour un index de cube donné (0-based). */
+function haloStyle(index, tailleForte, tailleDouce, dim){
+  const couleur=COULEURS_CUBE[index]||'#8cff2e';
+  if(couleur==='rainbow'){
+    const a=dim?0.15:0.45;
+    return 'box-shadow:'+RAINBOW_COLORS.map(c=>'0 0 '+tailleForte+'px 1px '+hexToRgba(c,a)).join(', ');
+  }
+  const a1=dim?0.18:0.55, a2=dim?0.08:0.25;
+  return 'box-shadow:0 0 '+tailleForte+'px 4px '+hexToRgba(couleur,a1)+', 0 0 '+tailleDouce+'px 10px '+hexToRgba(couleur,a2);
+}
 
 // Titres "Pioche", basés sur le travail réel cumulé (totalHashes) -- volontairement
 // indépendant du pool utilisé (contrairement à un nombre brut de shares, qui avantagerait
@@ -361,7 +386,7 @@ function rendreCpu(mineurs){
     const meilleur=tenants[0];
     const icone='cube-p'+String(niveau).padStart(2,'0');
     return '<div class="carte '+(vide?'vide':'debloque')+'">'+
-      '<div class="cube-frame"><img class="emoji-cube" src="icones/'+icone+'.png" alt=""'+(vide?' style="opacity:.4"':'')+'></div>'+
+      '<div class="cube-frame" style="'+haloStyle(i, 22, 46, vide)+'"><img class="emoji-cube" src="icones/'+icone+'.png" alt=""'+(vide?' style="opacity:.4"':'')+'></div>'+
       '<div class="nom">'+NOMS_CUBE[i]+'</div>'+
       '<div class="seuil">Difficulté ≥ '+fmtD(seuil)+'</div>'+
       (vide
