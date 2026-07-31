@@ -136,8 +136,8 @@ async function chargerMesCubes(){
     const toutes=[...(j.cpu?.allTime||j.top||[]), ...(j.asic?.allTime||[])];
     // Provisoire : identité par nom affiché, comme sur index.html/recompenses.html --
     // à remplacer par une vraie correspondance machineId/compte quand ce système existera.
-    const nomCompte=(localStorage.getItem('axecube_nom')||'AXECUBE001').trim();
-    const moi=toutes.find(e=>e.worker===nomCompte);
+    const nomCompte=(localStorage.getItem('axecube_nom')||'AXECUBE001').trim().toLowerCase();
+    const moi=toutes.find(e=>(e.worker||'').trim().toLowerCase()===nomCompte);
     if(!moi){ mesCubes=[]; rendreCubes(); return; }
 
     mesCubes=[];
