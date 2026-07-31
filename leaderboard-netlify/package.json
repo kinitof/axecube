@@ -10,6 +10,8 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@netlify/blobs": "^10.7.11"
+    "@metaplex-foundation/js": "^0.20.1",
+    "@netlify/blobs": "^10.7.11",
+    "@solana/web3.js": "^1.98.4"
   }
 }
