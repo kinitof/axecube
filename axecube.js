@@ -991,8 +991,16 @@ function main() {
   }
   const machineId = obtenirIdentiteMachine();
 
-  let workerName = args.worker || process.env.WORKER || '';
-  if (!workerName) workerName = `mineur-${machineId.slice(0, 6)}`;
+  // Le nom de worker reste personnalisable (--worker=...), mais on lui accole
+  // toujours un suffixe tiré du machineId matériel. Ça élimine les collisions
+  // de nom entre deux machines différentes (ex: --worker=axecube copié-collé
+  // par erreur sur deux ordinateurs distincts continuerait, sans ce suffixe,
+  // à se faire passer pour un seul et même mineur sur le pool/classement).
+  const nomPersonnalise = (args.worker || process.env.WORKER || '').trim();
+  const suffixeMachine = machineId.slice(0, 6);
+  let workerName = nomPersonnalise
+    ? `${nomPersonnalise}-${suffixeMachine}`
+    : `mineur-${suffixeMachine}`;
   const poolPassword = args.password || process.env.POOL_PASSWORD || 'x';
   const user = `${address}.${workerName}`;
   let poolLabel = poolHost;
@@ -1403,6 +1411,34 @@ function main() {
   // UPTIME juste en dessous : les deux partagent la même règle des 30 minutes.
   const coupureDepuisArretMs = dernierArretISO ? (Date.now() - new Date(dernierArretISO).getTime()) : Infinity;
 
+  // Clé de date locale (YYYY-MM-DD, fuseau de la machine) -- sert à détecter le passage
+  // à un nouveau jour pour remettre à zéro les compteurs "du jour" (meilleure diff du
+  // jour, total difficultés du jour), sans jamais toucher au total cumulé infini.
+  function cleJourLocal(d = new Date()) {
+    const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, '0'), j = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${j}`;
+  }
+  function verifierRolloverJour() {
+    const jourActuel = cleJourLocal();
+    if (state.diffJourDate !== jourActuel) {
+      // Le jour change : on archive le bloc du jour écoulé (s'il y a eu de l'activité)
+      // avant de remettre les compteurs à zéro pour le nouveau jour.
+      if (state.diffJourDate && (state.bestDiffJour || 0) > 0) {
+        state.journalJour.push({
+          date: state.diffJourDate,
+          bestDiff: state.bestDiffJour || 0,
+          diffTotal: state.diffJour || 0,
+        });
+        // Garde un historique raisonnable (les 120 derniers jours avec activité).
+        if (state.journalJour.length > 120) state.journalJour.shift();
+      }
+      state.diffJour = 0;
+      state.bestDiffJour = 0;
+      state.diffJourDate = jourActuel;
+      stateDirty = true;
+    }
+  }
+
   function chargerBanque(cle) {
     const b = banques[cle] || {};
     state.bestDiff = b.bestDiff || 0;
@@ -1423,6 +1459,31 @@ function main() {
     state.totalHashes = b.totalHashes || 0;
     state.depuis = b.depuis || new Date().toISOString();
     state.paliersAtteints = b.paliersAtteints || {};
+
+    // Total cumulé infini (somme de TOUTES les difficultés acceptées, depuis le tout
+    // premier lancement) -- ne se remet jamais à zéro, quel que soit le temps d'arrêt.
+    state.diffTotalInfini = b.diffTotalInfini || 0;
+    // Date de départ du compteur infini -- fixée une seule fois, au tout premier
+    // lancement où ce champ existe, puis jamais modifiée ensuite.
+    state.diffInfiniDepuis = b.diffInfiniDepuis || new Date().toISOString();
+
+    // Journal quotidien : un "bloc" par jour ayant eu de l'activité (date, meilleure
+    // diff du jour, total du jour), conservé même après le passage au jour suivant --
+    // permet de consulter l'historique jour par jour, façon registre chronologique.
+    state.journalJour = Array.isArray(b.journalJour) ? b.journalJour : [];
+
+    // Compteurs "du jour" -- rattachés à une date (fuseau local). Si la date sauvegardée
+    // ne correspond plus à aujourd'hui (nouveau jour, ou machine restée éteinte plus
+    // longtemps), on repart de zéro pour ces deux-là uniquement.
+    const jourActuel = cleJourLocal();
+    if (b.diffJourDate === jourActuel) {
+      state.diffJour = b.diffJour || 0;
+      state.bestDiffJour = b.bestDiffJour || 0;
+    } else {
+      state.diffJour = 0;
+      state.bestDiffJour = 0;
+    }
+    state.diffJourDate = jourActuel;
     // Rattrapage : si un record préexistant (prouvé ou récupéré du pool) dépasse déjà des
     // paliers jamais enregistrés (ex. mise à jour depuis une version antérieure à cette
     // fonctionnalité), on les marque atteints avec la date de premier lancement comme repère.
@@ -1452,6 +1513,11 @@ function main() {
       accepted: state.accepted, rejected: state.rejected,
       totalHashes: state.totalHashes,
       depuis: state.depuis, paliersAtteints: state.paliersAtteints,
+      diffTotalInfini: state.diffTotalInfini || 0,
+      diffInfiniDepuis: state.diffInfiniDepuis || new Date().toISOString(),
+      journalJour: state.journalJour || [],
+      diffJour: state.diffJour || 0, bestDiffJour: state.bestDiffJour || 0,
+      diffJourDate: state.diffJourDate || cleJourLocal(),
     };
     try {
       fs.writeFileSync(STATE_FILE, JSON.stringify({
@@ -1464,6 +1530,7 @@ function main() {
   }
 
   setInterval(() => { if (stateDirty) saveState(); }, 15000);
+  setInterval(() => verifierRolloverJour(), 60000); // capte le passage à minuit même sans share
   setInterval(() => {
     const now = Date.now();
     state.histRecord.push({ t: now, v: state.bestDiff });
@@ -1789,6 +1856,10 @@ function main() {
       } else if (req.type === 'submit') {
         if (msg.result === true) {
           state.accepted++;
+          verifierRolloverJour();
+          state.diffTotalInfini = (state.diffTotalInfini || 0) + req.share.diff;
+          state.diffJour = (state.diffJour || 0) + req.share.diff;
+          if (req.share.diff > (state.bestDiffJour || 0)) state.bestDiffJour = req.share.diff;
           stateDirty = true;
           log('ok', t.shareOk(formatDiff(req.share.diff), state.accepted));
         } else {
@@ -3162,10 +3233,16 @@ setInterval(tick,2000);tick();
   <div class="card"><div class="k" id="k_thr">THERMIQUE</div><div class="v" id="d_thr">—</div></div>
   <div class="card"><div class="k" id="k_tot">TICKETS JOUÉS</div><div class="v" id="d_tot">—</div></div>
   <div class="card"><div class="k" id="k_up">SESSION</div><div class="v" id="d_up">—</div></div>
+  <div class="card"><div class="k" id="k_recjour">MEILLEURE DIFF DU JOUR</div><div class="v big" id="d_recjour">—</div></div>
+  <div class="card"><div class="k" id="k_diffjour">TOTAL DIFFICULTÉS DU JOUR</div><div class="v big" id="d_diffjour">—</div></div>
+  <div class="card"><div class="k" id="k_cubs">CUB'S (TOTAL CUMULÉ)</div><div class="v big" id="d_cubs">—</div><div class="sub" id="d_cubssub"></div></div>
 </div>
 
 <h2 id="h_graph">RECORD AU FIL DU TEMPS</h2>
 <canvas id="graph" width="1040" height="150"></canvas>
+
+<h2 id="h_journal">📖 JOURNAL DES GAINS <span style="font-size:9px;color:var(--mut)">— un bloc par jour, comme un registre</span></h2>
+<div class="card full"><div id="d_journal" class="loading">Chargement…</div></div>
 
 <h2 id="h_cores">CŒURS</h2>
 <div class="card full"><table id="t_cores"><tbody></tbody></table></div>
@@ -3255,6 +3332,48 @@ async function charger(){
   }
   document.getElementById('d_tot').textContent=fmtHR(d.perf.totalHashes).replace('/s','');
   document.getElementById('d_up').textContent=fmtUp(d.uptime);
+
+  // Diff du jour + Cub's (total infini, 1 Cub's = 1 satoshi) -- fmtD est déjà défini
+  // plus haut dans ce même fichier pour formater les difficultés (k/M/G...).
+  document.getElementById('d_recjour').textContent=fmtD(d.loterie.bestDiffJour||0);
+  document.getElementById('d_diffjour').textContent=fmtD(d.loterie.diffJour||0);
+  const cubsTotal=d.loterie.diffTotalInfini||0;
+  document.getElementById('d_cubs').textContent=cubsTotal.toLocaleString('fr-FR',{maximumFractionDigits:2})+" CUB'S";
+  {
+    const sats=Math.floor(cubsTotal);
+    const btcEquiv=sats/1e8;
+    const sub=[sats.toLocaleString('fr-FR')+' sats'];
+    if(d.marche&&d.marche.btcPrice){
+      sub.push('≈ '+(btcEquiv*d.marche.btcPrice).toLocaleString('fr-FR',{maximumFractionDigits:2})+' '+d.marche.btcSymbol);
+    }
+    if(d.loterie.diffInfiniDepuis){
+      const dt=new Date(d.loterie.diffInfiniDepuis);
+      sub.push('depuis le '+dt.toLocaleDateString('fr-FR'));
+    }
+    document.getElementById('d_cubssub').textContent=sub.join(' · ');
+  }
+
+  // Journal des gains : un bloc par jour ayant eu de l'activité, du plus récent au plus
+  // ancien -- façon registre chronologique, chaque entrée résume le jour concerné.
+  {
+    const journal=d.loterie.journalJour||[];
+    const boiteJournal=document.getElementById('d_journal');
+    if(!journal.length){
+      boiteJournal.innerHTML='<span style="color:var(--mut)">Aucun jour archivé pour le moment -- le premier bloc apparaitra demain.</span>';
+    } else {
+      const lignes=[...journal].reverse().map((j,i)=>{
+        const dt=new Date(j.date+'T00:00:00');
+        const dateAffichee=dt.toLocaleDateString('fr-FR',{weekday:'short',day:'2-digit',month:'short',year:'numeric'});
+        return '<tr>'
+          +'<td style="color:var(--mut);font-size:11px">#'+(journal.length-i)+'</td>'
+          +'<td>'+dateAffichee+'</td>'
+          +'<td>'+fmtD(j.bestDiff||0)+'</td>'
+          +'<td>'+fmtD(j.diffTotal||0)+'</td>'
+          +'</tr>';
+      }).join('');
+      boiteJournal.innerHTML='<table><tr><th>BLOC</th><th>DATE</th><th>MEILLEURE DIFF</th><th>TOTAL DIFF</th></tr>'+lignes+'</table>';
+    }
+  }
 
   graphe(d.histRecord);
 
@@ -3498,6 +3617,8 @@ charger();setInterval(charger,5000);
         blockHeight: state.blockHeight, jobId: state.jobId,
         uptime: (Date.now() - state.startedAt) / 1000,
         totalHashes: state.totalHashes,
+        diffTotalInfini: state.diffTotalInfini || 0,
+        diffJour: state.diffJour || 0, bestDiffJour: state.bestDiffJour || 0,
         log: state.log.slice(-200),
       }));
     } else if (url.pathname === '/api/threads') {
@@ -3532,6 +3653,10 @@ charger();setInterval(charger,5000);
           recordExterne: state.recordExterne || 0,
           accepted: state.accepted, rejected: state.rejected,
           netDiff: state.netDiff, netHashrate: state.netHashrate,
+          diffTotalInfini: state.diffTotalInfini || 0,
+          diffInfiniDepuis: state.diffInfiniDepuis || null,
+          journalJour: (state.journalJour || []).slice(-30),
+          diffJour: state.diffJour || 0, bestDiffJour: state.bestDiffJour || 0,
         },
         bloc: { hauteur: state.blockHeight, depuis: state.lastBlockAt },
         paiement: state.paiement,
