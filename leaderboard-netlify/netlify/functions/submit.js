@@ -5,6 +5,17 @@
 const crypto = require('crypto');
 const { getStore } = require('@netlify/blobs');
 
+/** Code d'accès lisible (pas de 0/O/1/I ambigus) -- sert à rattacher cette machine à un
+ *  compte (wallet Solana) sur "Mes récompenses gagnées". Généré UNE SEULE FOIS, à la toute
+ *  première soumission de ce machineId, puis jamais régénéré (sinon le propriétaire perdrait
+ *  l'accès à ses propres récompenses déjà acquises). */
+function genererCodeAcces() {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code = '';
+  for (let i = 0; i < 8; i++) code += alphabet[crypto.randomInt(alphabet.length)];
+  return code.slice(0, 4) + '-' + code.slice(4);
+}
+
 const MAX_TEXTE = 40;
 const DIFF1 = 0x00000000FFFF0000000000000000000000000000000000000000000000000000n;
 const TOLERANCE = 0.98; // marge d'arrondi flottant entre client et serveur
@@ -151,6 +162,12 @@ exports.handler = async (event) => {
 
   const categorie = hashrate >= SEUIL_ASIC_HS ? 'asic' : 'cpu';
 
+  // Code d'accès de cette machine -- généré une seule fois (première soumission jamais vue
+  // pour ce machineId), conservé identique à toutes les soumissions suivantes. C'est ce code,
+  // couplé à la signature du wallet Solana, qui permet de rattacher cette machine à un compte
+  // sur "Mes récompenses gagnées" sans jamais transmettre la clé privée de personne.
+  const codeAcces = (precedent && precedent.codeAcces) ? precedent.codeAcces : genererCodeAcces();
+
   // Compteurs calendaires JOUR/SEMAINE/MOIS : chacun repart à zéro dès que son étiquette
   // (jour civil / semaine ISO / mois) change par rapport à la dernière soumission enregistrée
   // -- exactement le comportement décrit : un record du jour glisse en acquis de la semaine
@@ -183,11 +200,13 @@ exports.handler = async (event) => {
     historique: historiqueElague,
     periodes,
     vu: maintenant,
+    codeAcces,
+    walletProprietaire: (precedent && precedent.walletProprietaire) || null,
   };
   await store.setJSON(cle, entree);
 
   return { statusCode: 200, headers: cors, body: JSON.stringify({
-    ok: true, verifie, bestDiff: entree.bestDiff, categorie,
+    ok: true, verifie, bestDiff: entree.bestDiff, categorie, codeAcces,
     raison: verifie ? undefined : 'preuve manquante ou invalide — pool/statut mis à jour, record inchangé',
   }) };
 };

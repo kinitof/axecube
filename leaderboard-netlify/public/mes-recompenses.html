@@ -25,7 +25,7 @@
 
   .walletBox{background:var(--panel);border:1px solid var(--border);border-radius:14px;
     padding:18px 20px;display:flex;align-items:center;justify-content:space-between;gap:16px;
-    margin-bottom:28px;flex-wrap:wrap}
+    margin-bottom:20px;flex-wrap:wrap}
   .walletBox .info{font-size:12px;color:var(--mut)}
   .walletBox .adresse{color:var(--green);font-family:monospace;font-size:13px}
   .btn{background:var(--green);color:#08240a;border:none;border-radius:10px;padding:11px 20px;
@@ -34,12 +34,29 @@
   .btn:disabled{opacity:.4;cursor:not-allowed}
   .btn.secondaire{background:transparent;border:1px solid var(--green-dim);color:var(--green)}
 
+  .blocMachines{background:var(--panel);border:1px solid var(--border);border-radius:14px;
+    padding:16px 20px;margin-bottom:28px}
+  .blocMachines h3{margin:0 0 12px;font-size:13px;letter-spacing:.04em;color:var(--mut);text-transform:uppercase}
+  .ligneMachine{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px}
+  .ligneMachine:last-child{border-bottom:none}
+  .ligneMachine .nomM{font-weight:700;flex:1}
+  .ligneMachine .statM{color:var(--mut);font-size:11px}
+
+  .formRattacher{margin-top:14px;padding-top:14px;border-top:1px solid var(--border);
+    display:grid;grid-template-columns:1fr 1fr auto;gap:10px}
+  .formRattacher input{padding:11px 14px;border-radius:10px;border:1px solid var(--border);
+    background:#0b0f1a;color:var(--txt);font-size:13px}
+  .formRattacher input::placeholder{color:var(--mut)}
+  .erreurRattacher{grid-column:1/-1;color:#ff8a8a;font-size:12px;min-height:14px}
+
   .grille{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px}
   .carte{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:18px;text-align:center}
   .carte .cadre{width:140px;height:140px;margin:0 auto 12px;border-radius:14px;background:#000;
-    display:flex;align-items:center;justify-content:center;overflow:hidden}
+    display:flex;align-items:center;justify-content:center;overflow:hidden;cursor:zoom-in}
+  .carte .cadre:hover{filter:brightness(1.15)}
   .carte .cadre img{width:140px;height:140px;display:block}
-  .carte .nom{font-size:13px;font-weight:700;margin-bottom:4px}
+  .carte .nom{font-size:13px;font-weight:700;margin-bottom:2px}
+  .carte .machineTag{font-size:10px;color:var(--green);margin-bottom:4px}
   .carte .type{font-size:10px;color:var(--mut);letter-spacing:.05em;text-transform:uppercase;margin-bottom:10px}
   .carte .statutMint{font-size:11px;padding:6px 10px;border-radius:999px;display:inline-block}
   .statutMint.a-minter{background:rgba(140,255,46,.1);color:var(--green);border:1px solid var(--green-dim)}
@@ -51,19 +68,6 @@
   .vide{text-align:center;padding:60px 20px;color:var(--mut)}
   .badgeReseau{display:inline-block;font-size:10px;padding:3px 9px;border-radius:999px;
     background:rgba(255,140,46,.12);color:#ffb066;border:1px solid rgba(255,140,46,.3);margin-left:8px}
-
-  .connexionBox{max-width:420px;margin:60px auto;background:var(--card);border:1px solid var(--border);
-    border-radius:16px;padding:32px 28px;text-align:center}
-  .connexionBox h2{margin:0 0 8px;font-size:17px}
-  .connexionBox p{color:var(--mut);font-size:12px;margin:0 0 22px;line-height:1.6}
-  .connexionBox input{width:100%;padding:12px 14px;border-radius:10px;border:1px solid var(--border);
-    background:#0b0f1a;color:var(--txt);font-size:14px;margin-bottom:12px;box-sizing:border-box;
-    text-align:center;letter-spacing:1px}
-  .connexionBox input::placeholder{color:var(--mut);letter-spacing:normal}
-  .connexionBox .erreur{color:#ff8a8a;font-size:12px;margin-top:10px;min-height:16px}
-
-  .cadre{cursor:zoom-in}
-  .cadre:hover{filter:brightness(1.15)}
 
   .lightbox{position:fixed;inset:0;background:rgba(3,6,12,.92);z-index:1000;
     display:none;align-items:center;justify-content:center;padding:30px}
@@ -103,11 +107,13 @@
       <a id="retourMineur" href="#" style="display:none;font-size:11px;color:var(--green);text-decoration:none;
          border:1px solid var(--green-dim);border-radius:9px;padding:8px 12px;white-space:nowrap">‹ Retour au mineur</a>
     </div>
-  </div>  <div class="conteneur">
-    <h1>🎁 Mes récompenses gagnées <span class="badgeReseau">DEVNET — TEST</span></h1>
-    <p class="sousTitre">Retrouvez ici tous les cubes que vous avez débloqués. Connectez votre wallet Solana pour les transformer en NFT.</p>
+  </div>
 
-    <div class="walletBox" id="walletBox" style="display:none">
+  <div class="conteneur">
+    <h1>🎁 Mes récompenses gagnées <span class="badgeReseau">DEVNET — TEST</span></h1>
+    <p class="sousTitre">Votre wallet Solana EST votre compte. Connectez-le, signez pour prouver que c'est bien le vôtre, puis rattachez vos machines pour voir et minter vos cubes.</p>
+
+    <div class="walletBox">
       <div>
         <div class="info" id="walletStatutTexte">Wallet non connecté</div>
         <div class="adresse" id="walletAdresse" style="display:none"></div>
@@ -115,17 +121,19 @@
       <button class="btn" id="btnWallet">👻 Connecter Phantom</button>
     </div>
 
-    <div class="connexionBox" id="connexionBox">
-      <h2>🔒 Vérification du mineur</h2>
-      <p>Entrez le nom de votre mineur et son code d'accès secret (affiché une seule fois lors de l'enregistrement) pour voir et minter vos propres récompenses.</p>
-      <input type="text" id="inputNom" placeholder="Nom du mineur (ex: axecube001)" autocomplete="off">
-      <input type="text" id="inputCode" placeholder="Code d'accès (ex: AB3D-9XYZ)" autocomplete="off">
-      <button class="btn" id="btnVerifier" style="width:100%">Vérifier</button>
-      <div class="erreur" id="erreurConnexion"></div>
+    <div class="blocMachines" id="blocMachines" style="display:none">
+      <h3>🖥️ Machines rattachées à ce compte</h3>
+      <div id="listeMachines"></div>
+      <div class="formRattacher">
+        <input type="text" id="inputMachineId" placeholder="Identifiant machine (machineId)" autocomplete="off">
+        <input type="text" id="inputCodeMachine" placeholder="Code d'accès (ex: AB3D-9XYZ)" autocomplete="off">
+        <button class="btn secondaire" id="btnRattacher">+ Rattacher</button>
+        <div class="erreurRattacher" id="erreurRattacher"></div>
+      </div>
     </div>
 
-    <div class="grille" id="grilleMesCubes" style="display:none">
-      <div class="vide">Chargement de vos récompenses…</div>
+    <div class="grille" id="grilleMesCubes">
+      <div class="vide">Connectez votre wallet pour voir vos récompenses.</div>
     </div>
   </div>
 
@@ -165,60 +173,10 @@ const NOMS_CUBE=[
   'Diamant Émeraude','Diamant Saphir','Diamant Ruby','Diamant Multi-Gemmes I','Diamant Multi-Gemmes II'
 ];
 
-// ============================================================================
-// Vérification d'identité par code d'accès -- remplace la simple détection par
-// nom (non sécurisée). Le nom+code validés sont mémorisés en localStorage pour
-// éviter de re-saisir à chaque visite, mais re-vérifiés côté serveur à chaque
-// chargement de page (pas de confiance aveugle dans le localStorage).
-async function verifierEtCharger(nom, code){
-  const erreurEl=document.getElementById('erreurConnexion');
-  erreurEl.textContent='';
-  try{
-    const r=await fetch('/.netlify/functions/verify-code', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({nom, code}),
-    });
-    const j=await r.json();
-    if(!j.valide){
-      erreurEl.textContent='Nom ou code incorrect.';
-      localStorage.removeItem('axecube_nom_verifie');
-      localStorage.removeItem('axecube_code_verifie');
-      return false;
-    }
-    localStorage.setItem('axecube_nom_verifie', nom);
-    localStorage.setItem('axecube_code_verifie', code);
-    document.getElementById('connexionBox').style.display='none';
-    document.getElementById('walletBox').style.display='';
-    document.getElementById('grilleMesCubes').style.display='';
-    await chargerMesCubes(nom);
-    return true;
-  }catch(e){
-    console.error('Erreur vérification code:', e);
-    erreurEl.textContent='Erreur de connexion, réessayez.';
-    return false;
-  }
-}
-
-document.getElementById('btnVerifier').addEventListener('click', ()=>{
-  const nom=document.getElementById('inputNom').value.trim().toLowerCase();
-  const code=document.getElementById('inputCode').value.trim().toUpperCase();
-  if(!nom || !code){
-    document.getElementById('erreurConnexion').textContent='Merci de remplir les deux champs.';
-    return;
-  }
-  verifierEtCharger(nom, code);
-});
-
-// Tentative de reconnexion automatique si nom+code déjà validés précédemment.
-(function tenterReconnexionAuto(){
-  const nom=localStorage.getItem('axecube_nom_verifie');
-  const code=localStorage.getItem('axecube_code_verifie');
-  if(nom && code) verifierEtCharger(nom, code);
-})();
-
 let walletPubkey=null;
-let mesCubes=[]; // liste des cubes débloqués, remplie par chargerMesCubes()
+let signatureCourante=null; // {message, signature} -- réutilisée pour tous les appels API tant que le wallet reste connecté
+let mesMachines=[]; // liste des machines rattachées, remplie par chargerMesMachines()
+let mesCubes=[]; // liste combinée des cubes de toutes les machines
 
 // Affiche le lien "Retour au mineur" si on arrive depuis le dashboard local (qui ajoute
 // ?back=... à l'URL) -- absent pour un visiteur classique du site. Le lien TABLEAU DE BORD
@@ -248,7 +206,8 @@ let mesCubes=[]; // liste des cubes débloqués, remplie par chargerMesCubes()
 })();
 
 // ============================================================================
-// Connexion Phantom (client Solana injecté par l'extension navigateur)
+// Connexion Phantom + signature -- le wallet EST le compte. La signature prouve
+// que la personne possède bien la clé privée, sans jamais la transmettre.
 // ============================================================================
 async function connecterWallet(){
   if(!window.solana || !window.solana.isPhantom){
@@ -259,63 +218,125 @@ async function connecterWallet(){
   try{
     const resp=await window.solana.connect();
     walletPubkey=resp.publicKey.toString();
-    document.getElementById('walletStatutTexte').textContent='Wallet connecté';
+
+    const message='AXECUBE — Connexion à mes récompenses\nWallet: '+walletPubkey+'\nDate: '+new Date().toISOString().slice(0,10);
+    const encoded=new TextEncoder().encode(message);
+    const signe=await window.solana.signMessage(encoded, 'utf8');
+    const signatureB64=btoa(String.fromCharCode(...signe.signature));
+    signatureCourante={message, signature:signatureB64};
+
+    document.getElementById('walletStatutTexte').textContent='Wallet connecté et vérifié';
     const adr=document.getElementById('walletAdresse');
     adr.style.display='block';
     adr.textContent=walletPubkey.slice(0,4)+'…'+walletPubkey.slice(-4);
     document.getElementById('btnWallet').textContent='✅ Connecté';
     document.getElementById('btnWallet').disabled=true;
-    rendreCubes(); // ré-affiche pour activer les boutons Mint
+    document.getElementById('blocMachines').style.display='';
+
+    await chargerMesMachines();
   }catch(e){
-    console.error('Connexion Phantom refusée ou échouée :', e);
+    console.error('Connexion ou signature Phantom refusée/échouée :', e);
+    alert('Connexion annulée ou refusée dans Phantom.');
   }
 }
 document.getElementById('btnWallet').addEventListener('click', connecterWallet);
 
 // ============================================================================
-// Récupération de mes cubes débloqués (même source que le classement : /top)
+// Récupère les machines rattachées à ce wallet, puis calcule les cubes combinés
+// de toutes ces machines (chaque machine garde sa propre collection complète --
+// voir la discussion sur la rareté : pas de fusion des bestDiff entre machines).
 // ============================================================================
-async function chargerMesCubes(nomVerifie){
+async function chargerMesMachines(){
   try{
-    const r=await fetch('/top');
+    const r=await fetch('/.netlify/functions/mes-machines', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(signatureCourante ? {wallet:walletPubkey, ...signatureCourante} : {}),
+    });
     const j=await r.json();
-    const toutes=[...(j.cpu?.allTime||j.top||[]), ...(j.asic?.allTime||[])];
-    const nomCompte=(nomVerifie||'').trim().toLowerCase();
-    const moi=toutes.find(e=>(e.worker||'').trim().toLowerCase()===nomCompte);
-    if(!moi){ mesCubes=[]; rendreCubes(); return; }
+    if(!j.ok){ console.error('Erreur mes-machines:', j.erreur); return; }
+    mesMachines=j.machines||[];
+    rendreListeMachines();
+    recalculerCubes();
+  }catch(e){
+    console.error('Erreur chargement des machines:', e);
+  }
+}
 
-    mesCubes=[];
-    // 22 cubes CPU (loterie / bestDiff)
-    const niveauMax=Math.min(NIVEAUX_CPU, Math.floor((moi.bestDiff||0)/SEUIL_CPU)+1);
-    if((moi.bestDiff||0)>=0 && niveauMax>=1){
+function rendreListeMachines(){
+  const boite=document.getElementById('listeMachines');
+  if(!mesMachines.length){
+    boite.innerHTML='<div style="color:var(--mut);font-size:12px">Aucune machine rattachée pour l\'instant -- utilisez le formulaire ci-dessous.</div>';
+    return;
+  }
+  boite.innerHTML=mesMachines.map(m=>
+    '<div class="ligneMachine"><span class="nomM">'+(m.worker||'?')+'</span>'
+    +'<span class="statM">'+(m.cpu||'')+' · diff '+(m.bestDiff||0).toLocaleString('fr-FR')+' · '+(m.accepted||0)+' shares</span></div>'
+  ).join('');
+}
+
+document.getElementById('btnRattacher').addEventListener('click', async ()=>{
+  const erreurEl=document.getElementById('erreurRattacher');
+  erreurEl.textContent='';
+  if(!walletPubkey || !signatureCourante){
+    erreurEl.textContent='Connectez votre wallet d\'abord.';
+    return;
+  }
+  const machineId=document.getElementById('inputMachineId').value.trim();
+  const code=document.getElementById('inputCodeMachine').value.trim().toUpperCase();
+  if(!machineId || !code){
+    erreurEl.textContent='Merci de remplir les deux champs.';
+    return;
+  }
+  try{
+    const r=await fetch('/.netlify/functions/claim-machine', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({wallet:walletPubkey, ...signatureCourante, machineId, code}),
+    });
+    const j=await r.json();
+    if(!j.ok){ erreurEl.textContent=j.erreur||'Rattachement échoué.'; return; }
+    document.getElementById('inputMachineId').value='';
+    document.getElementById('inputCodeMachine').value='';
+    await chargerMesMachines();
+  }catch(e){
+    console.error('Erreur rattachement machine:', e);
+    erreurEl.textContent='Erreur de connexion, réessayez.';
+  }
+});
+
+// ============================================================================
+// Calcule les cubes débloqués pour CHAQUE machine rattachée, combinés dans une
+// seule liste affichée (chaque cube précise de quelle machine il vient).
+// ============================================================================
+function recalculerCubes(){
+  mesCubes=[];
+  for(const m of mesMachines){
+    const niveauMax=Math.min(NIVEAUX_CPU, Math.floor((m.bestDiff||0)/SEUIL_CPU)+1);
+    if((m.bestDiff||0)>=0 && niveauMax>=1){
       for(let n=1;n<=niveauMax;n++){
         mesCubes.push({
-          id:'cpu-'+n,
+          id:'cpu-'+n+'-'+m.machineId,
           type:'Cube CPU (loterie)',
           nom:NOMS_CUBE[n-1],
           icone:'cube-p'+String(n).padStart(2,'0'),
-          seuilAtteint:(n-1)*SEUIL_CPU,
+          machine:m.worker,
         });
       }
     }
-    // 6 cubes difficulté (cumul de shares)
-    PALIERS.forEach((p,i)=>{
-      if((moi.accepted||0)>=p.seuil){
+    PALIERS.forEach((p)=>{
+      if((m.accepted||0)>=p.seuil){
         mesCubes.push({
-          id:'palier-'+p.cle,
+          id:'palier-'+p.cle+'-'+m.machineId,
           type:'Cube Difficulté (cumul)',
           nom:p.nom,
           icone:'palier-'+p.cle,
-          seuilAtteint:p.seuil,
+          machine:m.worker,
         });
       }
     });
-
-    rendreCubes();
-  }catch(e){
-    console.error('Erreur chargement /top :', e);
-    document.getElementById('grilleMesCubes').innerHTML='<div class="vide">Impossible de charger vos récompenses pour le moment.</div>';
   }
+  rendreCubes();
 }
 
 // ============================================================================
@@ -355,8 +376,12 @@ function afficherFelicitations(nomCube){
 
 function rendreCubes(){
   const conteneur=document.getElementById('grilleMesCubes');
+  if(!walletPubkey){
+    conteneur.innerHTML='<div class="vide">Connectez votre wallet pour voir vos récompenses.</div>';
+    return;
+  }
   if(mesCubes.length===0){
-    conteneur.innerHTML='<div class="vide">Aucune récompense débloquée pour l\'instant. Continuez à miner !</div>';
+    conteneur.innerHTML='<div class="vide">Aucune récompense débloquée pour l\'instant -- rattachez une machine ou continuez à miner.</div>';
     return;
   }
   conteneur.innerHTML=mesCubes.map(c=>{
@@ -374,11 +399,12 @@ function rendreCubes(){
       boutonHtml='<button class="btn" disabled>Patientez…</button>';
     }else{
       statutHtml='<span class="statutMint a-minter">💎 Prêt à minter</span>';
-      boutonHtml='<button class="btn" onclick="minterCube(\''+c.id+'\')" '+(walletPubkey?'':'disabled title="Connectez votre wallet"')+'>🪙 Mint ce cube</button>';
+      boutonHtml='<button class="btn" onclick="minterCube(\''+c.id+'\')">🪙 Mint ce cube</button>';
     }
     return '<div class="carte">'+
       '<div class="cadre" onclick="ouvrirLightbox(\''+c.icone+'\', \''+c.nom.replace(/'/g,"\\'")+'\')"><img src="icones/'+c.icone+'.png" alt=""></div>'+
       '<div class="nom">'+c.nom+'</div>'+
+      '<div class="machineTag">'+(c.machine||'')+'</div>'+
       '<div class="type">'+c.type+'</div>'+
       statutHtml+
       boutonHtml+
@@ -422,9 +448,6 @@ async function minterCube(cubeId){
     rendreCubes();
   }
 }
-
-// Le chargement des cubes se fait désormais uniquement après vérification
-// réussie du code d'accès (voir verifierEtCharger / tenterReconnexionAuto plus haut).
 </script>
 </body>
 </html>
