@@ -11,6 +11,9 @@
   }
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--txt);font-family:-apple-system,"Segoe UI",sans-serif;min-height:100vh}
+  .top{display:flex;align-items:center;gap:12px;padding:14px 28px;border-bottom:1px solid var(--border)}
+  .logo{width:auto;height:132px}
+  .topRight{margin-left:auto;display:flex;align-items:center;gap:18px;white-space:nowrap}
   .navtop{display:flex;gap:4px;padding:14px 20px;border-bottom:1px solid var(--border);align-items:center;flex-wrap:wrap}
   .navitem{font-size:11px;letter-spacing:.04em;color:var(--mut);padding:9px 14px;border-radius:9px;text-decoration:none}
   a.navitem:hover{color:var(--green);cursor:pointer}
@@ -49,6 +52,16 @@
   .badgeReseau{display:inline-block;font-size:10px;padding:3px 9px;border-radius:999px;
     background:rgba(255,140,46,.12);color:#ffb066;border:1px solid rgba(255,140,46,.3);margin-left:8px}
 
+  .connexionBox{max-width:420px;margin:60px auto;background:var(--card);border:1px solid var(--border);
+    border-radius:16px;padding:32px 28px;text-align:center}
+  .connexionBox h2{margin:0 0 8px;font-size:17px}
+  .connexionBox p{color:var(--mut);font-size:12px;margin:0 0 22px;line-height:1.6}
+  .connexionBox input{width:100%;padding:12px 14px;border-radius:10px;border:1px solid var(--border);
+    background:#0b0f1a;color:var(--txt);font-size:14px;margin-bottom:12px;box-sizing:border-box;
+    text-align:center;letter-spacing:1px}
+  .connexionBox input::placeholder{color:var(--mut);letter-spacing:normal}
+  .connexionBox .erreur{color:#ff8a8a;font-size:12px;margin-top:10px;min-height:16px}
+
   .cadre{cursor:zoom-in}
   .cadre:hover{filter:brightness(1.15)}
 
@@ -76,20 +89,25 @@
 </head>
 <body>
 
-  <nav class="navtop">
-    <a class="navitem" href="/">📊 TABLEAU DE BORD</a>
-    <a class="navitem" href="/miners.html">🔗 MINERS</a>
-    <a class="navitem" href="/"><img src="icones/icone-trophee.png" width="16" height="16" style="vertical-align:-3px;margin-right:4px"> CLASSEMENT</a>
-    <a class="navitem" href="/recompenses.html">📦 RÉCOMPENSES</a>
-    <span class="navitem on">🎁 MES RÉCOMPENSES GAGNÉES</span>
-    <span class="navitem" title="Bientôt disponible">⚙️ PARAMÈTRES</span>
-  </nav>
-
-  <div class="conteneur">
+  <div class="top">
+    <a id="lienLogo" href="/"><img class="logo" src="icones/logo-complet.png?v=3" alt="AxeCube — Mineur Lottery" height="132" style="width:auto"></a>
+    <nav class="navtop">
+      <a class="navitem" id="lienTableauBord" href="/">📊 TABLEAU DE BORD</a>
+      <a class="navitem" id="lienMiners" href="/miners.html">🔗 MINERS</a>
+      <a class="navitem" id="lienClassementNav" href="/"><img src="icones/icone-trophee.png" width="16" height="16" style="vertical-align:-3px;margin-right:4px"> CLASSEMENT</a>
+      <a class="navitem" id="lienRecompenses" href="/recompenses.html">📦 RÉCOMPENSES</a>
+      <span class="navitem on">🎁 MES RÉCOMPENSES GAGNÉES</span>
+      <span class="navitem" title="Bientôt disponible">⚙️ PARAMÈTRES</span>
+    </nav>
+    <div class="topRight">
+      <a id="retourMineur" href="#" style="display:none;font-size:11px;color:var(--green);text-decoration:none;
+         border:1px solid var(--green-dim);border-radius:9px;padding:8px 12px;white-space:nowrap">‹ Retour au mineur</a>
+    </div>
+  </div>  <div class="conteneur">
     <h1>🎁 Mes récompenses gagnées <span class="badgeReseau">DEVNET — TEST</span></h1>
     <p class="sousTitre">Retrouvez ici tous les cubes que vous avez débloqués. Connectez votre wallet Solana pour les transformer en NFT.</p>
 
-    <div class="walletBox">
+    <div class="walletBox" id="walletBox" style="display:none">
       <div>
         <div class="info" id="walletStatutTexte">Wallet non connecté</div>
         <div class="adresse" id="walletAdresse" style="display:none"></div>
@@ -97,7 +115,16 @@
       <button class="btn" id="btnWallet">👻 Connecter Phantom</button>
     </div>
 
-    <div class="grille" id="grilleMesCubes">
+    <div class="connexionBox" id="connexionBox">
+      <h2>🔒 Vérification du mineur</h2>
+      <p>Entrez le nom de votre mineur et son code d'accès secret (affiché une seule fois lors de l'enregistrement) pour voir et minter vos propres récompenses.</p>
+      <input type="text" id="inputNom" placeholder="Nom du mineur (ex: axecube001)" autocomplete="off">
+      <input type="text" id="inputCode" placeholder="Code d'accès (ex: AB3D-9XYZ)" autocomplete="off">
+      <button class="btn" id="btnVerifier" style="width:100%">Vérifier</button>
+      <div class="erreur" id="erreurConnexion"></div>
+    </div>
+
+    <div class="grille" id="grilleMesCubes" style="display:none">
       <div class="vide">Chargement de vos récompenses…</div>
     </div>
   </div>
@@ -138,8 +165,87 @@ const NOMS_CUBE=[
   'Diamant Émeraude','Diamant Saphir','Diamant Ruby','Diamant Multi-Gemmes I','Diamant Multi-Gemmes II'
 ];
 
+// ============================================================================
+// Vérification d'identité par code d'accès -- remplace la simple détection par
+// nom (non sécurisée). Le nom+code validés sont mémorisés en localStorage pour
+// éviter de re-saisir à chaque visite, mais re-vérifiés côté serveur à chaque
+// chargement de page (pas de confiance aveugle dans le localStorage).
+async function verifierEtCharger(nom, code){
+  const erreurEl=document.getElementById('erreurConnexion');
+  erreurEl.textContent='';
+  try{
+    const r=await fetch('/.netlify/functions/verify-code', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({nom, code}),
+    });
+    const j=await r.json();
+    if(!j.valide){
+      erreurEl.textContent='Nom ou code incorrect.';
+      localStorage.removeItem('axecube_nom_verifie');
+      localStorage.removeItem('axecube_code_verifie');
+      return false;
+    }
+    localStorage.setItem('axecube_nom_verifie', nom);
+    localStorage.setItem('axecube_code_verifie', code);
+    document.getElementById('connexionBox').style.display='none';
+    document.getElementById('walletBox').style.display='';
+    document.getElementById('grilleMesCubes').style.display='';
+    await chargerMesCubes(nom);
+    return true;
+  }catch(e){
+    console.error('Erreur vérification code:', e);
+    erreurEl.textContent='Erreur de connexion, réessayez.';
+    return false;
+  }
+}
+
+document.getElementById('btnVerifier').addEventListener('click', ()=>{
+  const nom=document.getElementById('inputNom').value.trim().toLowerCase();
+  const code=document.getElementById('inputCode').value.trim().toUpperCase();
+  if(!nom || !code){
+    document.getElementById('erreurConnexion').textContent='Merci de remplir les deux champs.';
+    return;
+  }
+  verifierEtCharger(nom, code);
+});
+
+// Tentative de reconnexion automatique si nom+code déjà validés précédemment.
+(function tenterReconnexionAuto(){
+  const nom=localStorage.getItem('axecube_nom_verifie');
+  const code=localStorage.getItem('axecube_code_verifie');
+  if(nom && code) verifierEtCharger(nom, code);
+})();
+
 let walletPubkey=null;
 let mesCubes=[]; // liste des cubes débloqués, remplie par chargerMesCubes()
+
+// Affiche le lien "Retour au mineur" si on arrive depuis le dashboard local (qui ajoute
+// ?back=... à l'URL) -- absent pour un visiteur classique du site. Le lien TABLEAU DE BORD
+// pointe alors AUSSI directement vers ce mineur local (c'est lui, le vrai tableau de bord
+// avec les infos de minage en direct) plutôt que vers la page d'accueil de ce site.
+(function initRetourMineur(){
+  const back=new URLSearchParams(location.search).get('back');
+  if(back){
+    const lien=document.getElementById('retourMineur');
+    lien.href=back;
+    lien.style.display='inline-block';
+    const t=document.getElementById('lienTableauBord');
+    if(t) t.href=back;
+  }
+})();
+
+// Propage la chaîne de requête actuelle (?back=...&token=...) vers les autres
+// onglets, sinon ce contexte de retour se perd en changeant de page.
+(function propagerQuery(){
+  if(!location.search) return;
+  const c=document.getElementById('lienClassementNav');
+  if(c) c.href='/'+location.search;
+  const m=document.getElementById('lienMiners');
+  if(m) m.href='/miners.html'+location.search;
+  const r=document.getElementById('lienRecompenses');
+  if(r) r.href='/recompenses.html'+location.search;
+})();
 
 // ============================================================================
 // Connexion Phantom (client Solana injecté par l'extension navigateur)
@@ -169,14 +275,12 @@ document.getElementById('btnWallet').addEventListener('click', connecterWallet);
 // ============================================================================
 // Récupération de mes cubes débloqués (même source que le classement : /top)
 // ============================================================================
-async function chargerMesCubes(){
+async function chargerMesCubes(nomVerifie){
   try{
     const r=await fetch('/top');
     const j=await r.json();
     const toutes=[...(j.cpu?.allTime||j.top||[]), ...(j.asic?.allTime||[])];
-    // Provisoire : identité par nom affiché, comme sur index.html/recompenses.html --
-    // à remplacer par une vraie correspondance machineId/compte quand ce système existera.
-    const nomCompte=(localStorage.getItem('axecube_nom')||'AXECUBE001').trim().toLowerCase();
+    const nomCompte=(nomVerifie||'').trim().toLowerCase();
     const moi=toutes.find(e=>(e.worker||'').trim().toLowerCase()===nomCompte);
     if(!moi){ mesCubes=[]; rendreCubes(); return; }
 
@@ -319,7 +423,8 @@ async function minterCube(cubeId){
   }
 }
 
-chargerMesCubes();
+// Le chargement des cubes se fait désormais uniquement après vérification
+// réussie du code d'accès (voir verifierEtCharger / tenterReconnexionAuto plus haut).
 </script>
 </body>
 </html>

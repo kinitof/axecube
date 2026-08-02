@@ -236,13 +236,18 @@ let data=null, cat='cpu', fen='jour', page=1, taillePage=25, filtre='';
 
 // Lien de retour vers le mineur : présent seulement si on est arrivé ici depuis le
 // dashboard local (qui ajoute ?back=... à l'URL) -- absent pour un visiteur classique
-// du site public, qui n'a pas de mineur local vers lequel revenir.
+// du site public, qui n'a pas de mineur local vers lequel revenir. TABLEAU DE BORD pointe
+// alors AUSSI vers ce mineur local (le vrai tableau de bord avec les infos de minage en
+// direct) plutôt que vers la page d'accueil de ce site.
 (function initRetourMineur(){
   const back=new URLSearchParams(location.search).get('back');
-  if(!back) return;
-  const lien=document.getElementById('retourMineur');
-  lien.href=back;
-  lien.style.display='inline-block';
+  if(back){
+    const lien=document.getElementById('retourMineur');
+    lien.href=back;
+    lien.style.display='inline-block';
+    const t=document.getElementById('lienTableauBord');
+    if(t) t.href=back;
+  }
 })();
 
 // Propage la chaîne de requête actuelle (?back=...&token=...) vers la page RÉCOMPENSES
@@ -251,8 +256,8 @@ let data=null, cat='cpu', fen='jour', page=1, taillePage=25, filtre='';
   if(!location.search) return;
   const r=document.getElementById('lienRecompenses');
   if(r) r.href='/recompenses.html'+location.search;
-  const t=document.getElementById('lienTableauBord');
-  if(t) t.href='/'+location.search;
+  const mr=document.getElementById('lienMesRecompenses');
+  if(mr) mr.href='/mes-recompenses.html'+location.search;
   const m=document.getElementById('lienMiners');
   if(m) m.href='/miners.html'+location.search;
 })();

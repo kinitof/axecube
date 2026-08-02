@@ -277,23 +277,29 @@ function fmtD(d){
 
 (function initRetourMineur(){
   const back=new URLSearchParams(location.search).get('back');
-  if(!back) return;
-  const lien=document.getElementById('retourMineur');
-  lien.href=back;
-  lien.style.display='inline-block';
+  if(back){
+    const lien=document.getElementById('retourMineur');
+    lien.href=back;
+    lien.style.display='inline-block';
+    const t=document.getElementById('lienTableauBord');
+    if(t) t.href=back;
+  }
 })();
 
 // Propage la chaîne de requête actuelle (?back=...&token=...) vers les liens qui
-// ramènent au classement/tableau de bord, sinon ce contexte de retour se perd en
-// changeant de page.
+// ramènent au classement, sinon ce contexte de retour se perd en changeant de page.
+// TABLEAU DE BORD est géré séparément ci-dessus (il pointe vers le mineur local, pas
+// vers ce site, quand ce contexte existe).
 (function propagerQueryVersClassement(){
   if(!location.search) return;
-  ['lienLogo','lienClassementNav','lienClassementFoot','lienTableauBord'].forEach(id=>{
+  ['lienLogo','lienClassementNav','lienClassementFoot'].forEach(id=>{
     const lien=document.getElementById(id);
     if(lien) lien.href='/'+location.search;
   });
   const m=document.getElementById('lienMiners');
   if(m) m.href='/miners.html'+location.search;
+  const mr=document.getElementById('lienMesRecompenses');
+  if(mr) mr.href='/mes-recompenses.html'+location.search;
 })();
 
 /** Pour chaque mineur, détermine le palier (cumul de shares) le plus haut atteint (ou -1). */
