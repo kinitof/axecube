@@ -3518,7 +3518,7 @@ async function charger(){
 const NOTES_POOL={
   solopool:{c:'var(--amber)',t:'🟢 Difficulté minimale de 1, ajustée automatiquement à votre hashrate (vardiff) -- '
     +'le plus adapté pour un CPU, vous verrez des shares régulièrement.'},
-  'nmminer-solo':{c:'var(--amber)',t:'🟢 Fork de public-pool.io conçu à l\'origine pour des puces ESP32 (quelques '
+  'nmminer-solo':{c:'var(--amber)',t:'🟢 Fork de public-pool.io conçu à l\\'origine pour des puces ESP32 (quelques '
     +'centaines de kH/s) -- plancher de difficulté très bas, shares très fréquents attendus sur un CPU.'},
   'mineshop-solo':{c:'#e8b64a',t:'🟡 Difficulté minimale de 100 imposée par le pool -- shares moins fréquents que sur '
     +'public-pool.io, mais tout à fait normal.'},
