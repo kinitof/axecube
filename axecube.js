@@ -3497,6 +3497,8 @@ async function charger(){
 const NOTES_POOL={
   solopool:{c:'var(--amber)',t:'🟢 Difficulté minimale de 1, ajustée automatiquement à votre hashrate (vardiff) -- '
     +'le plus adapté pour un CPU, vous verrez des shares régulièrement.'},
+  'nmminer-solo':{c:'var(--amber)',t:'🟢 Fork de public-pool.io conçu à l\'origine pour des puces ESP32 (quelques '
+    +'centaines de kH/s) -- plancher de difficulté très bas, shares très fréquents attendus sur un CPU.'},
   'mineshop-solo':{c:'#e8b64a',t:'🟡 Difficulté minimale de 100 imposée par le pool -- shares moins fréquents que sur '
     +'public-pool.io, mais tout à fait normal.'},
   'braiins-solo':{c:'#e8a64a',t:'🟠 Difficulté minimale de 512 imposée par le pool -- les shares seront rares avec '
@@ -3515,7 +3517,8 @@ async function chargerWorkers(d){
   const hote=d.pool.hote||'';
   const estPublicPool=/public-pool\\.io/i.test(hote);
   const estMineshop=/mineshop\\.eu/i.test(hote);
-  document.getElementById('w_via').textContent=estPublicPool?'(via public-pool.io)':estMineshop?'(via mineshop.eu)':'';
+  const estNmminer=/nmminer\\.com/i.test(hote);
+  document.getElementById('w_via').textContent=estPublicPool?'(via public-pool.io)':estMineshop?'(via mineshop.eu)':estNmminer?'(via nmminer.com)':'';
   const liens=document.getElementById('poolLinks');
   if(estPublicPool){
     liens.style.display='flex';
@@ -3535,11 +3538,27 @@ async function chargerWorkers(d){
       '<a href="https://solo.mineshop.eu/api/miner.php?wallet='+d.adresse+'" target="_blank" rel="noopener" '+
       'style="font-size:11px;color:var(--white-dim);border:1px solid var(--line);padding:6px 12px;'+
       'border-radius:8px;text-decoration:none">{ } Données brutes (JSON) ↗</a>';
+  } else if(estNmminer){
+    liens.style.display='flex';
+    liens.innerHTML=
+      '<a href="https://solobtc.nmminer.com/#/app/'+d.adresse+'" target="_blank" rel="noopener" '+
+      'style="font-size:11px;color:var(--amber);border:1px solid rgba(150,240,31,.3);padding:6px 12px;'+
+      'border-radius:8px;text-decoration:none">📊 Voir sur solobtc.nmminer.com ↗</a>'+
+      '<a href="https://solobtc.nmminer.com:40557/api/client/'+d.adresse+'" target="_blank" rel="noopener" '+
+      'style="font-size:11px;color:var(--white-dim);border:1px solid var(--line);padding:6px 12px;'+
+      'border-radius:8px;text-decoration:none">{ } Données brutes (JSON) ↗</a>';
   } else liens.style.display='none';
-  if(!estPublicPool && !estMineshop){box.innerHTML='<span style="color:var(--mut)">Disponible uniquement sur public-pool.io ou Mineshop.eu.</span>';return;}
+  if(!estPublicPool && !estMineshop && !estNmminer){box.innerHTML='<span style="color:var(--mut)">Disponible uniquement sur public-pool.io, Mineshop.eu ou NMMiner Solo.</span>';return;}
   try{
-    if(estPublicPool){
-      const r=await fetch('https://public-pool.io:40557/api/client/'+d.adresse);
+    if(estPublicPool || estNmminer){
+      // NMMiner Solo est un fork de public-pool.io -- même code serveur, donc même schéma
+      // d'API attendu (port 40557, /api/client/{adresse}, tableau "workers"). Pas de doc
+      // publique confirmant ce point precisement pour ce fork : si jamais le schema differe
+      // ou que l'endpoint n'existe pas, le catch plus bas affiche juste un message neutre,
+      // sans jamais casser le reste du dashboard.
+      const urlApi = estPublicPool ? 'https://public-pool.io:40557/api/client/'+d.adresse
+                                    : 'https://solobtc.nmminer.com:40557/api/client/'+d.adresse;
+      const r=await fetch(urlApi);
       const j=await r.json();
       const w=j.workers||[];
       if(!w.length){box.innerHTML='<span style="color:var(--mut)">Aucun worker actif signalé par le pool (délai de quelques minutes).</span>';return;}
