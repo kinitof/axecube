@@ -3544,20 +3544,20 @@ async function chargerWorkers(d){
       '<a href="https://solobtc.nmminer.com/#/app/'+d.adresse+'" target="_blank" rel="noopener" '+
       'style="font-size:11px;color:var(--amber);border:1px solid rgba(150,240,31,.3);padding:6px 12px;'+
       'border-radius:8px;text-decoration:none">📊 Voir sur solobtc.nmminer.com ↗</a>'+
-      '<a href="https://solobtc.nmminer.com:40557/api/client/'+d.adresse+'" target="_blank" rel="noopener" '+
+      '<a href="https://solobtc.nmminer.com/api/client/'+d.adresse+'" target="_blank" rel="noopener" '+
       'style="font-size:11px;color:var(--white-dim);border:1px solid var(--line);padding:6px 12px;'+
       'border-radius:8px;text-decoration:none">{ } Données brutes (JSON) ↗</a>';
   } else liens.style.display='none';
   if(!estPublicPool && !estMineshop && !estNmminer){box.innerHTML='<span style="color:var(--mut)">Disponible uniquement sur public-pool.io, Mineshop.eu ou NMMiner Solo.</span>';return;}
   try{
     if(estPublicPool || estNmminer){
-      // NMMiner Solo est un fork de public-pool.io -- même code serveur, donc même schéma
-      // d'API attendu (port 40557, /api/client/{adresse}, tableau "workers"). Pas de doc
-      // publique confirmant ce point precisement pour ce fork : si jamais le schema differe
-      // ou que l'endpoint n'existe pas, le catch plus bas affiche juste un message neutre,
-      // sans jamais casser le reste du dashboard.
+      // NMMiner Solo est un fork de public-pool.io -- même schéma de données (tableau
+      // "workers", bestDifficulty), MAIS PAS le même port : contrairement à public-pool.io
+      // (qui expose son API sur le port 40557), ce fork sert son API directement sur le
+      // domaine principal, sans port dédié -- confirmé en inspectant les requêtes réseau
+      // du site officiel solobtc.nmminer.com le 03/08/2026.
       const urlApi = estPublicPool ? 'https://public-pool.io:40557/api/client/'+d.adresse
-                                    : 'https://solobtc.nmminer.com:40557/api/client/'+d.adresse;
+                                    : 'https://solobtc.nmminer.com/api/client/'+d.adresse;
       const r=await fetch(urlApi);
       const j=await r.json();
       const w=j.workers||[];
