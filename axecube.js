@@ -3365,7 +3365,28 @@ function graphe(hist){
   x.stroke();x.shadowBlur=0;x.fillStyle='#96f01f';x.font='11px monospace';x.fillText('max '+fmtD(max),8,16);
 }
 async function charger(){
-  let d;try{d=await(await fetch('/api/details'+Q)).json();}catch(e){return;}
+  let d;
+  try{
+    const rep=await fetch('/api/details'+Q);
+    if(rep.status===401){
+      document.getElementById('d_workers').innerHTML=
+        '<span style="color:#ff6a78">⚠ Accès refusé (401) — le lien contient un ancien jeton, probablement '
+        +'périmé depuis un redémarrage du mineur. <a href="/" style="color:var(--amber)">Retour au tableau de bord</a> '
+        +'pour récupérer le lien à jour.</span>';
+      return;
+    }
+    if(!rep.ok){
+      document.getElementById('d_workers').innerHTML=
+        '<span style="color:#ff6a78">⚠ Le mineur a répondu avec une erreur (HTTP '+rep.status+'). Nouvelle tentative dans 5s…</span>';
+      return;
+    }
+    d=await rep.json();
+  }catch(e){
+    document.getElementById('d_workers').innerHTML=
+      '<span style="color:#ff6a78">⚠ Mineur injoignable (arrêté, ou page ouverte avant son démarrage). '
+      +'Nouvelle tentative automatique dans 5s…</span>';
+    return;
+  }
   const lg=document.getElementById('logo');if(!lg.src){
     try{const dash=await(await fetch('/'+Q)).text();const i=dash.indexOf('brand-logo');
       if(i>=0){const s2=dash.indexOf('src="',i)+5,e2=dash.indexOf('"',s2);if(s2>4&&e2>s2)lg.src=dash.slice(s2,e2);}}catch(e){}}
