@@ -938,6 +938,12 @@ function main() {
                           + 'abaisse a 1 (comme public-pool.io) : aucune limite technique confirmee cote '
                           + 'Mineshop, donc autant laisser le pool imposer lui-meme son vrai plancher via '
                           + 'son propre vardiff plutot que de le brider depuis le client.' },
+    'nmminer-solo': { host: 'solobtc.nmminer.com', port: 3333, mode: 'solo', compte: false, diffMin: 1,
+                      note: 'Solo (fork communautaire de public-pool.io, projet NMMiner), aucun compte '
+                          + 'requis -- adresse BTC directe. Concu a l\'origine pour du materiel ESP32 '
+                          + '(quelques centaines de kH/s) -- donc plancher de difficulte tres bas, ideal '
+                          + 'pour voir des shares tres frequents sur un CPU. Alternative Australie '
+                          + 'disponible : au.solobtc.nmminer.com.' },
     viabtc:         { host: 'btc.viabtc.io', port: 3333, mode: 'pool', compte: true, diffMin: 128,
                       note: 'Repartition auto (FPPS/PPS+/PPLNS) -- necessite un compte ViaBTC cree '
                           + 'au prealable sur viabtc.com. Utilisateur au format "votreIDViaBTC.worker", '
@@ -3299,6 +3305,7 @@ setInterval(tick,2000);tick();
     padding:5px 8px;font-family:inherit;font-size:11px">
     <option value="">— choisir —</option>
     <option value="solopool">public-pool.io — 🟢 Idéal CPU</option>
+    <option value="nmminer-solo">NMMiner Solo — 🟢 Idéal CPU (pensé pour ESP32)</option>
     <option value="mineshop-solo">Mineshop.eu — 🟡 Correct, shares moyens</option>
     <option value="braiins-solo">Braiins Solo — 🟠 Shares rares en CPU</option>
     <option value="ckpool">CKPool — 🔴 Pensé pour ASIC</option>
@@ -3482,7 +3489,7 @@ async function charger(){
   chargerWorkers(d);
   chargerLeader(d);
   const HOTE_VERS_PRESET={'public-pool.io':'solopool','solo.stratum.braiins.com':'braiins-solo',
-    'solo.ckpool.org':'ckpool','stratum-de.solo.mineshop.eu':'mineshop-solo'};
+    'solo.ckpool.org':'ckpool','stratum-de.solo.mineshop.eu':'mineshop-solo','solobtc.nmminer.com':'nmminer-solo'};
   const selPool=document.getElementById('sel_pool');
   const cleActuelle=HOTE_VERS_PRESET[d.pool.hote]||'';
   if(selPool && document.activeElement!==selPool){ selPool.value=cleActuelle; afficherNotePool(cleActuelle); }
