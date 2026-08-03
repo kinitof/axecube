@@ -200,6 +200,10 @@ exports.handler = async (event) => {
     historique: historiqueElague,
     periodes,
     vu: maintenant,
+    // Horodatage du dernier VRAI record battu (prouvé), distinct de "vu" qui se
+    // rafraîchit à chaque simple ping de statut -- sert au badge "nouveau record" côté
+    // frontend, pour ne pas l'afficher juste parce que le mineur est actif et en tête.
+    dernierRecordAt: nouveauMeilleur ? maintenant : (precedent ? precedent.dernierRecordAt || null : null),
     codeAcces,
     walletProprietaire: (precedent && precedent.walletProprietaire) || null,
   };

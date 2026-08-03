@@ -420,7 +420,7 @@ function rendre(){
         :rang===2?'<img src="icones/icone-podium-argent.png" width="32" height="32" alt="2e">'
         :rang===3?'<img src="icones/icone-podium-bronze.png" width="32" height="32" alt="3e">'
         :rang;
-      const neuf=(rang===1 && e.vu && (Date.now()-e.vu)<24*3600e3)
+      const neuf=(rang===1 && e.dernierRecordAt && (Date.now()-e.dernierRecordAt)<24*3600e3)
         ? '<div class="neuf">🔥 nouveau record</div>' : '';
       return '<tr>'+
         '<td><div class="rang '+classeRang+'">'+medaille+'</div></td>'+

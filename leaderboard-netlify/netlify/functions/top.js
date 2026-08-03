@@ -74,7 +74,7 @@ exports.handler = async (event) => {
                 : cle === 'semaine' ? valeurPeriode(e.periodes && e.periodes.semaine, labelSemaine)
                 : cle === 'mois' ? valeurPeriode(e.periodes && e.periodes.mois, labelMois)
                 : e.bestDiff,
-        vu: e.vu || null, spark: decimer(e.historique, 12),
+        vu: e.vu || null, dernierRecordAt: e.dernierRecordAt || null, spark: decimer(e.historique, 12),
       }))
       .filter(e => e.bestDiff > 0)
       .sort((a, b) => b.bestDiff - a.bestDiff)
