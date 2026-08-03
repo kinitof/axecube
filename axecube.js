@@ -1604,7 +1604,12 @@ function main() {
       if (m.type === 'stats') recordHashes(id, m.hashes);
       else if (m.type === 'best') {
         let nouveauteAEnvoyer = false;
-        if (m.diff > state.bestDiff) {
+        // Garde : un candidat sous le plancher du pool utilisé (DIFF_PLANCHER_POOL, ex. 100
+        // sur Mineshop) n'aurait jamais pu devenir un vrai share validé sur CE pool -- on ne
+        // le retient donc pas comme record all-time (base des paliers/Cubes CPU), même s'il
+        // dépasse un éventuel record à 0 (tout premier lancement). Reste toujours vrai pour
+        // un mineur déjà lancé, puisque son record dépasse déjà largement ce plancher.
+        if (m.diff > state.bestDiff && m.diff >= DIFF_PLANCHER_POOL) {
           state.bestDiff = m.diff;
           state.bestProofHeader = m.headerHex || null;
           stateDirty = true;
@@ -1625,6 +1630,11 @@ function main() {
           state.bestDiffRecent = m.diff;
           state.bestProofHeaderRecent = m.headerHex || null;
           nouveauteAEnvoyer = true;
+          // Volontairement distinct du log "🏆 Nouveau record de difficulté" ci-dessus :
+          // celui-ci n'est PAS un share validé par le pool (juste un candidat qui alimente le
+          // classement JOUR/SEMAINE/MOIS), pour ne jamais laisser croire à un vrai gain payé.
+          const sousLePlancher = m.diff < DIFF_PLANCHER_POOL ? ` — pas un share pool (< seuil ${DIFF_PLANCHER_POOL})` : '';
+          log('info', `📈 Nouveau meilleur candidat (classement du jour) : ${formatDiff(m.diff)}${sousLePlancher}`);
         }
         if (nouveauteAEnvoyer) soumettreRecordLeaderboard();
       } else if (m.type === 'share') {
