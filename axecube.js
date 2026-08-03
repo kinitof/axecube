@@ -945,6 +945,12 @@ function main() {
                           + '(quelques centaines de kH/s) -- donc plancher de difficulte tres bas, ideal '
                           + 'pour voir des shares tres frequents sur un CPU. Alternative Australie '
                           + 'disponible : au.solobtc.nmminer.com.' },
+    'nerdminer-solo': { host: 'pool.nerdminer.io', port: 3333, mode: 'solo', compte: false, diffMin: 1,
+                      note: 'Solo (NerdMiner Pool, etabli depuis 2023), aucun compte requis -- '
+                          + 'adresse BTC directe utilisee comme nom de worker, mot de passe "x". '
+                          + 'Communaute active (Multi NerdMiner, Bitaxe, NMMiner, NerdAxe tous presents '
+                          + 'sur ce pool) -- outil "Miner Lookup" public sur pool.nerdminer.io pour '
+                          + 'verifier son propre statut par adresse.' },
     viabtc:         { host: 'btc.viabtc.io', port: 3333, mode: 'pool', compte: true, diffMin: 128,
                       note: 'Repartition auto (FPPS/PPS+/PPLNS) -- necessite un compte ViaBTC cree '
                           + 'au prealable sur viabtc.com. Utilisateur au format "votreIDViaBTC.worker", '
@@ -3379,6 +3385,7 @@ setInterval(majSwarm,6000);majSwarm();
     <option value="">— choisir —</option>
     <option value="solopool">public-pool.io — 🟢 Idéal CPU</option>
     <option value="nmminer-solo">NMMiner Solo — 🟢 Idéal CPU (pensé pour ESP32)</option>
+    <option value="nerdminer-solo">NerdMiner Pool — 🟢 Idéal CPU (communauté active depuis 2023)</option>
     <option value="mineshop-solo">Mineshop.eu — 🟡 Correct, shares moyens</option>
     <option value="braiins-solo">Braiins Solo — 🟠 Shares rares en CPU</option>
     <option value="ckpool">CKPool — 🔴 Pensé pour ASIC</option>
@@ -3588,7 +3595,7 @@ async function charger(){
   chargerSwarm();
   chargerLeader(d);
   const HOTE_VERS_PRESET={'public-pool.io':'solopool','solo.stratum.braiins.com':'braiins-solo',
-    'solo.ckpool.org':'ckpool','stratum-de.solo.mineshop.eu':'mineshop-solo','solobtc.nmminer.com':'nmminer-solo'};
+    'solo.ckpool.org':'ckpool','stratum-de.solo.mineshop.eu':'mineshop-solo','solobtc.nmminer.com':'nmminer-solo','pool.nerdminer.io':'nerdminer-solo'};
   const selPool=document.getElementById('sel_pool');
   const cleActuelle=HOTE_VERS_PRESET[d.pool.hote]||'';
   if(selPool && document.activeElement!==selPool){ selPool.value=cleActuelle; afficherNotePool(cleActuelle); }
@@ -3598,6 +3605,9 @@ const NOTES_POOL={
     +'le plus adapté pour un CPU, vous verrez des shares régulièrement.'},
   'nmminer-solo':{c:'var(--amber)',t:'🟢 Fork de public-pool.io conçu à l\\'origine pour des puces ESP32 (quelques '
     +'centaines de kH/s) -- plancher de difficulté très bas, shares très fréquents attendus sur un CPU.'},
+  'nerdminer-solo':{c:'var(--amber)',t:'🟢 Pool communautaire établi depuis 2023, très actif (Bitaxe, NMMiner, '
+    +'NerdAxe et Multi NerdMiner y cohabitent) -- outil de vérification publique par adresse disponible sur '
+    +'pool.nerdminer.io.'},
   'mineshop-solo':{c:'#e8b64a',t:'🟡 Difficulté minimale de 100 imposée par le pool -- shares moins fréquents que sur '
     +'public-pool.io, mais tout à fait normal.'},
   'braiins-solo':{c:'#e8a64a',t:'🟠 Difficulté minimale de 512 imposée par le pool -- les shares seront rares avec '
