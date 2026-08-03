@@ -1446,10 +1446,14 @@ function main() {
           date: state.diffJourDate,
           bestDiff: state.bestDiffJour || 0,
           diffTotal: state.diffJour || 0,
+          // Détail brut conservé pour ce jour précis -- consultable plus tard au clic.
+          // Trié du plus récent au plus ancien pour un affichage naturel une fois développé.
+          detail: Array.isArray(state.detailJour) ? [...state.detailJour].reverse() : [],
         });
         // Garde un historique raisonnable (les 120 derniers jours avec activité).
         if (state.journalJour.length > 120) state.journalJour.shift();
       }
+      state.detailJour = [];
       state.diffJour = 0;
       state.bestDiffJour = 0;
       state.diffJourDate = jourActuel;
@@ -1492,6 +1496,9 @@ function main() {
     // diff du jour, total du jour), conservé même après le passage au jour suivant --
     // permet de consulter l'historique jour par jour, façon registre chronologique.
     state.journalJour = Array.isArray(b.journalJour) ? b.journalJour : [];
+    // Détail brut du jour en cours (shares individuels non encore archivés dans le
+    // journal) -- rechargé pour ne pas perdre la journée en cours lors d'un redémarrage.
+    state.detailJour = Array.isArray(b.detailJour) ? b.detailJour : [];
 
     // Compteurs "du jour" -- rattachés à une date (fuseau local). Si la date sauvegardée
     // ne correspond plus à aujourd'hui (nouveau jour, ou machine restée éteinte plus
@@ -1538,6 +1545,7 @@ function main() {
       diffInfiniDepuis: state.diffInfiniDepuis || new Date().toISOString(),
       codeAccesClassement: state.codeAccesClassement || null,
       journalJour: state.journalJour || [],
+      detailJour: state.detailJour || [],
       diffJour: state.diffJour || 0, bestDiffJour: state.bestDiffJour || 0,
       diffJourDate: state.diffJourDate || cleJourLocal(),
     };
@@ -1938,6 +1946,13 @@ function main() {
           state.diffTotalInfini = (state.diffTotalInfini || 0) + req.share.diff;
           state.diffJour = (state.diffJour || 0) + req.share.diff;
           if (req.share.diff > (state.bestDiffJour || 0)) state.bestDiffJour = req.share.diff;
+          // Détail brut du jour en cours : chaque share accepté, horodaté -- conservé tel
+          // quel pour être archivé dans le journal au changement de jour (voir
+          // verifierRolloverJour), et consultable ensuite au clic sur une entrée du journal.
+          // Plafonné à 5000 shares/jour par sécurité (mémoire), largement suffisant pour un CPU.
+          if (!Array.isArray(state.detailJour)) state.detailJour = [];
+          state.detailJour.push({ t: Date.now(), diff: req.share.diff });
+          if (state.detailJour.length > 5000) state.detailJour.shift();
           stateDirty = true;
           log('ok', t.shareOk(formatDiff(req.share.diff), state.accepted));
         } else {
@@ -3520,14 +3535,15 @@ async function charger(){
       const lignes=[...journal].reverse().map((j,i)=>{
         const dt=new Date(j.date+'T00:00:00');
         const dateAffichee=dt.toLocaleDateString('fr-FR',{weekday:'short',day:'2-digit',month:'short',year:'numeric'});
-        return '<tr>'
+        return '<tr class="ligneJournal" style="cursor:pointer" onclick="voirDetailJour(\\''+j.date+'\\')" title="Cliquer pour voir le détail de cette journée">'
           +'<td style="color:var(--mut);font-size:11px">#'+(journal.length-i)+'</td>'
           +'<td>'+dateAffichee+'</td>'
           +'<td>'+fmtD(j.bestDiff||0)+'</td>'
           +'<td>'+fmtD(j.diffTotal||0)+'</td>'
           +'</tr>';
       }).join('');
-      boiteJournal.innerHTML='<table><tr><th>BLOC</th><th>DATE</th><th>MEILLEURE DIFF</th><th>TOTAL DIFF</th></tr>'+lignes+'</table>';
+      boiteJournal.innerHTML='<table><tr><th>BLOC</th><th>DATE</th><th>MEILLEURE DIFF</th><th>TOTAL DIFF</th></tr>'+lignes+'</table>'
+        +'<div id="d_journalDetail" style="margin-top:12px"></div>';
     }
   }
 
@@ -3692,6 +3708,28 @@ function rendreLeader(d){
     leaderFenetre=b.dataset.fen; rendreLeader(d);
   }));
 }
+async function voirDetailJour(dateISO){
+  const zone=document.getElementById('d_journalDetail');
+  if(!zone)return;
+  zone.innerHTML='<span style="color:var(--mut)">Chargement du détail…</span>';
+  try{
+    const r=await(await fetch('/api/journal-jour?date='+encodeURIComponent(dateISO)+Q)).json();
+    const e=r.entree;
+    if(!e || !e.detail || !e.detail.length){
+      zone.innerHTML='<span style="color:var(--mut)">Aucun détail brut disponible pour cette journée (probablement archivée avant cette fonctionnalité).</span>';
+      return;
+    }
+    const dt=new Date(dateISO+'T00:00:00');
+    const dateAffichee=dt.toLocaleDateString('fr-FR',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});
+    const lignes=e.detail.map(s=>{
+      const heure=new Date(s.t).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+      return '<tr><td style="color:var(--mut);font-size:11px">'+heure+'</td><td>'+fmtD(s.diff)+'</td></tr>';
+    }).join('');
+    zone.innerHTML='<div style="font-size:11px;color:var(--amber-dim);margin-bottom:8px">'
+      +'Détail du '+dateAffichee+' — '+e.detail.length+' share(s) accepté(s)</div>'
+      +'<div style="max-height:320px;overflow-y:auto"><table><tr><th>HEURE</th><th>DIFFICULTÉ</th></tr>'+lignes+'</table></div>';
+  }catch(e){zone.innerHTML='<span style="color:var(--mut)">Détail indisponible pour le moment.</span>';}
+}
 async function chargerSwarm(){
   const box=document.getElementById('d_swarm');
   try{
@@ -3821,6 +3859,19 @@ charger();setInterval(charger,5000);
       if (on === '0' || on === '1') basculerMinage(on === '1');
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ actif: state.actif }));
+    } else if (url.pathname === '/api/journal-jour') {
+      const dateVoulue = url.searchParams.get('date') || '';
+      let entree = null;
+      if (dateVoulue === state.diffJourDate) {
+        // Jour en cours, pas encore archivé dans journalJour : on construit une réponse
+        // équivalente à la volée à partir du détail brut accumulé aujourd'hui.
+        entree = { date: state.diffJourDate, bestDiff: state.bestDiffJour || 0, diffTotal: state.diffJour || 0,
+                   detail: [...(state.detailJour || [])].reverse() };
+      } else {
+        entree = (state.journalJour || []).find(j => j.date === dateVoulue) || null;
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ entree }));
     } else if (url.pathname === '/api/swarm') {
       const maintenant = Date.now();
       const liste = [...swarmPeers.values()]
@@ -3853,7 +3904,7 @@ charger();setInterval(charger,5000);
           diffTotalInfini: state.diffTotalInfini || 0,
           diffInfiniDepuis: state.diffInfiniDepuis || null,
           codeAccesClassement: state.codeAccesClassement || null,
-          journalJour: (state.journalJour || []).slice(-30),
+          journalJour: (state.journalJour || []).slice(-30).map(j => ({ date: j.date, bestDiff: j.bestDiff, diffTotal: j.diffTotal })),
           diffJour: state.diffJour || 0, bestDiffJour: state.bestDiffJour || 0,
         },
         bloc: { hauteur: state.blockHeight, depuis: state.lastBlockAt },
