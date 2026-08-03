@@ -932,12 +932,12 @@ function main() {
                           + 'adresse BTC directe. 2% de frais sur bloc trouve. ATTENTION : difficulte '
                           + 'minimale fixee a 10000 par le pool -- a hashrate CPU, vos shares resteront '
                           + 'probablement invisibles la plupart du temps (ce pool cible plutot les ASIC).' },
-    'mineshop-solo': { host: 'stratum-de.solo.mineshop.eu', port: 3333, mode: 'solo', compte: false, diffMin: 8,
+    'mineshop-solo': { host: 'stratum-de.solo.mineshop.eu', port: 3333, mode: 'solo', compte: false, diffMin: 1,
                       note: 'Solo (Mineshop.eu), aucun compte requis -- adresse BTC directe. '
                           + '0% de frais, serveur Allemagne (faible latence Europe). Plancher de difficulte '
-                          + 'abaisse a 8 (au lieu de 100) pour un CPU : shares beaucoup plus frequents, sans '
-                          + 'aucun impact sur les vraies chances de trouver un bloc (uniquement la difficulte '
-                          + 'reseau compte pour ca -- voir commentaire plus bas).' },
+                          + 'abaisse a 1 (comme public-pool.io) : aucune limite technique confirmee cote '
+                          + 'Mineshop, donc autant laisser le pool imposer lui-meme son vrai plancher via '
+                          + 'son propre vardiff plutot que de le brider depuis le client.' },
     viabtc:         { host: 'btc.viabtc.io', port: 3333, mode: 'pool', compte: true, diffMin: 128,
                       note: 'Repartition auto (FPPS/PPS+/PPLNS) -- necessite un compte ViaBTC cree '
                           + 'au prealable sur viabtc.com. Utilisateur au format "votreIDViaBTC.worker", '
