@@ -932,9 +932,12 @@ function main() {
                           + 'adresse BTC directe. 2% de frais sur bloc trouve. ATTENTION : difficulte '
                           + 'minimale fixee a 10000 par le pool -- a hashrate CPU, vos shares resteront '
                           + 'probablement invisibles la plupart du temps (ce pool cible plutot les ASIC).' },
-    'mineshop-solo': { host: 'stratum-de.solo.mineshop.eu', port: 3333, mode: 'solo', compte: false, diffMin: 100,
+    'mineshop-solo': { host: 'stratum-de.solo.mineshop.eu', port: 3333, mode: 'solo', compte: false, diffMin: 8,
                       note: 'Solo (Mineshop.eu), aucun compte requis -- adresse BTC directe. '
-                          + '0% de frais, serveur Allemagne (faible latence Europe).' },
+                          + '0% de frais, serveur Allemagne (faible latence Europe). Plancher de difficulte '
+                          + 'abaisse a 8 (au lieu de 100) pour un CPU : shares beaucoup plus frequents, sans '
+                          + 'aucun impact sur les vraies chances de trouver un bloc (uniquement la difficulte '
+                          + 'reseau compte pour ca -- voir commentaire plus bas).' },
     viabtc:         { host: 'btc.viabtc.io', port: 3333, mode: 'pool', compte: true, diffMin: 128,
                       note: 'Repartition auto (FPPS/PPS+/PPLNS) -- necessite un compte ViaBTC cree '
                           + 'au prealable sur viabtc.com. Utilisateur au format "votreIDViaBTC.worker", '
@@ -1822,9 +1825,12 @@ function main() {
   // Difficulté suggérée au pool : basse au départ (adaptée à du CPU, pas de l'ASIC), mais
   // jamais en dessous du plancher connu du pool choisi (ex. 512 sur Braiins Solo, 10000 sur
   // CKPool) -- inutile de suggérer plus bas, le pool l'ignorerait de toute façon. Ensuite,
-  // divisée par deux automatiquement si aucune part n'est acceptée pendant 4 minutes, sans
-  // jamais descendre sous ce plancher. Ça ne change rien aux vraies chances de trouver un
-  // bloc : ça ne dépend que de la difficulté réseau, jamais de la difficulté de part.
+  // divisée par deux automatiquement si aucune part n'est acceptée pendant 90s (au lieu de
+  // 4 min -- un CPU a besoin de converger plus vite vers une diff confortable), sans jamais
+  // descendre sous ce plancher. Ça ne change rien aux vraies chances de trouver un bloc :
+  // ça ne dépend que de la difficulté réseau, jamais de la difficulté de part -- un share à
+  // diff 8 et un share à diff 100 réclament exactement le même travail réel pour trouver un
+  // bloc, seule la FRÉQUENCE des shares "visibles" en tant que participation change.
   const DIFF_PLANCHER_POOL = (preset && preset.diffMin) || 1;
   const DIFF_SUGGESTION_INITIALE = Math.max(16, DIFF_PLANCHER_POOL);
   let diffSuggereeActuelle = DIFF_SUGGESTION_INITIALE;
@@ -1839,10 +1845,10 @@ function main() {
       if (state.accepted === accepteesAuDernierControle && diffSuggereeActuelle > DIFF_PLANCHER_POOL) {
         diffSuggereeActuelle = Math.max(DIFF_PLANCHER_POOL, Math.floor(diffSuggereeActuelle / 2));
         send({ id: ++msgId, method: 'mining.suggest_difficulty', params: [diffSuggereeActuelle] });
-        log('info', `⚙️ Aucune part acceptée depuis 4 min — nouvelle difficulté suggérée au pool : ${diffSuggereeActuelle}`);
+        log('info', `⚙️ Aucune part acceptée depuis 90s — nouvelle difficulté suggérée au pool : ${diffSuggereeActuelle}`);
       }
       accepteesAuDernierControle = state.accepted;
-    }, 4 * 60 * 1000);
+    }, 90 * 1000);
   }
 
   function submitShare(share) {
