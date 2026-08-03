@@ -38,6 +38,7 @@ const AXECUBE_VERSION = '1.5.0';
 
 const crypto = require('crypto');
 const net = require('net');
+const dgram = require('dgram');
 const http = require('http');
 const https = require('https');
 const os = require('os');
@@ -1607,6 +1608,49 @@ function main() {
   const cpuModel = (os.cpus()[0] && os.cpus()[0].model) ? os.cpus()[0].model.trim() : 'CPU';
   let currentJobMsg = null;
 
+  // ---------------------------- Essaim local (LAN) --------------------------
+  // Chaque instance AXECUBE annonce spontanément sa présence en UDP broadcast
+  // sur le réseau local, et écoute les annonces des autres -- sans configuration,
+  // sans dépendre d'internet ni du pool. Découverte volontairement large (comme
+  // NMMiner) : toute machine AXECUBE sur le même réseau apparaît, peu importe son
+  // adresse BTC -- un voisin ou un ami sur le même Wi-Fi apparaîtra aussi.
+  const SWARM_PORT = 41234;
+  const SWARM_INTERVAL_MS = 4000;
+  const SWARM_TIMEOUT_MS = 15000; // une machine disparaît de la liste si silencieuse 15s
+  const swarmPeers = new Map(); // machineId -> {machineId, worker, cpu, hashrate, bestDiff, pool, ip, vu}
+  let swarmSocket = null;
+  try {
+    swarmSocket = dgram.createSocket({ type: 'udp4', reuseAddr: true });
+    swarmSocket.on('error', () => { /* réseau indisponible : essaim silencieusement désactivé */ });
+    swarmSocket.on('message', (msg, rinfo) => {
+      try {
+        const j = JSON.parse(msg.toString('utf8'));
+        if (j.type !== 'axecube-swarm' || !j.machineId || j.machineId === machineId) return;
+        swarmPeers.set(j.machineId, {
+          machineId: j.machineId, worker: String(j.worker || '').slice(0, 40),
+          cpu: String(j.cpu || '').slice(0, 40), hashrate: Number(j.hashrate) || 0,
+          bestDiff: Number(j.bestDiff) || 0, pool: String(j.pool || '').slice(0, 40),
+          ip: rinfo.address, vu: Date.now(),
+        });
+      } catch { /* paquet illisible, ignoré */ }
+    });
+    swarmSocket.bind(SWARM_PORT, () => { try { swarmSocket.setBroadcast(true); } catch {} });
+    setInterval(() => {
+      if (!swarmSocket) return;
+      const paquet = Buffer.from(JSON.stringify({
+        type: 'axecube-swarm', machineId, worker: workerName, cpu: cpuModel,
+        hashrate: state.hashrate, bestDiff: state.bestDiff, pool: poolLabel,
+      }));
+      swarmSocket.send(paquet, 0, paquet.length, SWARM_PORT, '255.255.255.255', () => {});
+    }, SWARM_INTERVAL_MS);
+    // Purge les machines qui ne se sont plus annoncées depuis trop longtemps (éteintes,
+    // déconnectées du réseau, ou AXECUBE fermé chez elles).
+    setInterval(() => {
+      const maintenant = Date.now();
+      for (const [cle, p] of swarmPeers) if (maintenant - p.vu > SWARM_TIMEOUT_MS) swarmPeers.delete(cle);
+    }, 5000);
+  } catch { /* dgram indisponible sur ce système : essaim simplement désactivé */ }
+
   function spawnWorker(id) {
     const w = new Worker(__filename, { workerData: { workerId: id } });
     w.on('message', (m) => {
@@ -2441,6 +2485,8 @@ function main() {
       <div class="row" style="margin-top:-4px" id="poolAdapteLigne">
         <span class="k" style="opacity:0"></span>
         <span class="v" id="poolAdapte" style="font-size:9px;font-weight:normal"></span></div>
+      <div class="row"><span class="k">🌐 RÉSEAU LOCAL</span>
+        <span class="v" id="swarmResume" style="font-size:11px">—</span></div>
       <div class="row" style="margin-top:-4px">
         <span class="k" style="opacity:0"></span>
         <span class="v" style="font-size:9px;font-weight:normal">
@@ -3004,7 +3050,19 @@ function majAge(){const e=document.getElementById('blockage');if(!e)return;
   const m=Math.floor(s/60), h=Math.floor(m/60);
   e.textContent='· '+(L.ilya?L.ilya+' ':'')+(h?h+' '+L.h+' '+(m%60)+' '+L.min:m?m+' '+L.min+' '+(s%60)+' '+L.s:s+' '+L.s);}
 setInterval(()=>{majAge();majPipAge();},1000);
+async function majSwarm(){
+  try{
+    const r=await(await fetch('/api/swarm'+Q)).json();
+    const el=document.getElementById('swarmResume');
+    if(!el)return;
+    const n=(r.machines||[]).length;
+    if(!n){ el.textContent='Aucune autre machine détectée'; return; }
+    const total=(r.machines||[]).reduce((a,m)=>a+(m.hashrate||0),0)+(r.moi?r.moi.hashrate||0:0);
+    el.textContent=n+' autre'+(n>1?'s':'')+' détectée'+(n>1?'s':'')+' · '+fmtHR(total)+' cumulé';
+  }catch(e){}
+}
 setInterval(tick,2000);tick();
+setInterval(majSwarm,6000);majSwarm();
 </script></body></html>`;
 
   const SOUTENIR_HTML = `<!doctype html>
@@ -3315,6 +3373,9 @@ setInterval(tick,2000);tick();
 <div id="poolLinks" style="display:none;margin-bottom:10px;gap:8px;flex-wrap:wrap"></div>
 <div class="card full"><div id="d_workers" class="loading">Interrogation du pool…</div></div>
 
+<h2 id="h_swarm">🌐 ESSAIM LOCAL (RÉSEAU) <span style="font-size:9px;color:var(--mut)">autres machines AXECUBE détectées sur ce réseau</span></h2>
+<div class="card full"><div id="d_swarm" class="loading">Recherche sur le réseau local…</div></div>
+
 <h2 id="h_leader">CLASSEMENT AXECUBE <a id="l_via" href="#" style="font-size:9px;color:var(--amber-dim);text-decoration:none"></a></h2>
 <div class="card full"><div id="d_leader" class="loading">—</div></div>
 
@@ -3508,6 +3569,7 @@ async function charger(){
 
   // Workers du pool (appel direct navigateur → API public-pool)
   chargerWorkers(d);
+  chargerSwarm();
   chargerLeader(d);
   const HOTE_VERS_PRESET={'public-pool.io':'solopool','solo.stratum.braiins.com':'braiins-solo',
     'solo.ckpool.org':'ckpool','stratum-de.solo.mineshop.eu':'mineshop-solo','solobtc.nmminer.com':'nmminer-solo'};
@@ -3630,6 +3692,20 @@ function rendreLeader(d){
     leaderFenetre=b.dataset.fen; rendreLeader(d);
   }));
 }
+async function chargerSwarm(){
+  const box=document.getElementById('d_swarm');
+  try{
+    const r=await(await fetch('/api/swarm'+Q)).json();
+    const liste=r.machines||[];
+    if(!liste.length){
+      box.innerHTML='<span style="color:var(--mut)">Aucune autre machine AXECUBE détectée sur ce réseau local pour l\\'instant.</span>';
+      return;
+    }
+    box.innerHTML='<table><tr><th>MACHINE</th><th>CPU</th><th>ADRESSE IP</th><th>HASHRATE</th><th>MEILLEURE DIFF</th><th>POOL</th></tr>'+
+      liste.map(m=>'<tr><td>'+(m.worker||'—')+'</td><td>'+(m.cpu||'—')+'</td><td>'+(m.ip||'—')+'</td><td>'+
+        fmtHR(m.hashrate||0)+'</td><td>'+fmtD(m.bestDiff||0)+'</td><td>'+(m.pool||'—')+'</td></tr>').join('')+'</table>';
+  }catch(e){box.innerHTML='<span style="color:var(--mut)">Recherche réseau indisponible.</span>';}
+}
 async function chargerLeader(d){
   const box=document.getElementById('d_leader');
   if(!LEADER_URL){box.innerHTML='<span style="color:var(--mut)">Classement communautaire non configuré. '+
@@ -3745,6 +3821,13 @@ charger();setInterval(charger,5000);
       if (on === '0' || on === '1') basculerMinage(on === '1');
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ actif: state.actif }));
+    } else if (url.pathname === '/api/swarm') {
+      const maintenant = Date.now();
+      const liste = [...swarmPeers.values()]
+        .filter(p => maintenant - p.vu <= SWARM_TIMEOUT_MS)
+        .sort((a, b) => b.hashrate - a.hashrate);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ moi: { machineId, worker: workerName, cpu: cpuModel, hashrate: state.hashrate }, machines: liste }));
     } else if (url.pathname === '/api/details') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
