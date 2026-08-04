@@ -16,6 +16,7 @@
  *   --port N           (port du dashboard, défaut 1337) [env DASH_PORT]
  *   --worker name      (nom du worker, défaut "web")    [env WORKER]
  *   --password pass    (mot de passe pool, défaut "x")  [env POOL_PASSWORD]
+ *   --solo-split N      (0-100, SoloPool.com uniquement : % solo vs pool, prime sur --password) [env SOLO_SPLIT]
  *                      (ex: certains pools acceptent "d=32" pour fixer la difficulté de départ)
  *   --devise eur|usd   (devise du cours BTC, défaut eur)  [env DEVISE]
  *   --lang fr|en       (langue, défaut : celle du système)  [env AXECUBE_LANG]
@@ -951,6 +952,22 @@ function main() {
                           + 'Communaute active (Multi NerdMiner, Bitaxe, NMMiner, NerdAxe tous presents '
                           + 'sur ce pool) -- outil "Miner Lookup" public sur pool.nerdminer.io pour '
                           + 'verifier son propre statut par adresse.' },
+    ocean:          { host: 'mine.ocean.xyz', port: 3334, mode: 'solo', compte: false, diffMin: 1,
+                      note: 'Solo (OCEAN, fonde par Luke Dashjr -- developpeur Bitcoin Core -- et '
+                          + 'soutenu par Jack Dorsey), aucun compte ni KYC requis -- adresse BTC directe. '
+                          + 'Design non-custodial, dashboard consultable par simple adresse sur ocean.xyz. '
+                          + 'Seul pool de cette liste avec des frais (2%, ou 1% via DATUM) preleves '
+                          + 'uniquement si un bloc est trouve -- jamais sur les parts normales. Plancher de '
+                          + 'difficulte non confirme officiellement pour du CPU (surtout teste avec du '
+                          + 'materiel Bitaxe/ASIC), a verifier a l\'usage.' },
+    'solopool-com': { host: 'eu.solopool.com', port: 3333, mode: 'solo', compte: false, diffMin: 1,
+                      note: 'Solo (SoloPool.com, serveur EU), aucun compte requis -- adresse BTC directe. '
+                          + 'Possede un client CPU/GPU dedie en open-source (SHA256-NI). Fonctionnalite '
+                          + 'unique "Solo Split" : le mot de passe accepte un chiffre de 0 a 100 pour doser '
+                          + 'librement le ratio solo/pool part par part (x = 100% solo par defaut). '
+                          + '2% de frais dev, preleves uniquement sur un bloc reellement trouve. Port haute '
+                          + 'difficulte separe (4444, diff 500000) reserve a la location de hashrate -- '
+                          + 'utiliser le port standard 3333 pour un CPU.' },
     viabtc:         { host: 'btc.viabtc.io', port: 3333, mode: 'pool', compte: true, diffMin: 128,
                       note: 'Repartition auto (FPPS/PPS+/PPLNS) -- necessite un compte ViaBTC cree '
                           + 'au prealable sur viabtc.com. Utilisateur au format "votreIDViaBTC.worker", '
@@ -1017,7 +1034,14 @@ function main() {
   const suffixeMachine = machineId.slice(0, 6);
   let workerName = nomPersonnalise || `mineur-${suffixeMachine}`;
   const nomAffichage = workerName;
-  const poolPassword = args.password || process.env.POOL_PASSWORD || 'x';
+  // --solo-split N (0-100) : spécifique à SoloPool.com -- dose le ratio solo/pool part par
+  // part directement via le mot de passe stratum (x = 100% solo, valeur par défaut). Prend
+  // le pas sur --password quand fourni, puisque c'est la même mécanique sur ce pool précis
+  // (le mot de passe standard n'a aucun autre rôle sur un pool solo classique).
+  const soloSplitBrut = args['solo-split'] !== undefined ? args['solo-split'] : process.env.SOLO_SPLIT;
+  const soloSplit = (soloSplitBrut !== undefined && soloSplitBrut !== '')
+    ? Math.max(0, Math.min(100, parseInt(soloSplitBrut, 10) || 0)) : null;
+  const poolPassword = (soloSplit !== null) ? String(soloSplit) : (args.password || process.env.POOL_PASSWORD || 'x');
   const user = `${address}.${workerName}`;
   let poolLabel = poolHost;
 
@@ -3386,6 +3410,8 @@ setInterval(majSwarm,6000);majSwarm();
     <option value="solopool">public-pool.io — 🟢 Idéal CPU</option>
     <option value="nmminer-solo">NMMiner Solo — 🟢 Idéal CPU (pensé pour ESP32)</option>
     <option value="nerdminer-solo">NerdMiner Pool — 🟢 Idéal CPU (communauté active depuis 2023)</option>
+    <option value="ocean">OCEAN — 🟡 Réputé (fondé par Luke Dashjr), 2% de frais sur bloc trouvé</option>
+    <option value="solopool-com">SoloPool.com (EU) — 🟢 Client CPU dédié, ratio Solo Split ajustable</option>
     <option value="mineshop-solo">Mineshop.eu — 🟡 Correct, shares moyens</option>
     <option value="braiins-solo">Braiins Solo — 🟠 Shares rares en CPU</option>
     <option value="ckpool">CKPool — 🔴 Pensé pour ASIC</option>
@@ -3595,7 +3621,7 @@ async function charger(){
   chargerSwarm();
   chargerLeader(d);
   const HOTE_VERS_PRESET={'public-pool.io':'solopool','solo.stratum.braiins.com':'braiins-solo',
-    'solo.ckpool.org':'ckpool','stratum-de.solo.mineshop.eu':'mineshop-solo','solobtc.nmminer.com':'nmminer-solo','pool.nerdminer.io':'nerdminer-solo'};
+    'solo.ckpool.org':'ckpool','stratum-de.solo.mineshop.eu':'mineshop-solo','solobtc.nmminer.com':'nmminer-solo','pool.nerdminer.io':'nerdminer-solo','mine.ocean.xyz':'ocean','eu.solopool.com':'solopool-com'};
   const selPool=document.getElementById('sel_pool');
   const cleActuelle=HOTE_VERS_PRESET[d.pool.hote]||'';
   if(selPool && document.activeElement!==selPool){ selPool.value=cleActuelle; afficherNotePool(cleActuelle); }
@@ -3608,6 +3634,12 @@ const NOTES_POOL={
   'nerdminer-solo':{c:'var(--amber)',t:'🟢 Pool communautaire établi depuis 2023, très actif (Bitaxe, NMMiner, '
     +'NerdAxe et Multi NerdMiner y cohabitent) -- outil de vérification publique par adresse disponible sur '
     +'pool.nerdminer.io.'},
+  ocean:{c:'#e8b64a',t:'🟡 Pool réputé fondé par Luke Dashjr (développeur Bitcoin Core) et soutenu par Jack '
+    +'Dorsey -- design non-custodial, aucun compte requis. 2% de frais, mais uniquement prélevés si un bloc '
+    +'est réellement trouvé -- jamais sur les parts normales.'},
+  'solopool-com':{c:'var(--amber)',t:'🟢 Possède un client CPU dédié en open-source (SHA256-NI). Fonctionnalité '
+    +'unique "Solo Split" : dose librement le ratio solo/pool via le mot de passe. 2% de frais dev, '
+    +'uniquement prélevés sur un bloc réellement trouvé.'},
   'mineshop-solo':{c:'#e8b64a',t:'🟡 Difficulté minimale de 100 imposée par le pool -- shares moins fréquents que sur '
     +'public-pool.io, mais tout à fait normal.'},
   'braiins-solo':{c:'#e8a64a',t:'🟠 Difficulté minimale de 512 imposée par le pool -- les shares seront rares avec '
@@ -4055,6 +4087,9 @@ charger();setInterval(charger,5000);
   console.log(`  Version : ${AXECUBE_VERSION}`);
   console.log(`  ${t.adresse} : ${address}`);
   console.log(`  ${t.pool} : ${poolHost}:${poolPort}`);
+  if (soloSplit !== null) {
+    console.log(`  ⚖️  Solo Split : ${soloSplit}% solo / ${100 - soloSplit}% pool (mot de passe stratum = "${soloSplit}")`);
+  }
   console.log(`  ${t.threads} : ${threads}`);
   console.log('');
   connect();
