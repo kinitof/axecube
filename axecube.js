@@ -1515,6 +1515,10 @@ function main() {
     // Total cumulé infini (somme de TOUTES les difficultés acceptées, depuis le tout
     // premier lancement) -- ne se remet jamais à zéro, quel que soit le temps d'arrêt.
     state.diffTotalInfini = b.diffTotalInfini || 0;
+    // Compteur de blocs potentiellement trouvés (share dont la diff dépasse la difficulté
+    // réseau) -- conservé pour toujours, jamais remis à zéro, même après un simple partage
+    // non retenu par le pool (voir plus bas pour la nuance "potentiel" vs confirmé).
+    state.blocsTrouves = b.blocsTrouves || 0;
     // Date de départ du compteur infini -- fixée une seule fois, au tout premier
     // lancement où ce champ existe, puis jamais modifiée ensuite.
     state.diffInfiniDepuis = b.diffInfiniDepuis || new Date().toISOString();
@@ -1572,6 +1576,7 @@ function main() {
       totalHashes: state.totalHashes,
       depuis: state.depuis, paliersAtteints: state.paliersAtteints,
       diffTotalInfini: state.diffTotalInfini || 0,
+      blocsTrouves: state.blocsTrouves || 0,
       diffInfiniDepuis: state.diffInfiniDepuis || new Date().toISOString(),
       codeAccesClassement: state.codeAccesClassement || null,
       journalJour: state.journalJour || [],
@@ -1946,6 +1951,8 @@ function main() {
     send({ id, method: 'mining.submit', params: [user, share.jobId, share.extranonce2, share.ntime, share.nonce] });
     log('share', t.shareSoumis(formatDiff(share.diff), share.nonce));
     if (state.netDiff > 0 && share.diff >= state.netDiff) {
+      state.blocsTrouves = (state.blocsTrouves || 0) + 1;
+      stateDirty = true;
       log('block', t.blocTrouve);
     }
   }
@@ -2319,9 +2326,14 @@ function main() {
   .screenScroll{flex:1;display:flex;flex-direction:column;gap:12px;min-height:0;
                 overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch}
   .lbl{font-size:9px;letter-spacing:.28em;color:var(--white-dim)}
+  .hero{position:relative}
   .hero .hr{font-size:44px;font-weight:700;line-height:1.05;text-shadow:var(--glow);
             font-variant-numeric:tabular-nums;margin-top:4px}
   .hero .sub{font-size:10px;color:var(--white-dim);margin-top:5px}
+  .blocBadge{position:absolute;top:0;right:0;text-align:center;line-height:1.15}
+  .blocBadge .n{font-size:15px;font-weight:700;color:var(--amber);text-shadow:var(--glow);
+                font-variant-numeric:tabular-nums}
+  .blocBadge .l{font-size:7px;letter-spacing:.18em;color:var(--white-dim);margin-top:1px}
   canvas{width:100%;height:44px;display:block;opacity:.9}
   .cores{display:flex;gap:4px;align-items:flex-end;height:18px;margin-top:8px}
   .cores i{flex:0 0 12px;background:var(--amber-faint);border-radius:1px;min-height:2px}
@@ -2501,6 +2513,10 @@ function main() {
       <div class="hr" id="hashrate">0 H/s</div>
       <div class="sub" id="sub">${t.ui.demarrage}</div>
       <div class="cores" id="cores"></div>
+      <div class="blocBadge" title="Blocs potentiellement trouvés depuis le début">
+        <div class="n" id="blocsN">0</div>
+        <div class="l">BLOC</div>
+      </div>
     </div>
     <canvas id="spark" width="360" height="44"></canvas>
     <div class="record">
@@ -2947,6 +2963,8 @@ async function tick(){try{
     pb.classList.toggle('on',!minageActif);
   }
   document.getElementById('hashrate').textContent=fmtHR(s.hashrate);
+  const bn=document.getElementById('blocsN');
+  if(bn) bn.textContent=(s.blocsTrouves||0).toLocaleString('fr-FR');
   // Sélecteur de réseau
   if(s.reseau){
     const box=document.getElementById('netsel');
@@ -3888,6 +3906,7 @@ charger();setInterval(charger,5000);
         uptime: (Date.now() - state.startedAt) / 1000,
         totalHashes: state.totalHashes,
         diffTotalInfini: state.diffTotalInfini || 0,
+        blocsTrouves: state.blocsTrouves || 0,
         diffJour: state.diffJour || 0, bestDiffJour: state.bestDiffJour || 0,
         log: state.log.slice(-200),
       }));
@@ -3944,6 +3963,7 @@ charger();setInterval(charger,5000);
           accepted: state.accepted, rejected: state.rejected,
           netDiff: state.netDiff, netHashrate: state.netHashrate,
           diffTotalInfini: state.diffTotalInfini || 0,
+          blocsTrouves: state.blocsTrouves || 0,
           diffInfiniDepuis: state.diffInfiniDepuis || null,
           codeAccesClassement: state.codeAccesClassement || null,
           journalJour: (state.journalJour || []).slice(-30).map(j => ({ date: j.date, bestDiff: j.bestDiff, diffTotal: j.diffTotal })),
