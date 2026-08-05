@@ -3069,6 +3069,7 @@ async function tick(){try{
   if(typeof s.blocsTrouves==='number'){
     if(dernierBlocsTrouves!==null && s.blocsTrouves>dernierBlocsTrouves) celebrerBloc(true);
     else if(s.blocsTrouves>0) document.querySelector('.blocBadge')?.classList.add('trouve');
+    else document.querySelector('.blocBadge')?.classList.remove('trouve');
     dernierBlocsTrouves=s.blocsTrouves;
   }
   {
