@@ -241,19 +241,43 @@ function haloStyle(index, tailleForte, tailleDouce, dim){
   return 'box-shadow:0 0 '+tailleForte+'px 4px '+hexToRgba(couleur,a1)+', 0 0 '+tailleDouce+'px 10px '+hexToRgba(couleur,a2);
 }
 
-// Titres "Pioche", basés sur le travail réel cumulé (totalHashes) -- volontairement
-// indépendant du pool utilisé (contrairement à un nombre brut de shares, qui avantagerait
-// injustement quiconque choisit un pool à difficulté minimale plus basse). Noms distincts
-// des 6 cubes de difficulté pour ne jamais confondre les deux systèmes.
+// Titres "Pioche", basés sur le travail réel cumulé -- volontairement indépendant du
+// pool utilisé (contrairement à un nombre brut de shares, qui avantagerait injustement
+// quiconque choisit un pool à difficulté minimale plus basse). 22 niveaux, du bois à la
+// légende AXECUBE -- remplace l'ancien système à 6 "cubes de difficulté" (basé à tort sur
+// le nombre brut de shares), unifié ici en un seul système cohérent.
+//
+// Les seuils sont pensés en "CUB'S cumulés" (diffTotalInfini, le même total déjà affiché
+// sur le dashboard local -- 1 CUB'S = 1 unité de difficulté de share accepté). Comme ce
+// classement communautaire ne reçoit pour l'instant que "totalHashes" (le nombre réel de
+// hachages calculés, pas encore le total CUB'S), chaque seuil est converti via l'équivalence
+// statistique totalHashes ≈ CUB'S × 2^32 (un share de difficulté D nécessite en moyenne
+// D × 2^32 hachages) -- même progression voulue, compatible avec les données déjà partagées.
+const CUBS_VERS_HACHAGES = 4294967296; // 2^32
 const PIOCHES=[
-  {cle:'bois', nom:'PIOCHE EN BOIS', seuil:1e11, couleur:'#a9793f'},
-  {cle:'pierre', nom:'PIOCHE EN PIERRE', seuil:1e12, couleur:'#8a8f94'},
-  {cle:'fer', nom:'PIOCHE EN FER', seuil:1e13, couleur:'#c7cdd1'},
-  {cle:'acier', nom:'PIOCHE EN ACIER', seuil:1e14, couleur:'#7fa8c9'},
-  {cle:'titane', nom:'PIOCHE EN TITANE', seuil:1e15, couleur:'#b98cf2'},
-  {cle:'quantique', nom:'PIOCHE QUANTIQUE', seuil:1e16, couleur:'#38e0e0'},
-  {cle:'cosmique', nom:'PIOCHE COSMIQUE', seuil:1e17, couleur:'#f2b90c'},
-];
+  {cle:'bois',        nom:'PIOCHE EN BOIS',       cubs:0,       categorie:'Débutant',     couleur:'#a9793f'},
+  {cle:'pierre',       nom:'PIOCHE DE PIERRE',     cubs:50,      categorie:'Débutant',     couleur:'#8a8f94'},
+  {cle:'cuivre',       nom:'PIOCHE EN CUIVRE',     cubs:200,     categorie:'Débutant',     couleur:'#c87f4a'},
+  {cle:'fer',          nom:'PIOCHE EN FER',        cubs:500,     categorie:'Débutant',     couleur:'#c7cdd1'},
+  {cle:'acier_noir',   nom:'PIOCHE EN ACIER NOIR', cubs:1000,    categorie:'Professionnel',couleur:'#4a4f57'},
+  {cle:'titane',       nom:'PIOCHE EN TITANE',     cubs:2500,    categorie:'Professionnel',couleur:'#b98cf2'},
+  {cle:'carbone',      nom:'PIOCHE EN CARBONE',    cubs:5000,    categorie:'Professionnel',couleur:'#5c6570'},
+  {cle:'neon',         nom:'PIOCHE NÉON',          cubs:10000,   categorie:'Professionnel',couleur:'#96f01f'},
+  {cle:'neon2',        nom:'PIOCHE NÉON II',       cubs:20000,   categorie:'Expert',       couleur:'#5df0c7'},
+  {cle:'plasma',       nom:'PIOCHE PLASMA',        cubs:40000,   categorie:'Expert',       couleur:'#38c8f0'},
+  {cle:'electrique',   nom:'PIOCHE ÉLECTRIQUE',    cubs:75000,   categorie:'Expert',       couleur:'#1f6bf0'},
+  {cle:'quantum',      nom:'PIOCHE QUANTUM',       cubs:125000,  categorie:'Expert',       couleur:'#8b3dff'},
+  {cle:'emeraude',     nom:'PIOCHE ÉMERAUDE',      cubs:200000,  categorie:'Élite',        couleur:'#1fd47a'},
+  {cle:'rubis',        nom:'PIOCHE RUBIS',         cubs:300000,  categorie:'Élite',        couleur:'#e0304f'},
+  {cle:'saphir',       nom:'PIOCHE SAPHIR',        cubs:450000,  categorie:'Élite',        couleur:'#2a5cd9'},
+  {cle:'amethyste',    nom:'PIOCHE AMÉTHYSTE',     cubs:650000,  categorie:'Élite',        couleur:'#a24fe0'},
+  {cle:'diamant',      nom:'PIOCHE EN DIAMANT',    cubs:900000,  categorie:'Élite',        couleur:'#8ce8f5'},
+  {cle:'diamant_noir', nom:'PIOCHE DIAMANT NOIR',  cubs:1200000, categorie:'Légendaire',   couleur:'#2b2f38'},
+  {cle:'cosmic',       nom:'PIOCHE COSMIC',        cubs:1600000, categorie:'Légendaire',   couleur:'#f2b90c'},
+  {cle:'nova',         nom:'PIOCHE NOVA',          cubs:2200000, categorie:'Légendaire',   couleur:'#ff6a3d'},
+  {cle:'genesis',      nom:'PIOCHE GENESIS',       cubs:3000000, categorie:'Légendaire',   couleur:'#ff4fc8'},
+  {cle:'legend',       nom:'AXECUBE LEGEND',       cubs:4000000, categorie:'Légendaire',   couleur:'#ffd76e'},
+].map(p=>({...p, seuil: p.cubs*CUBS_VERS_HACHAGES}));
 
 function fmtH(n){
   if(!n) return '0';
@@ -315,6 +339,13 @@ function palierPiocheDe(totalHashes){
   return idx;
 }
 
+function fmtCubs(n){
+  if(!n) return '0';
+  if(n>=1e6) return (n/1e6).toFixed(2)+'M';
+  if(n>=1e3) return (n/1e3).toFixed(1)+'k';
+  return Math.round(n).toString();
+}
+
 function rendrePioches(mineurs){
   const parPalier=PIOCHES.map(()=>[]);
   for(const m of mineurs){
@@ -330,7 +361,8 @@ function rendrePioches(mineurs){
     return '<div class="carte '+(vide?'vide':'debloque')+'" style="box-shadow:inset 0 0 0 1px '+p.couleur+(vide?'55':'aa')+'">'+
       '<div class="emoji">⛏️</div>'+
       '<div class="nom" style="color:'+p.couleur+'">'+p.nom+'</div>'+
-      '<div class="seuil">Travail cumulé ≥ '+fmtH(p.seuil)+' hachages</div>'+
+      '<div class="categorie" style="color:'+p.couleur+'99;font-size:10px;letter-spacing:.12em;text-transform:uppercase">'+p.categorie+'</div>'+
+      '<div class="seuil">CUB\'S cumulés ≥ '+fmtCubs(p.cubs)+'</div>'+
       (vide
         ? '<div class="compteur zero">Aucun mineur pour l\'instant</div>'
         : '<div class="compteur">'+tenants.length+' mineur'+(tenants.length>1?'s':'')+'</div>'+
