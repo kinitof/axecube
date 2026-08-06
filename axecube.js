@@ -3605,7 +3605,8 @@ setInterval(majSwarm,6000);majSwarm();
 <div id="poolLinks" style="display:none;margin-bottom:10px;gap:8px;flex-wrap:wrap"></div>
 <div class="card full"><div id="d_workers" class="loading">Interrogation du pool…</div></div>
 
-<h2 id="h_swarm">🌐 ESSAIM LOCAL (RÉSEAU) <span style="font-size:9px;color:var(--mut)">autres machines AXECUBE détectées sur ce réseau</span></h2>
+<h2 id="h_swarm">🌐 ESSAIM LOCAL (RÉSEAU) <span style="font-size:9px;color:var(--mut)">autres machines AXECUBE détectées sur ce réseau</span>
+  <a id="l_machines" href="/machines" target="_blank" rel="noopener" style="font-size:9px;color:var(--amber-dim);text-decoration:none;margin-left:8px">↗ vue cartes (essai)</a></h2>
 <div class="card full"><div id="d_swarm" class="loading">Recherche sur le réseau local…</div></div>
 
 <h2 id="h_leader">CLASSEMENT AXECUBE <a id="l_via" href="#" style="font-size:9px;color:var(--amber-dim);text-decoration:none"></a></h2>
@@ -3854,6 +3855,8 @@ async function charger(){
   chargerWorkers(d).then(restaurerScroll);
   chargerSwarm().then(restaurerScroll);
   chargerLeader(d).then(restaurerScroll);
+  const lienMachines=document.getElementById('l_machines');
+  if(lienMachines) lienMachines.href='/machines'+Q;
   const HOTE_VERS_PRESET={'public-pool.io':'solopool','solo.stratum.braiins.com':'braiins-solo',
     'solo.ckpool.org':'ckpool','stratum-de.solo.mineshop.eu':'mineshop-solo','solobtc.nmminer.com':'nmminer-solo','pool.nerdminer.io':'nerdminer-solo','mine.ocean.xyz':'ocean','eu.solopool.com':'solopool-com'};
   const selPool=document.getElementById('sel_pool');
@@ -4087,6 +4090,105 @@ document.getElementById('sel_pool').addEventListener('change', async (e)=>{
 charger();setInterval(charger,5000);
 </script></body></html>`;
 
+  const MACHINES_HTML = `<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#05070a">
+<title>AXECUBE — Machines connectées</title>
+<style>
+  :root{
+    --bg:#07090c; --line:#1c2029;
+    --amber:#96f01f; --amber-dim:rgba(150,240,31,.6); --amber-faint:rgba(150,240,31,.32);
+    --glow:0 0 10px rgba(150,240,31,.35);
+    --white:#e8edf5; --white-dim:rgba(232,237,245,.6); --mut:#6b7686;
+    --mono:ui-monospace,'SF Mono','Cascadia Code',Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--white);font-family:var(--mono);
+       padding:20px;padding-top:max(20px,env(safe-area-inset-top));line-height:1.5}
+  .wrap{max-width:1200px;margin:0 auto}
+  header{display:flex;align-items:center;gap:14px;padding-bottom:18px;
+         border-bottom:1px solid var(--line);margin-bottom:22px;flex-wrap:wrap}
+  .lien{color:var(--amber);text-decoration:none;font-size:12px;border:1px solid var(--amber-faint);
+        padding:7px 13px;border-radius:8px}
+  .lien:hover{border-color:var(--amber)}
+  h1{font-size:16px;font-weight:600;color:var(--amber);text-shadow:var(--glow)}
+  .sub{font-size:11px;color:var(--mut);margin-top:8px;flex-basis:100%}
+  .grille{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:22px}
+  .carteMachine{position:relative;width:100%;aspect-ratio:1086/1448;
+    background-image:url('/assets/bitaxe-board.png');background-size:contain;background-repeat:no-repeat;
+    filter:drop-shadow(0 8px 20px rgba(0,0,0,.5))}
+  .carteMachine.hors-ligne{filter:grayscale(1) opacity(.45)}
+  .ecran{position:absolute;left:22.56%;top:4.49%;width:53.68%;height:20.03%;
+    border-radius:2.4%/3.5%;overflow:hidden;background:#05070a;
+    display:flex;flex-direction:column;justify-content:space-between;padding:5% 6%}
+  .ecranHaut{display:flex;justify-content:space-between;align-items:center;font-size:min(1.9vw,13px)}
+  .ecranLogo{display:flex;align-items:center;gap:5px;font-weight:700;color:var(--white)}
+  .ecranLogo svg{width:1.1em;height:1.1em}
+  .statut{color:var(--amber);display:flex;align-items:center;gap:4px;font-weight:700}
+  .statut .pt{width:6px;height:6px;border-radius:50%;background:var(--amber)}
+  .statut.off{color:var(--mut)}
+  .statut.off .pt{background:var(--mut)}
+  .ecranLabel{font-size:min(1.5vw,10px);color:var(--mut);letter-spacing:.08em}
+  .ecranHash{font-weight:800;color:var(--white);font-size:min(6.5vw,44px);line-height:1;display:flex;align-items:baseline;gap:4px}
+  .ecranHash span{font-size:min(2.6vw,17px);font-weight:700;color:var(--amber)}
+  .ecranFoot{display:flex;justify-content:space-between;font-size:min(1.5vw,10px);gap:4px}
+  .ecranFoot div{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ecranFoot b{display:block;color:var(--white);font-size:min(2vw,13px)}
+  .ecranFoot .m b{color:var(--amber)}
+  .nomMachine{position:absolute;left:0;right:0;bottom:-26px;text-align:center;font-size:11px;color:var(--white-dim)}
+  .vide{color:var(--mut);font-size:12px;padding:30px 0}
+</style></head>
+<body><div class="wrap">
+<header>
+  <h1>Machines connectées</h1>
+  <div style="margin-left:auto"><a class="lien" id="retour" href="/details">← Retour au tableau de bord</a></div>
+  <div class="sub">Essai d'affichage façon carte ASIC — une machine AXECUBE connectée = une carte. Données réelles, rafraîchies toutes les 5 secondes.</div>
+</header>
+<div id="grille" class="grille"><div class="vide">Recherche des machines sur le réseau local…</div></div>
+</div>
+<script>
+const TOK=${JSON.stringify(jeton || '')};const Q=TOK?('?token='+TOK):'';
+function fmtHR(h){if(!h)return'0 H/s';if(h>=1e12)return(h/1e12).toFixed(2)+' TH/s';if(h>=1e9)return(h/1e9).toFixed(2)+' GH/s';
+  if(h>=1e6)return(h/1e6).toFixed(2)+' MH/s';if(h>=1e3)return(h/1e3).toFixed(2)+' kH/s';return h.toFixed(0)+' H/s'}
+function fmtD(d){if(!d)return'—';if(d>=1e12)return(d/1e12).toFixed(2)+' T';if(d>=1e9)return(d/1e9).toFixed(2)+' G';
+  if(d>=1e6)return(d/1e6).toFixed(2)+' M';if(d>=1e3)return(d/1e3).toFixed(2)+' k';return d>=100?d.toFixed(0):d.toPrecision(3)}
+const LOGO_SVG='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 2l8 4.6v9.8L12 22l-8-4.6V6.6z"/><path d="M12 2v9M12 11L4 6.6M12 11l8-4.4"/></svg>';
+document.getElementById('retour').href='/details'+Q;
+function carte(m){
+  const enLigne=(m.hashrate||0)>0;
+  return '<div class="carteMachine'+(enLigne?'':' hors-ligne')+'">'
+    +'<div class="ecran">'
+      +'<div class="ecranHaut"><div class="ecranLogo">'+LOGO_SVG+'AXECUBE</div>'
+        +'<div class="statut'+(enLigne?'':' off')+'"><span class="pt"></span>'+(enLigne?'MINING':'HORS LIGNE')+'</div></div>'
+      +'<div><div class="ecranLabel">HASHRATE</div>'
+        +'<div class="ecranHash">'+fmtHR(m.hashrate||0).replace(/ .*/,'')+'<span>'+ (fmtHR(m.hashrate||0).split(' ')[1]||'') +'</span></div></div>'
+      +'<div class="ecranFoot">'
+        +'<div class="m">MEILLEURE<b>'+fmtD(m.bestDiff||0)+'</b></div>'
+        +'<div>POOL<b>'+(m.pool||'—')+'</b></div>'
+        +'<div>IP<b>'+(m.ip||'—')+'</b></div>'
+      +'</div>'
+    +'</div>'
+    +'<div class="nomMachine">'+(m.worker||'—')+' · '+(m.cpu||'—')+'</div>'
+  +'</div>';
+}
+async function charger(){
+  const grille=document.getElementById('grille');
+  try{
+    const r=await(await fetch('/api/swarm'+Q)).json();
+    const liste=r.machines||[];
+    if(!liste.length){
+      grille.innerHTML='<div class="vide">Aucune machine AXECUBE détectée sur ce réseau local pour l\\'instant.</div>';
+      return;
+    }
+    grille.innerHTML=liste.map(carte).join('');
+  }catch(e){
+    grille.innerHTML='<div class="vide">Recherche réseau indisponible.</div>';
+  }
+}
+charger();setInterval(charger,5000);
+</script></body></html>`;
+
   const JOUR_DETAIL_HTML = `<!DOCTYPE html>
 <html lang="fr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -4200,6 +4302,15 @@ function fmtD(d){if(!d)return'—';if(d>=1e12)return(d/1e12).toFixed(2)+' T';if(
       if (!PALIERS.some(p => p.cle === cleBadge)) { res.writeHead(404); res.end(); return; }
       const cheminBadge = path.join(__dirname, 'assets', 'badges', nomFichier);
       fs.readFile(cheminBadge, (err, data) => {
+        if (err) { res.writeHead(404); res.end(); return; }
+        res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=86400' });
+        res.end(data);
+      });
+      return;
+    }
+    if (url.pathname === '/assets/bitaxe-board.png') {
+      const cheminCarte = path.join(__dirname, 'assets', 'bitaxe-board.png');
+      fs.readFile(cheminCarte, (err, data) => {
         if (err) { res.writeHead(404); res.end(); return; }
         res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=86400' });
         res.end(data);
@@ -4341,6 +4452,9 @@ function fmtD(d){if(!d)return'—';if(d>=1e12)return(d/1e12).toFixed(2)+' T';if(
     } else if (url.pathname === '/details/jour') {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(JOUR_DETAIL_HTML);
+    } else if (url.pathname === '/machines') {
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end(MACHINES_HTML);
     } else if (url.pathname === '/decouvrir') {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(DECOUVRIR_HTML);
