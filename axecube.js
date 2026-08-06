@@ -3519,6 +3519,19 @@ setInterval(majSwarm,6000);majSwarm();
   th{color:var(--amber-faint);font-size:9px;letter-spacing:.14em;font-weight:600}
   td{color:var(--white-dim);font-variant-numeric:tabular-nums}
   td.me{color:var(--amber)}
+  .ligneJournal:hover{background:rgba(150,240,31,.05)}
+  .lienJournal{color:var(--white-dim);text-decoration:none}
+  .lienJournal:hover{color:var(--amber);text-decoration:underline}
+  .moisJournal{border-bottom:1px solid var(--line)}
+  .moisJournal:last-child{border-bottom:none}
+  .moisJournal summary{cursor:pointer;padding:9px 6px;font-size:11px;letter-spacing:.1em;
+    color:var(--amber-dim);list-style:none;user-select:none;display:flex;align-items:center;gap:6px}
+  .moisJournal summary::-webkit-details-marker{display:none}
+  .moisJournal summary::before{content:'▸';color:var(--amber-faint);font-size:10px;transition:transform .15s}
+  .moisJournal[open] summary::before{transform:rotate(90deg)}
+  .moisJournal summary:hover{color:var(--amber)}
+  .moisJournal .moisCompte{color:var(--mut);font-size:9px;letter-spacing:normal;font-weight:400}
+  .moisJournal table{margin-bottom:4px}
   .lead-tabs{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}
   .lead-tab{background:none;border:1px solid var(--line);color:var(--white-dim);font-family:inherit;
             font-size:10px;letter-spacing:.1em;padding:5px 12px;border-radius:6px;cursor:pointer}
@@ -3645,6 +3658,13 @@ function graphe(hist){
   x.stroke();x.shadowBlur=0;x.fillStyle='#96f01f';x.font='11px monospace';x.fillText('max '+fmtD(max),8,16);
 }
 async function charger(){
+  // On fige la position de lecture : la reconstruction du DOM ci-dessous
+  // peut légèrement changer la hauteur de plusieurs blocs (journal, workers,
+  // classement...), ce qui décale tout le contenu en dessous et fait perdre
+  // sa place à l'utilisateur. On capture le scroll ici et on le restaure une
+  // fois toutes les mises à jour (y compris les appels async) terminées.
+  const scrollAvant=window.scrollY;
+  const restaurerScroll=()=>{ requestAnimationFrame(()=>window.scrollTo(0,scrollAvant)); };
   let d;
   try{
     const rep=await fetch('/api/details'+Q);
@@ -3728,26 +3748,69 @@ async function charger(){
     document.getElementById('d_cubssub').textContent=sub.join(' · ');
   }
 
-  // Journal des gains : un bloc par jour ayant eu de l'activité, du plus récent au plus
-  // ancien -- façon registre chronologique, chaque entrée résume le jour concerné.
+  // Journal des gains : groupé par mois, façon registre chronologique.
+  // Chaque mois est un bloc repliable (accordéon natif <details>) ; le mois
+  // en cours est ouvert par défaut, les mois passés sont repliés pour garder
+  // la lecture lisible même après des mois/années d'historique.
   {
     const journal=d.loterie.journalJour||[];
     const boiteJournal=document.getElementById('d_journal');
     if(!journal.length){
       boiteJournal.innerHTML='<span style="color:var(--mut)">Aucun jour archivé pour le moment -- le premier bloc apparaitra demain.</span>';
     } else {
-      const lignes=[...journal].reverse().map((j,i)=>{
-        const dt=new Date(j.date+'T00:00:00');
-        const dateAffichee=dt.toLocaleDateString('fr-FR',{weekday:'short',day:'2-digit',month:'short',year:'numeric'});
-        return '<tr class="ligneJournal" style="cursor:pointer" onclick="voirDetailJour(\\''+j.date+'\\')" title="Cliquer pour voir le détail de cette journée">'
-          +'<td style="color:var(--mut);font-size:11px">#'+(journal.length-i)+'</td>'
-          +'<td>'+dateAffichee+'</td>'
-          +'<td>'+fmtD(j.bestDiff||0)+'</td>'
-          +'<td>'+fmtD(j.diffTotal||0)+'</td>'
-          +'</tr>';
+      const trie=[...journal].reverse(); // plus récent en premier
+      // Regroupement par clé AAAA-MM, en conservant l'ordre du plus récent au plus ancien
+      const groupes=[];
+      const parMois={};
+      trie.forEach((j,i)=>{
+        const cle=j.date.slice(0,7);
+        if(!parMois[cle]){
+          const g={cle, entrees:[]};
+          parMois[cle]=g;
+          groupes.push(g);
+        }
+        parMois[cle].entrees.push({j, numeroBloc:journal.length-i});
+      });
+      const moisCourantCle=new Date().toISOString().slice(0,7);
+      if(journalPremierRendu){ moisJournalOuverts.add(moisCourantCle); journalPremierRendu=false; }
+      // On mémorise la position de scroll du bloc journal avant de le
+      // reconstruire, pour ne pas faire "sauter" la lecture au rafraîchissement.
+      const ancienScroll=document.getElementById('d_journalScroll');
+      const scrollJournalAvant=ancienScroll?ancienScroll.scrollTop:0;
+      const blocsMois=groupes.map(g=>{
+        const dtMois=new Date(g.cle+'-01T00:00:00');
+        const labelMois=dtMois.toLocaleDateString('fr-FR',{month:'long',year:'numeric'}).toUpperCase();
+        const nbJours=g.entrees.length;
+        const ouvert=(moisJournalOuverts.has(g.cle))?' open':'';
+        const lignes=g.entrees.map(({j,numeroBloc})=>{
+          const dt=new Date(j.date+'T00:00:00');
+          const dateAffichee=dt.toLocaleDateString('fr-FR',{weekday:'short',day:'2-digit',month:'short',year:'numeric'});
+          const lienJour='/details/jour?date='+j.date+(Q?Q.replace('?','&'):'');
+          return '<tr class="ligneJournal" data-date="'+j.date+'">'
+            +'<td style="color:var(--mut);font-size:11px">#'+numeroBloc+'</td>'
+            +'<td><a class="lienJournal" href="'+lienJour+'" target="_blank" rel="noopener" title="Ouvrir le détail de cette journée dans un nouvel onglet">'+dateAffichee+'</a></td>'
+            +'<td>'+fmtD(j.bestDiff||0)+'</td>'
+            +'<td>'+fmtD(j.diffTotal||0)+'</td>'
+            +'</tr>';
+        }).join('');
+        return '<details class="moisJournal" data-mois="'+g.cle+'"'+ouvert+'>'
+          +'<summary>'+labelMois+' <span class="moisCompte">('+nbJours+' jour'+(nbJours>1?'s':'')+')</span></summary>'
+          +'<table><thead><tr><th>BLOC</th><th>DATE</th><th>MEILLEURE DIFF</th><th>TOTAL DIFF</th></tr></thead>'
+          +'<tbody>'+lignes+'</tbody></table></details>';
       }).join('');
-      boiteJournal.innerHTML='<table><tr><th>BLOC</th><th>DATE</th><th>MEILLEURE DIFF</th><th>TOTAL DIFF</th></tr>'+lignes+'</table>'
-        +'<div id="d_journalDetail" style="margin-top:12px"></div>';
+      boiteJournal.innerHTML='<div id="d_journalScroll" style="max-height:480px;overflow-y:auto;border:1px solid var(--line);border-radius:8px;padding:2px 4px">'
+        +blocsMois+'</div>';
+      // On restaure la position de scroll interne du bloc journal.
+      const nouveauScroll=document.getElementById('d_journalScroll');
+      if(nouveauScroll) nouveauScroll.scrollTop=scrollJournalAvant;
+      // On mémorise chaque ouverture/fermeture manuelle d'un mois, pour que
+      // ça survive au prochain rafraîchissement automatique.
+      document.querySelectorAll('.moisJournal').forEach(det=>{
+        det.addEventListener('toggle',()=>{
+          const cle=det.getAttribute('data-mois');
+          if(det.open) moisJournalOuverts.add(cle); else moisJournalOuverts.delete(cle);
+        });
+      });
     }
   }
 
@@ -3788,14 +3851,15 @@ async function charger(){
   else document.getElementById('g_pay').innerHTML='<div class="loading">En attente d\\'un job du pool…</div>';
 
   // Workers du pool (appel direct navigateur → API public-pool)
-  chargerWorkers(d);
-  chargerSwarm();
-  chargerLeader(d);
+  chargerWorkers(d).then(restaurerScroll);
+  chargerSwarm().then(restaurerScroll);
+  chargerLeader(d).then(restaurerScroll);
   const HOTE_VERS_PRESET={'public-pool.io':'solopool','solo.stratum.braiins.com':'braiins-solo',
     'solo.ckpool.org':'ckpool','stratum-de.solo.mineshop.eu':'mineshop-solo','solobtc.nmminer.com':'nmminer-solo','pool.nerdminer.io':'nerdminer-solo','mine.ocean.xyz':'ocean','eu.solopool.com':'solopool-com'};
   const selPool=document.getElementById('sel_pool');
   const cleActuelle=HOTE_VERS_PRESET[d.pool.hote]||'';
   if(selPool && document.activeElement!==selPool){ selPool.value=cleActuelle; afficherNotePool(cleActuelle); }
+  restaurerScroll();
 }
 const NOTES_POOL={
   solopool:{c:'var(--amber)',t:'🟢 Difficulté minimale de 1, ajustée automatiquement à votre hashrate (vardiff) -- '
@@ -3964,28 +4028,11 @@ function rendreLeader(d){
     leaderFenetre=b.dataset.fen; rendreLeader(d);
   }));
 }
-async function voirDetailJour(dateISO){
-  const zone=document.getElementById('d_journalDetail');
-  if(!zone)return;
-  zone.innerHTML='<span style="color:var(--mut)">Chargement du détail…</span>';
-  try{
-    const r=await(await fetch('/api/journal-jour?date='+encodeURIComponent(dateISO)+(Q?Q.replace('?','&'):''))).json();
-    const e=r.entree;
-    if(!e || !e.detail || !e.detail.length){
-      zone.innerHTML='<span style="color:var(--mut)">Aucun détail brut disponible pour cette journée (probablement archivée avant cette fonctionnalité).</span>';
-      return;
-    }
-    const dt=new Date(dateISO+'T00:00:00');
-    const dateAffichee=dt.toLocaleDateString('fr-FR',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});
-    const lignes=e.detail.map(s=>{
-      const heure=new Date(s.t).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
-      return '<tr><td style="color:var(--mut);font-size:11px">'+heure+'</td><td>'+fmtD(s.diff)+'</td></tr>';
-    }).join('');
-    zone.innerHTML='<div style="font-size:11px;color:var(--amber-dim);margin-bottom:8px">'
-      +'Détail du '+dateAffichee+' — '+e.detail.length+' share(s) accepté(s)</div>'
-      +'<div style="max-height:320px;overflow-y:auto"><table><tr><th>HEURE</th><th>DIFFICULTÉ</th></tr>'+lignes+'</table></div>';
-  }catch(e){zone.innerHTML='<span style="color:var(--mut)">Détail indisponible pour le moment.</span>';}
-}
+// Mois du journal ouverts manuellement par l'utilisateur (clé AAAA-MM) --
+// persiste entre les rafraîchissements pour ne pas refermer un mois que
+// l'utilisateur a volontairement déplié.
+const moisJournalOuverts=new Set();
+let journalPremierRendu=true;
 async function chargerSwarm(){
   const box=document.getElementById('d_swarm');
   try{
@@ -4038,6 +4085,97 @@ document.getElementById('sel_pool').addEventListener('change', async (e)=>{
   setTimeout(()=>{e.target.disabled=false;}, 3000);
 });
 charger();setInterval(charger,5000);
+</script></body></html>`;
+
+  const JOUR_DETAIL_HTML = `<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#05070a">
+<title>AXECUBE — Détail du jour</title>
+<style>
+  :root{
+    --bg:#07090c; --panel:#0d1014; --panel2:#12161c; --line:#1c2029;
+    --amber:#96f01f; --amber-dim:rgba(150,240,31,.6); --amber-faint:rgba(150,240,31,.32);
+    --glow:0 0 10px rgba(150,240,31,.35); --led-ok:#4dffc3;
+    --white:#e8edf5; --white-dim:rgba(232,237,245,.6); --mut:#6b7686;
+    --mono:ui-monospace,'SF Mono','Cascadia Code',Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--white);font-family:var(--mono);
+       padding:20px;padding-top:max(20px,env(safe-area-inset-top));line-height:1.5}
+  .wrap{max-width:720px;margin:0 auto}
+  header{display:flex;align-items:center;gap:14px;padding-bottom:18px;
+         border-bottom:1px solid var(--line);margin-bottom:22px;flex-wrap:wrap}
+  .lien{color:var(--amber);text-decoration:none;font-size:12px;border:1px solid var(--amber-faint);
+        padding:7px 13px;border-radius:8px}
+  .lien:hover{border-color:var(--amber)}
+  h1{font-size:16px;font-weight:600;color:var(--amber);text-shadow:var(--glow)}
+  .sub{font-size:11px;color:var(--mut);margin-top:8px}
+  table{width:100%;border-collapse:collapse;font-size:12px;margin-top:18px}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)}
+  th{color:var(--amber-faint);font-size:9px;letter-spacing:.14em;font-weight:600}
+  td{color:var(--white-dim);font-variant-numeric:tabular-nums}
+  tr.partMeilleure td{color:var(--amber);font-weight:600;text-shadow:var(--glow)}
+  tr.partForte td{color:var(--led-ok)}
+  .badge-diff{display:inline-block;font-size:9px;letter-spacing:.06em;padding:1px 6px;
+    border-radius:10px;margin-left:8px;font-weight:600;vertical-align:middle}
+  .badge-meilleure{background:rgba(150,240,31,.14);color:var(--amber);border:1px solid rgba(150,240,31,.4)}
+  .badge-forte{background:rgba(77,255,195,.12);color:var(--led-ok);border:1px solid rgba(77,255,195,.35)}
+  .loading{color:var(--mut);font-size:12px;padding:20px 0}
+</style></head>
+<body><div class="wrap">
+<header>
+  <h1 id="titre">Détail du jour</h1>
+  <div style="margin-left:auto"><a class="lien" id="retour" href="/details">← Retour au tableau de bord</a></div>
+</header>
+<div id="zone" class="loading">Chargement…</div>
+</div>
+<script>
+const TOK=${JSON.stringify(jeton || '')};const Q=TOK?('?token='+TOK):'';
+function fmtD(d){if(!d)return'—';if(d>=1e12)return(d/1e12).toFixed(2)+' T';if(d>=1e9)return(d/1e9).toFixed(2)+' G';
+  if(d>=1e6)return(d/1e6).toFixed(2)+' M';if(d>=1e3)return(d/1e3).toFixed(2)+' k';return d>=100?d.toFixed(0):d.toPrecision(3)}
+(async function(){
+  const params=new URLSearchParams(location.search);
+  const dateISO=params.get('date')||'';
+  document.getElementById('retour').href='/details'+Q;
+  const zone=document.getElementById('zone');
+  if(!dateISO){ zone.innerHTML='<span style="color:var(--mut)">Aucune date fournie.</span>'; return; }
+  try{
+    const rep=await fetch('/api/journal-jour?date='+encodeURIComponent(dateISO)+(Q?Q.replace('?','&'):''));
+    if(rep.status===401){
+      zone.innerHTML='<span style="color:#ff6a78">⚠ Accès refusé (401) — le lien contient un ancien jeton, probablement '
+        +'périmé depuis un redémarrage du mineur. <a href="/" style="color:var(--amber)">Retour au tableau de bord</a> '
+        +'pour récupérer le lien à jour.</span>';
+      return;
+    }
+    const r=await rep.json();
+    const e=r.entree;
+    const dt=new Date(dateISO+'T00:00:00');
+    const dateAffichee=dt.toLocaleDateString('fr-FR',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});
+    document.getElementById('titre').textContent='Détail du '+dateAffichee;
+    document.title='AXECUBE — '+dateAffichee;
+    if(!e || !e.detail || !e.detail.length){
+      zone.innerHTML='<span style="color:var(--mut)">Aucun détail brut disponible pour cette journée (probablement archivée avant cette fonctionnalité).</span>';
+      return;
+    }
+    const meilleureDiff=Math.max(...e.detail.map(s=>s.diff||0));
+    const lignes=e.detail.map(s=>{
+      const heure=new Date(s.t).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+      const diff=s.diff||0;
+      let classe='', badge='';
+      if(diff===meilleureDiff && meilleureDiff>0){
+        classe=' class="partMeilleure"';
+        badge=' <span class="badge-diff badge-meilleure">★ MEILLEURE</span>';
+      } else if(diff>100){
+        classe=' class="partForte"';
+        badge=' <span class="badge-diff badge-forte">▲ +100</span>';
+      }
+      return '<tr'+classe+'><td style="color:var(--mut);font-size:11px">'+heure+'</td><td>'+fmtD(diff)+badge+'</td></tr>';
+    }).join('');
+    zone.outerHTML='<div class="sub">'+e.detail.length+' share(s) accepté(s)</div>'
+      +'<table id="zone"><tr><th>HEURE</th><th>DIFFICULTÉ</th></tr>'+lignes+'</table>';
+  }catch(err){ zone.innerHTML='<span style="color:var(--mut)">Détail indisponible pour le moment.</span>'; }
+})();
 </script></body></html>`;
 
   const server = http.createServer((req, res) => {
@@ -4200,6 +4338,9 @@ charger();setInterval(charger,5000);
     } else if (url.pathname === '/details') {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(DETAILS_HTML);
+    } else if (url.pathname === '/details/jour') {
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end(JOUR_DETAIL_HTML);
     } else if (url.pathname === '/decouvrir') {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(DECOUVRIR_HTML);
