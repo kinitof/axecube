@@ -4118,8 +4118,8 @@ charger();setInterval(charger,5000);
   .lien:hover{border-color:var(--amber)}
   h1{font-size:16px;font-weight:600;color:var(--amber);text-shadow:var(--glow)}
   .sub{font-size:11px;color:var(--mut);margin-top:8px;flex-basis:100%}
-  .grille{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:26px;justify-items:center}
-  .carteMachine{position:relative;width:100%;max-width:420px;aspect-ratio:1023/1537;container-type:size;container-name:carte;
+  .grille{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:16px;justify-items:center}
+  .carteMachine{position:relative;width:100%;max-width:190px;aspect-ratio:1023/1537;container-type:size;container-name:carte;
     background-image:url('/assets/bitaxe-board.png?v=${AXECUBE_VERSION}');background-size:contain;background-repeat:no-repeat;
     filter:drop-shadow(0 10px 24px rgba(0,0,0,.55))}
   .carteMachine.hors-ligne{filter:grayscale(1) opacity(.45)}
@@ -4127,7 +4127,8 @@ charger();setInterval(charger,5000);
   /* Ventilateur : disque de pales extrait de la photo, tourne par-dessus le cadre fixe */
   .ventilo{position:absolute;left:23.95%;top:56.60%;width:42.03%;aspect-ratio:1/1;
     background-image:url('/assets/fan-blade.png?v=${AXECUBE_VERSION}');background-size:contain;background-repeat:no-repeat;
-    animation:tournerVentilo 2.2s linear infinite;transform-origin:center center}
+    animation:tournerVentilo .35s linear infinite;transform-origin:center center;
+    filter:blur(1.1px);will-change:transform}
   @keyframes tournerVentilo{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
   /* Liseré vert du contour de la carte : pulse doucement comme si elle était sous tension */
   .contourGlow{position:absolute;left:1.96%;top:1.3%;width:96.08%;height:87.18%;border-radius:4.5%/3.8%;
