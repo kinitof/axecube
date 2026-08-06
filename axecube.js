@@ -4118,14 +4118,14 @@ charger();setInterval(charger,5000);
   .lien:hover{border-color:var(--amber)}
   h1{font-size:16px;font-weight:600;color:var(--amber);text-shadow:var(--glow)}
   .sub{font-size:11px;color:var(--mut);margin-top:8px;flex-basis:100%}
-  .grille{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:26px}
-  .carteMachine{position:relative;width:100%;aspect-ratio:1023/1537;container-type:size;container-name:carte;
+  .grille{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:26px;justify-items:center}
+  .carteMachine{position:relative;width:100%;max-width:420px;aspect-ratio:1023/1537;container-type:size;container-name:carte;
     background-image:url('/assets/bitaxe-board.png?v=${AXECUBE_VERSION}');background-size:contain;background-repeat:no-repeat;
     filter:drop-shadow(0 10px 24px rgba(0,0,0,.55))}
   .carteMachine.hors-ligne{filter:grayscale(1) opacity(.45)}
   .carteMachine.hors-ligne .ventilo,.carteMachine.hors-ligne .contourGlow,.carteMachine.hors-ligne .barreGlow{animation-play-state:paused;opacity:.15}
   /* Ventilateur : disque de pales extrait de la photo, tourne par-dessus le cadre fixe */
-  .ventilo{position:absolute;left:25.61%;top:52.70%;width:40.08%;aspect-ratio:1/1;
+  .ventilo{position:absolute;left:23.95%;top:56.60%;width:42.03%;aspect-ratio:1/1;
     background-image:url('/assets/fan-blade.png?v=${AXECUBE_VERSION}');background-size:contain;background-repeat:no-repeat;
     animation:tournerVentilo 2.2s linear infinite;transform-origin:center center}
   @keyframes tournerVentilo{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
@@ -4148,20 +4148,20 @@ charger();setInterval(charger,5000);
     border-radius:2%/1.6%;overflow:hidden;background:#05070a;
     display:grid;grid-template-rows:9% 19% 15% 15% 15% 13%;row-gap:2%;padding:5% 6%;box-sizing:border-box}
   .eLigne{height:100%;min-height:0;display:flex;align-items:center;justify-content:space-between;min-width:0}
-  .ecranLogo{display:flex;align-items:center;gap:5px;font-weight:700;color:var(--white);font-size:min(8cqw,25cqh,24px);
+  .ecranLogo{display:flex;align-items:center;gap:5px;font-weight:700;color:var(--white);font-size:min(9.5cqw,29cqh,29px);
     min-width:0;flex-shrink:1;overflow:hidden;white-space:nowrap}
   .ecranLogo span{overflow:hidden;text-overflow:ellipsis}
   .ecranLogo svg{width:1.1em;height:1.1em}
-  .statut{color:var(--amber);display:flex;align-items:center;gap:4px;font-weight:700;font-size:min(7cqw,23cqh,19px);
+  .statut{color:var(--amber);display:flex;align-items:center;gap:4px;font-weight:700;font-size:min(8.3cqw,27cqh,23px);
     min-width:0;flex-shrink:1;overflow:hidden}
   .statut span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .statut .pt{width:6px;height:6px;border-radius:50%;background:var(--amber);flex-shrink:0}
   .statut.off{color:var(--mut)}
   .statut.off .pt{background:var(--mut)}
   .blocHash{height:100%;min-height:0;min-width:0;display:flex;flex-direction:column;justify-content:center;overflow:hidden}
-  .ecranLabel{font-size:min(5cqw,15cqh,16px);color:var(--mut);letter-spacing:.1em;line-height:1.2;flex-shrink:0}
-  .ecranHash{font-weight:800;color:var(--white);font-size:min(17cqw,29cqh,66px);line-height:1;display:flex;align-items:baseline;gap:5px;overflow:hidden;min-width:0;flex-shrink:0}
-  .ecranHash span{font-size:min(7cqw,13cqh,25px);font-weight:700;color:var(--amber);white-space:nowrap;flex-shrink:0}
+  .ecranLabel{font-size:min(6cqw,18cqh,19px);color:var(--mut);letter-spacing:.1em;line-height:1.2;flex-shrink:0}
+  .ecranHash{font-weight:800;color:var(--white);font-size:min(19cqw,32cqh,76px);line-height:1;display:flex;align-items:baseline;gap:5px;overflow:hidden;min-width:0;flex-shrink:0}
+  .ecranHash span{font-size:min(8cqw,15cqh,29px);font-weight:700;color:var(--amber);white-space:nowrap;flex-shrink:0}
   .spark{display:none;width:100%;flex:1 1 0;min-height:0;margin-top:2%}
   .spark svg{width:100%;height:100%;display:block}
   @container carte (min-height: 520px){
@@ -4171,9 +4171,9 @@ charger();setInterval(charger,5000);
   .eGrid{height:100%;min-height:0;min-width:0;display:grid;grid-auto-flow:column;grid-auto-columns:1fr;
     align-items:center;gap:0 4%}
   .eGrid>div{overflow:hidden;min-width:0;display:flex;flex-direction:column;justify-content:center;gap:2%}
-  .eGrid span{font-size:min(4.6cqw,14cqh,15px);color:var(--mut);letter-spacing:.08em;
+  .eGrid span{font-size:min(5.4cqw,16cqh,17px);color:var(--mut);letter-spacing:.08em;
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .eGrid b{font-size:min(5.8cqw,17cqh,20px);color:var(--white);font-weight:700;
+  .eGrid b{font-size:min(6.8cqw,19cqh,23px);color:var(--white);font-weight:700;
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .eGrid .accent b{color:var(--amber)}
   .eGrid .rej{color:var(--mut);font-weight:400;font-size:0.8em}
