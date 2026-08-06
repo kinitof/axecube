@@ -1695,6 +1695,7 @@ function main() {
           machineId: j.machineId, worker: String(j.worker || '').slice(0, 40),
           cpu: String(j.cpu || '').slice(0, 40), hashrate: Number(j.hashrate) || 0,
           bestDiff: Number(j.bestDiff) || 0, pool: String(j.pool || '').slice(0, 40),
+          accepted: Number(j.accepted) || 0, rejected: Number(j.rejected) || 0,
           ip: rinfo.address, vu: Date.now(),
         });
       } catch { /* paquet illisible, ignoré */ }
@@ -1705,6 +1706,7 @@ function main() {
       const paquet = Buffer.from(JSON.stringify({
         type: 'axecube-swarm', machineId, worker: workerName, cpu: cpuModel,
         hashrate: state.hashrate, bestDiff: state.bestDiff, pool: poolLabel,
+        accepted: state.accepted, rejected: state.rejected,
       }));
       swarmSocket.send(paquet, 0, paquet.length, SWARM_PORT, '255.255.255.255', () => {});
     }, SWARM_INTERVAL_MS);
@@ -4106,37 +4108,53 @@ charger();setInterval(charger,5000);
   *{box-sizing:border-box;margin:0;padding:0}
   body{background:var(--bg);color:var(--white);font-family:var(--mono);
        padding:20px;padding-top:max(20px,env(safe-area-inset-top));line-height:1.5}
-  .wrap{max-width:1200px;margin:0 auto}
+  .wrap{max-width:1300px;margin:0 auto}
   header{display:flex;align-items:center;gap:14px;padding-bottom:18px;
-         border-bottom:1px solid var(--line);margin-bottom:22px;flex-wrap:wrap}
+         border-bottom:1px solid var(--line);margin-bottom:28px;flex-wrap:wrap}
   .lien{color:var(--amber);text-decoration:none;font-size:12px;border:1px solid var(--amber-faint);
         padding:7px 13px;border-radius:8px}
   .lien:hover{border-color:var(--amber)}
   h1{font-size:16px;font-weight:600;color:var(--amber);text-shadow:var(--glow)}
   .sub{font-size:11px;color:var(--mut);margin-top:8px;flex-basis:100%}
-  .grille{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:22px}
-  .carteMachine{position:relative;width:100%;aspect-ratio:1086/1448;
+  .grille{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:26px}
+  .carteMachine{position:relative;width:100%;aspect-ratio:1023/1537;container-type:size;container-name:carte;
     background-image:url('/assets/bitaxe-board.png');background-size:contain;background-repeat:no-repeat;
-    filter:drop-shadow(0 8px 20px rgba(0,0,0,.5))}
+    filter:drop-shadow(0 10px 24px rgba(0,0,0,.55))}
   .carteMachine.hors-ligne{filter:grayscale(1) opacity(.45)}
-  .ecran{position:absolute;left:22.56%;top:4.49%;width:53.68%;height:20.03%;
-    border-radius:2.4%/3.5%;overflow:hidden;background:#05070a;
-    display:flex;flex-direction:column;justify-content:space-between;padding:5% 6%}
-  .ecranHaut{display:flex;justify-content:space-between;align-items:center;font-size:min(1.9vw,13px)}
-  .ecranLogo{display:flex;align-items:center;gap:5px;font-weight:700;color:var(--white)}
+  .ecran{position:absolute;left:23.85%;top:4.49%;width:51.03%;height:41.31%;
+    container-type:size;container-name:ecran;
+    border-radius:2%/1.6%;overflow:hidden;background:#05070a;
+    display:grid;grid-template-rows:9% 19% 15% 15% 15% 13%;row-gap:2%;padding:5% 6%;box-sizing:border-box}
+  .eLigne{height:100%;min-height:0;display:flex;align-items:center;justify-content:space-between;min-width:0}
+  .ecranLogo{display:flex;align-items:center;gap:5px;font-weight:700;color:var(--white);font-size:min(7cqw,22cqh,20px)}
   .ecranLogo svg{width:1.1em;height:1.1em}
-  .statut{color:var(--amber);display:flex;align-items:center;gap:4px;font-weight:700}
-  .statut .pt{width:6px;height:6px;border-radius:50%;background:var(--amber)}
+  .statut{color:var(--amber);display:flex;align-items:center;gap:4px;font-weight:700;font-size:min(6cqw,20cqh,16px)}
+  .statut .pt{width:6px;height:6px;border-radius:50%;background:var(--amber);flex-shrink:0}
   .statut.off{color:var(--mut)}
   .statut.off .pt{background:var(--mut)}
-  .ecranLabel{font-size:min(1.5vw,10px);color:var(--mut);letter-spacing:.08em}
-  .ecranHash{font-weight:800;color:var(--white);font-size:min(6.5vw,44px);line-height:1;display:flex;align-items:baseline;gap:4px}
-  .ecranHash span{font-size:min(2.6vw,17px);font-weight:700;color:var(--amber)}
-  .ecranFoot{display:flex;justify-content:space-between;font-size:min(1.5vw,10px);gap:4px}
-  .ecranFoot div{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .ecranFoot b{display:block;color:var(--white);font-size:min(2vw,13px)}
-  .ecranFoot .m b{color:var(--amber)}
-  .nomMachine{position:absolute;left:0;right:0;bottom:-26px;text-align:center;font-size:11px;color:var(--white-dim)}
+  .blocHash{height:100%;min-height:0;min-width:0;display:flex;flex-direction:column;justify-content:center;overflow:hidden}
+  .ecranLabel{font-size:min(4.4cqw,13cqh,14px);color:var(--mut);letter-spacing:.1em;line-height:1.2;flex-shrink:0}
+  .ecranHash{font-weight:800;color:var(--white);font-size:min(15cqw,26cqh,58px);line-height:1;display:flex;align-items:baseline;gap:5px;overflow:hidden;min-width:0;flex-shrink:0}
+  .ecranHash span{font-size:min(6cqw,11cqh,22px);font-weight:700;color:var(--amber);white-space:nowrap;flex-shrink:0}
+  .spark{display:none;width:100%;flex:1 1 0;min-height:0;margin-top:2%}
+  .spark svg{width:100%;height:100%;display:block}
+  @container carte (min-height: 520px){
+    .ecran{grid-template-rows:7% 36% 11% 13% 13% 11% !important}
+    .spark{display:block}
+  }
+  .eGrid{height:100%;min-height:0;min-width:0;display:grid;grid-auto-flow:column;grid-auto-columns:1fr;
+    align-items:center;gap:0 4%}
+  .eGrid>div{overflow:hidden;min-width:0;display:flex;flex-direction:column;justify-content:center;gap:2%}
+  .eGrid span{font-size:min(4cqw,12cqh,13px);color:var(--mut);letter-spacing:.08em;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .eGrid b{font-size:min(5cqw,15cqh,17px);color:var(--white);font-weight:700;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .eGrid .accent b{color:var(--amber)}
+  .eGrid .rej{color:var(--mut);font-weight:400;font-size:0.8em}
+  .nomMachine{position:absolute;left:4%;right:4%;bottom:-26px;text-align:center;font-size:11px;color:var(--white-dim);
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .badgeMoi{display:inline-block;background:rgba(150,240,31,.14);color:var(--amber);border:1px solid rgba(150,240,31,.4);
+    font-size:9px;font-weight:700;letter-spacing:.06em;padding:1px 6px;border-radius:8px;margin-right:5px;vertical-align:middle}
   .vide{color:var(--mut);font-size:12px;padding:30px 0}
 </style></head>
 <body><div class="wrap">
@@ -4153,35 +4171,118 @@ function fmtHR(h){if(!h)return'0 H/s';if(h>=1e12)return(h/1e12).toFixed(2)+' TH/
   if(h>=1e6)return(h/1e6).toFixed(2)+' MH/s';if(h>=1e3)return(h/1e3).toFixed(2)+' kH/s';return h.toFixed(0)+' H/s'}
 function fmtD(d){if(!d)return'—';if(d>=1e12)return(d/1e12).toFixed(2)+' T';if(d>=1e9)return(d/1e9).toFixed(2)+' G';
   if(d>=1e6)return(d/1e6).toFixed(2)+' M';if(d>=1e3)return(d/1e3).toFixed(2)+' k';return d>=100?d.toFixed(0):d.toPrecision(3)}
+function fmtN(n){n=n||0;if(n>=1e6)return(n/1e6).toFixed(2)+'M';if(n>=1e3)return(n/1e3).toFixed(1)+'k';return String(Math.round(n))}
+function fmtPrix(p,sym){if(!p)return'—';if(p>=1e3)return Math.round(p/1000)+'k'+(sym||'');return Math.round(p)+(sym||'')}
+function fmtUp(s){if(!s)return'—';s=Math.round(s);const j=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.floor(s%3600/60);
+  return (j?j+'j ':'')+h+'h'+String(m).padStart(2,'0')}
 const LOGO_SVG='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 2l8 4.6v9.8L12 22l-8-4.6V6.6z"/><path d="M12 2v9M12 11L4 6.6M12 11l8-4.4"/></svg>';
 document.getElementById('retour').href='/details'+Q;
-function carte(m){
+
+// Sparkline SVG à partir d'un vrai historique (histHash), pas de données inventées.
+// Retourne une chaîne vide si aucun historique n'est disponible (ex: machines distantes).
+function sparkSVG(hist){
+  if(!hist || hist.length<2) return '';
+  const w=200,h=44;
+  const mn=Math.min(...hist), mx=Math.max(...hist);
+  const range=(mx-mn)||1;
+  const pts=hist.map((v,i)=>{
+    const x=i/(hist.length-1)*w;
+    const y=h-((v-mn)/range)*h*0.85-h*0.05;
+    return x+','+y;
+  });
+  const path='M'+pts.join(' L');
+  const fillPts=pts.concat([w+','+h, '0,'+h]).join(' L');
+  return '<svg viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none">'
+    +'<polyline points="'+fillPts+'" fill="rgba(150,240,31,.14)" stroke="none"/>'
+    +'<polyline points="'+pts.join(' ')+'" fill="none" stroke="#96f01f" stroke-width="2" '
+    +'stroke-linejoin="round" stroke-linecap="round"/>'
+    +'</svg>';
+}
+
+// Carte complète : utilisée pour MA machine, dont on connaît tous les détails
+// (uptime, threads, difficulté, acceptation, historique réel...).
+function carteComplete(m, estMoi){
+  const enLigne=(m.hashrate||0)>0;
+  const acceptance=(m.accepted!=null && m.rejected!=null && (m.accepted+m.rejected)>0)
+    ? ((m.accepted/(m.accepted+m.rejected))*100).toFixed(1)+'%' : '—';
+  return '<div class="carteMachine'+(enLigne?'':' hors-ligne')+'">'
+    +'<div class="ecran">'
+      +'<div class="eLigne"><div class="ecranLogo">'+LOGO_SVG+'AXECUBE</div>'
+        +'<div class="statut'+(enLigne?'':' off')+'"><span class="pt"></span>'+(enLigne?'MINING':'HORS LIGNE')+'</div></div>'
+      +'<div class="blocHash"><div class="ecranLabel">HASHRATE</div>'
+        +'<div class="ecranHash">'+fmtHR(m.hashrate||0).replace(/ .*/,'')+'<span>'+ (fmtHR(m.hashrate||0).split(' ')[1]||'') +'</span></div>'
+        +'<div class="spark">'+sparkSVG(m.hist)+'</div></div>'
+      +'<div class="eGrid"><div><span>UPTIME</span><b>'+fmtUp(m.uptime)+'</b></div>'
+        +'<div><span>THREADS</span><b>'+(m.threads||'—')+'</b></div></div>'
+      +'<div class="eGrid"><div><span>POOL</span><b title="'+(m.pool||'—')+'">'+(m.pool||'—')+'</b></div>'
+        +'<div><span>DIFFICULTÉ</span><b>'+fmtD(m.poolDiff||0)+'</b></div></div>'
+      +'<div class="eGrid"><div class="accent"><span>MEILLEURE</span><b>'+fmtD(m.bestDiff||0)+'</b></div>'
+        +'<div><span>SHARES</span><b>'+fmtN(m.accepted||0)+' <span class="rej">· '+fmtN(m.rejected||0)+'</span></b></div></div>'
+      +'<div class="eGrid"><div><span>ACCEPTATION</span><b>'+acceptance+'</b></div>'
+        +'<div class="accent"><span>COURS ₿</span><b>'+fmtPrix(m.btcPrice, m.btcSymbol)+'</b></div></div>'
+    +'</div>'
+    +'<div class="nomMachine">'+(estMoi?'<span class="badgeMoi">MOI</span> ':'')+(m.worker||'—')+' · '+(m.cpu||'—')+'</div>'
+  +'</div>';
+}
+
+// Carte allégée : utilisée pour les autres machines du réseau, dont on ne connaît
+// que ce qu'elles diffusent réellement (pas d'uptime, threads ni température --
+// on ne les invente pas).
+function carteLegere(m){
   const enLigne=(m.hashrate||0)>0;
   return '<div class="carteMachine'+(enLigne?'':' hors-ligne')+'">'
     +'<div class="ecran">'
-      +'<div class="ecranHaut"><div class="ecranLogo">'+LOGO_SVG+'AXECUBE</div>'
+      +'<div class="eLigne"><div class="ecranLogo">'+LOGO_SVG+'AXECUBE</div>'
         +'<div class="statut'+(enLigne?'':' off')+'"><span class="pt"></span>'+(enLigne?'MINING':'HORS LIGNE')+'</div></div>'
-      +'<div><div class="ecranLabel">HASHRATE</div>'
+      +'<div class="blocHash"><div class="ecranLabel">HASHRATE</div>'
         +'<div class="ecranHash">'+fmtHR(m.hashrate||0).replace(/ .*/,'')+'<span>'+ (fmtHR(m.hashrate||0).split(' ')[1]||'') +'</span></div></div>'
-      +'<div class="ecranFoot">'
-        +'<div class="m">MEILLEURE<b>'+fmtD(m.bestDiff||0)+'</b></div>'
-        +'<div>POOL<b>'+(m.pool||'—')+'</b></div>'
-        +'<div>IP<b>'+(m.ip||'—')+'</b></div>'
-      +'</div>'
+      +'<div class="eGrid"><div class="accent"><span>MEILLEURE</span><b>'+fmtD(m.bestDiff||0)+'</b></div>'
+        +'<div><span>SHARES</span><b>'+fmtN(m.accepted||0)+' <span class="rej">· '+fmtN(m.rejected||0)+'</span></b></div></div>'
+      +'<div class="eGrid"><div><span>POOL</span><b title="'+(m.pool||'—')+'">'+(m.pool||'—')+'</b></div>'
+        +'<div class="accent"><span>COURS ₿</span><b>'+fmtPrix(m.btcPrice, m.btcSymbol)+'</b></div></div>'
     +'</div>'
-    +'<div class="nomMachine">'+(m.worker||'—')+' · '+(m.cpu||'—')+'</div>'
+    +'<div class="nomMachine">'+(m.worker||'—')+' · '+(m.cpu||'—')+(m.ip?' · '+m.ip:'')+'</div>'
   +'</div>';
 }
+
 async function charger(){
   const grille=document.getElementById('grille');
   try{
-    const r=await(await fetch('/api/swarm'+Q)).json();
-    const liste=r.machines||[];
-    if(!liste.length){
-      grille.innerHTML='<div class="vide">Aucune machine AXECUBE détectée sur ce réseau local pour l\\'instant.</div>';
+    const [repDetails, repSwarm]=await Promise.all([
+      fetch('/api/details'+Q).then(r=>r.ok?r.json():null).catch(()=>null),
+      fetch('/api/swarm'+Q).then(r=>r.ok?r.json():null).catch(()=>null)
+    ]);
+    const btcPrice=repDetails && repDetails.marche && repDetails.marche.btcPrice;
+    const btcSymbol=(repDetails && repDetails.marche && repDetails.marche.btcSymbol)||'$';
+    let html='';
+    // Ma propre machine (celle qui sert ce dashboard) — pas incluse dans /api/swarm
+    // qui ne liste que les *autres* machines détectées sur le réseau.
+    if(repDetails && repDetails.perf){
+      const moi={
+        worker: repDetails.worker,
+        cpu: repDetails.machine && repDetails.machine.cpu,
+        hashrate: repDetails.perf.hashrate,
+        hist: repDetails.histHash,
+        uptime: repDetails.uptime,
+        threads: repDetails.machine && (repDetails.machine.coeursActifs+'/'+repDetails.machine.coeursMax),
+        pool: repDetails.pool && repDetails.pool.nom,
+        poolDiff: repDetails.stratum && repDetails.stratum.poolDiff,
+        bestDiff: repDetails.loterie && repDetails.loterie.bestDiff,
+        accepted: repDetails.loterie && repDetails.loterie.accepted,
+        rejected: repDetails.loterie && repDetails.loterie.rejected,
+        btcPrice, btcSymbol
+      };
+      html+=carteComplete(moi, true);
+    }
+    const liste=(repSwarm && repSwarm.machines)||[];
+    // Le cours BTC n'est pas diffusé par chaque machine (c'est une donnée de marché
+    // globale, identique partout) -- on réutilise celui de cette machine pour toutes.
+    html+=liste.map(m=>carteLegere(Object.assign({},m,{btcPrice,btcSymbol}))).join('');
+    if(!html){
+      grille.innerHTML='<div class="vide">Aucune machine AXECUBE détectée pour l\\'instant.</div>';
       return;
     }
-    grille.innerHTML=liste.map(carte).join('');
+    grille.innerHTML=html;
   }catch(e){
     grille.innerHTML='<div class="vide">Recherche réseau indisponible.</div>';
   }
