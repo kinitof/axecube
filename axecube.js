@@ -4118,7 +4118,7 @@ charger();setInterval(charger,5000);
   .sub{font-size:11px;color:var(--mut);margin-top:8px;flex-basis:100%}
   .grille{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:26px}
   .carteMachine{position:relative;width:100%;aspect-ratio:1023/1537;container-type:size;container-name:carte;
-    background-image:url('/assets/bitaxe-board.png');background-size:contain;background-repeat:no-repeat;
+    background-image:url('/assets/bitaxe-board.png?v=${AXECUBE_VERSION}');background-size:contain;background-repeat:no-repeat;
     filter:drop-shadow(0 10px 24px rgba(0,0,0,.55))}
   .carteMachine.hors-ligne{filter:grayscale(1) opacity(.45)}
   .ecran{position:absolute;left:23.85%;top:4.49%;width:51.03%;height:41.31%;
