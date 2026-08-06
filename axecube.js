@@ -3969,7 +3969,7 @@ async function voirDetailJour(dateISO){
   if(!zone)return;
   zone.innerHTML='<span style="color:var(--mut)">Chargement du détail…</span>';
   try{
-    const r=await(await fetch('/api/journal-jour?date='+encodeURIComponent(dateISO)+Q)).json();
+    const r=await(await fetch('/api/journal-jour?date='+encodeURIComponent(dateISO)+(Q?Q.replace('?','&'):''))).json();
     const e=r.entree;
     if(!e || !e.detail || !e.detail.length){
       zone.innerHTML='<span style="color:var(--mut)">Aucun détail brut disponible pour cette journée (probablement archivée avant cette fonctionnalité).</span>';
