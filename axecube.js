@@ -45,6 +45,57 @@ const https = require('https');
 const os = require('os');
 const path = require('path');
 const fs = require('fs');
+
+// Empreinte de cache pour les images de la page /machines : basée sur la date de
+// dernière modification réelle des fichiers sur disque, pas un numéro à incrémenter
+// à la main. Ainsi, remplacer bitaxe-board.png ou fan-blade.png puis redémarrer le
+// serveur force automatiquement le navigateur à retélécharger la nouvelle version,
+// sans jamais servir une copie périmée en cache.
+function empreinteFichier(cheminRelatif) {
+  try {
+    return String(Math.floor(fs.statSync(path.join(__dirname, cheminRelatif)).mtimeMs));
+  } catch {
+    return String(Date.now());
+  }
+}
+const CACHE_CARTE = empreinteFichier(path.join('assets', 'bitaxe-board.png'));
+const CACHE_VENTILO = empreinteFichier(path.join('assets', 'fan-blade.png'));
+const CACHE_LOGO_VENTILO = empreinteFichier(path.join('assets', 'logo-ventilo.png'));
+
+// --- Configuration visuelle éditable ---
+// Toutes les positions/tailles des éléments de la carte "machines" (page /machines),
+// modifiables depuis le mode édition intégré, sauvegardées dans assets/config-visuel.json
+// pour survivre aux redémarrages. Les valeurs par défaut ci-dessous sont celles calibrées
+// manuellement au fil des sessions précédentes.
+const CHEMIN_CONFIG_VISUEL = path.join(__dirname, 'assets', 'config-visuel.json');
+const CONFIG_VISUEL_DEFAUT = {
+  ecran:        { left: 23.85, top: 4.49,  width: 51.03, height: 41.31 },
+  fondNoir:     { left: 26.42, top: 55.30, width: 46.97 },
+  ventilo:      { left: 23.50, top: 53.71, width: 53.00, pivotX: 50.69, pivotY: 48.18 },
+  logoVentilo:  { left: 33.27, top: 31.38, width: 35.00 },
+  contourGlow:  { left: 3.86,  top: 2.09,  width: 91.62, height: 86.18 },
+  barreGlow:    { left: 21.02, top: 95.32, width: 60.12, height: 1.95 },
+  boutonVentilo:{ left: 17.71, top: 50.98, width: 5.18 },
+};
+function chargerConfigVisuel() {
+  try {
+    const brut = fs.readFileSync(CHEMIN_CONFIG_VISUEL, 'utf8');
+    const lu = JSON.parse(brut);
+    // Fusionne avec les défauts pour tolérer un fichier partiel ou une ancienne version.
+    const fusion = {};
+    for (const cle of Object.keys(CONFIG_VISUEL_DEFAUT)) {
+      fusion[cle] = Object.assign({}, CONFIG_VISUEL_DEFAUT[cle], lu[cle] || {});
+    }
+    return fusion;
+  } catch {
+    return JSON.parse(JSON.stringify(CONFIG_VISUEL_DEFAUT));
+  }
+}
+function sauvegarderConfigVisuel(config) {
+  fs.mkdirSync(path.dirname(CHEMIN_CONFIG_VISUEL), { recursive: true });
+  fs.writeFileSync(CHEMIN_CONFIG_VISUEL, JSON.stringify(config, null, 2), 'utf8');
+}
+let configVisuel = chargerConfigVisuel();
 const { spawn } = require('child_process');
 const { Worker, isMainThread, parentPort, workerData } = require('worker_threads');
 
@@ -4094,7 +4145,9 @@ document.getElementById('sel_pool').addEventListener('change', async (e)=>{
 charger();setInterval(charger,5000);
 </script></body></html>`;
 
-  const MACHINES_HTML = `<!DOCTYPE html>
+  function genererMachinesHTML() {
+    const cv = configVisuel;
+    return `<!DOCTYPE html>
 <html lang="fr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#05070a">
@@ -4120,36 +4173,54 @@ charger();setInterval(charger,5000);
   .sub{font-size:11px;color:var(--mut);margin-top:8px;flex-basis:100%}
   .grille{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:18px;justify-items:center}
   .carteMachine{position:relative;width:100%;max-width:215px;aspect-ratio:1023/1537;container-type:size;container-name:carte;
-    background-image:url('/assets/bitaxe-board.png?v=${AXECUBE_VERSION}');background-size:contain;background-repeat:no-repeat;
+    background-image:url('/assets/bitaxe-board.png?v=${CACHE_CARTE}');background-size:contain;background-repeat:no-repeat;
     filter:drop-shadow(0 10px 24px rgba(0,0,0,.55))}
   .carteMachine.hors-ligne{filter:grayscale(1) opacity(.45)}
   .carteMachine.hors-ligne .contourGlow,.carteMachine.hors-ligne .barreGlow{animation-play-state:paused;opacity:.15}
-  /* Ventilateur : disque de pales extrait de la photo, tourne par-dessus le cadre fixe.
+  /* Fond noir rond : cache l'hélice imprimée sur la photo d'origine, pour que seul le
+     ventilateur animé (ci-dessous) soit visible en train de tourner par-dessus. */
+  .fondNoir{position:absolute;left:${cv.fondNoir.left}%;top:${cv.fondNoir.top}%;width:${cv.fondNoir.width}%;aspect-ratio:1/1;
+    border-radius:50%;background:#000}
+  /* Ventilateur : disque de pales, tourne par-dessus le fond noir et le cadre fixe de la photo.
      Trois états : tourne à pleine vitesse (par défaut), ralentit progressivement au moment
      précis où la machine tombe hors ligne (joué une seule fois), puis reste immobile. */
-  .ventilo{position:absolute;left:23.95%;top:56.60%;width:42.03%;aspect-ratio:1/1;
-    background-image:url('/assets/fan-blade.png?v=${AXECUBE_VERSION}');background-size:contain;background-repeat:no-repeat;
-    animation:tournerVentilo .1s linear infinite;transform-origin:center center;
+  .ventilo{position:absolute;left:${cv.ventilo.left}%;top:${cv.ventilo.top}%;width:${cv.ventilo.width}%;aspect-ratio:1/1;
+    background-image:url('/assets/fan-blade.png?v=${CACHE_VENTILO}');background-size:contain;background-repeat:no-repeat;
+    animation:tournerVentilo .1s linear infinite;transform-origin:${cv.ventilo.pivotX}% ${cv.ventilo.pivotY}%;
     filter:blur(1.8px);will-change:transform}
   .ventilo.ralentit{animation:ralentirVentilo 1.8s cubic-bezier(.25,.1,.25,1) 1 forwards;filter:blur(1.2px)}
   .ventilo.arrete{animation:none;transform:rotate(0deg);filter:none;opacity:.6}
+  /* Logo : enfant du ventilateur, donc tourne automatiquement avec lui (solidaire des pales).
+     mix-blend-mode:screen fait disparaître son fond noir sans avoir besoin de détourage. */
+  .logoVentilo{position:absolute;left:${cv.logoVentilo.left}%;top:${cv.logoVentilo.top}%;width:${cv.logoVentilo.width}%;aspect-ratio:1/1;
+    background-image:url('/assets/logo-ventilo.png?v=${CACHE_LOGO_VENTILO}');background-size:contain;background-repeat:no-repeat;
+    mix-blend-mode:screen}
   @keyframes tournerVentilo{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
   @keyframes ralentirVentilo{from{transform:rotate(0deg)}to{transform:rotate(1080deg)}}
-  /* Liseré vert du contour de la carte : pulse doucement comme si elle était sous tension */
-  .contourGlow{position:absolute;left:1.96%;top:1.3%;width:96.08%;height:87.18%;border-radius:4.5%/3.8%;
-    pointer-events:none;box-shadow:0 0 0 0.35cqw rgba(150,240,31,.6), 0 0 1.3cqw 0.15cqw rgba(150,240,31,.4);
+  /* Liseré du contour de la carte : couleur = palier de cube atteint (variable CSS
+     --couleur-cube posée sur .carteMachine, verte par défaut si aucun cube). Pulse
+     doucement comme si elle était sous tension. */
+  .contourGlow{position:absolute;left:${cv.contourGlow.left}%;top:${cv.contourGlow.top}%;width:${cv.contourGlow.width}%;height:${cv.contourGlow.height}%;border-radius:4.5%/3.8%;
+    pointer-events:none;
+    box-shadow:0 0 0 0.35cqw color-mix(in srgb, var(--couleur-cube,#96f01f) 60%, transparent),
+               0 0 1.3cqw 0.15cqw color-mix(in srgb, var(--couleur-cube,#96f01f) 40%, transparent);
     animation:respirerGlow 2.6s ease-in-out infinite}
-  /* Barre LED du socle : même pulsation, léger décalage pour un effet plus vivant */
-  .barreGlow{position:absolute;left:21.02%;top:95.32%;width:60.12%;height:1.95%;border-radius:50%;
-    pointer-events:none;background:radial-gradient(ellipse at center, rgba(150,240,31,.9), rgba(150,240,31,0) 75%);
+  /* Barre LED du socle : même couleur/pulsation, léger décalage pour un effet plus vivant */
+  .barreGlow{position:absolute;left:${cv.barreGlow.left}%;top:${cv.barreGlow.top}%;width:${cv.barreGlow.width}%;height:${cv.barreGlow.height}%;border-radius:50%;
+    pointer-events:none;
+    background:radial-gradient(ellipse at center, color-mix(in srgb, var(--couleur-cube,#96f01f) 90%, transparent), transparent 75%);
     filter:blur(0.35cqw);animation:respirerGlow 2.6s ease-in-out infinite;animation-delay:.3s}
   @keyframes respirerGlow{0%,100%{opacity:.55}50%{opacity:1}}
+  /* Paliers "rainbow" (Multicolore I/II, Multi-Gemmes II) : le liseré cycle toutes les
+     couleurs au lieu d'une teinte fixe, pour bien les distinguer des paliers unis. */
+  .carteMachine.rainbow-tier .contourGlow,.carteMachine.rainbow-tier .barreGlow{animation-name:respirerGlow,arcEnCiel;animation-duration:2.6s,4s;animation-timing-function:ease-in-out,linear;animation-iteration-count:infinite,infinite}
+  @keyframes arcEnCiel{from{filter:hue-rotate(0deg) saturate(1.4)}to{filter:hue-rotate(360deg) saturate(1.4)}}
   /* Badge "bloc trouvé" : cachée par défaut, apparaît seulement si blocsTrouves>0 */
   .badgeBloc{display:none;align-items:center;gap:4px;background:rgba(150,240,31,.16);color:var(--amber);
     border:1px solid rgba(150,240,31,.5);font-size:min(4.4cqw,13cqh,13px);font-weight:700;letter-spacing:.06em;
     padding:2px 7px;border-radius:8px;animation:respirerGlow 1.4s ease-in-out infinite;flex-shrink:0;white-space:nowrap}
   .badgeBloc.actif{display:inline-flex}
-  .ecran{position:absolute;left:23.85%;top:4.49%;width:51.03%;height:41.31%;
+  .ecran{position:absolute;left:${cv.ecran.left}%;top:${cv.ecran.top}%;width:${cv.ecran.width}%;height:${cv.ecran.height}%;
     container-type:size;container-name:ecran;
     border-radius:2%/1.6%;overflow:hidden;background:#05070a;
     display:grid;grid-template-rows:9% 19% 15% 15% 15% 13%;row-gap:2%;padding:5% 6%;box-sizing:border-box}
@@ -4182,11 +4253,32 @@ charger();setInterval(charger,5000);
   .eGrid b{font-size:min(6.8cqw,19cqh,23px);color:var(--white);font-weight:700;
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .eGrid .accent b{color:var(--amber)}
+  .nomCube{display:block;font-size:0.72em;font-weight:400;color:var(--couleur-cube,var(--amber));
+    letter-spacing:.04em;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .eGrid .rej{color:var(--mut);font-weight:400;font-size:0.8em}
   .nomMachine{position:absolute;left:4%;right:4%;bottom:-26px;text-align:center;font-size:11px;color:var(--white-dim);
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .flechePage{position:absolute;right:26%;top:4.49%;width:6%;aspect-ratio:1/1;z-index:3;
+    background:rgba(5,7,10,.55);border:1px solid rgba(150,240,31,.4);border-radius:50%;
+    color:var(--amber);cursor:pointer;display:flex;align-items:center;justify-content:center;
+    font-size:min(5cqw,15cqh,15px);line-height:1;padding:0;font-family:inherit}
+  .flechePage:hover{background:rgba(150,240,31,.18);border-color:var(--amber)}
+  .pool-nom{overflow:hidden}
+  .pool-nom b{display:inline-block;white-space:nowrap}
+  .pool-nom.defile b{animation:defilerPool 7s linear infinite}
+  @keyframes defilerPool{
+    0%,8%{transform:translateX(0)}
+    82%{transform:translateX(var(--defilement,0px))}
+    90%{transform:translateX(var(--defilement,0px))}
+    90.5%{transform:translateX(0)}
+    100%{transform:translateX(0)}
+  }
   .badgeMoi{display:inline-block;background:rgba(150,240,31,.14);color:var(--amber);border:1px solid rgba(150,240,31,.4);
     font-size:9px;font-weight:700;letter-spacing:.06em;padding:1px 6px;border-radius:8px;margin-right:5px;vertical-align:middle}
+  .boutonVentilo{position:absolute;left:${cv.boutonVentilo.left}%;top:${cv.boutonVentilo.top}%;width:${cv.boutonVentilo.width}%;aspect-ratio:1/1;border-radius:50%;
+    cursor:pointer;background:transparent;border:none;padding:0;z-index:2}
+  .boutonVentilo:hover{filter:brightness(1.3)}
+  .boutonVentilo:active{filter:brightness(0.8)}
   .vide{color:var(--mut);font-size:12px;padding:30px 0}
   .carteMachine{cursor:pointer;transition:transform .15s}
   .carteMachine:hover{transform:translateY(-3px)}
@@ -4199,11 +4291,61 @@ charger();setInterval(charger,5000);
   .modalFermer{position:absolute;top:-38px;right:0;background:none;border:1px solid var(--amber-faint);
     color:var(--amber);width:30px;height:30px;border-radius:50%;font-size:14px;cursor:pointer;font-family:inherit}
   .modalFermer:hover{border-color:var(--amber)}
+
+  /* --- Mode édition intégré --- */
+  .panneauEdition{display:none;position:fixed;inset:0;z-index:60;align-items:center;justify-content:center;padding:20px}
+  .panneauEdition.ouvert{display:flex}
+  .editFond{position:absolute;inset:0;background:rgba(3,5,4,.92)}
+  .editContenu{position:relative;display:flex;gap:24px;max-width:1000px;width:100%;max-height:94vh}
+  .editZone{position:relative;width:420px;flex-shrink:0;overflow:hidden;border:1px solid var(--line);border-radius:8px;height:fit-content}
+  .editZoneInterne{position:relative;width:100%}
+  .editBoard{width:100%;display:block;user-select:none;-webkit-user-drag:none}
+  .editForme{position:absolute;outline:2px dashed;box-sizing:border-box;cursor:move}
+  .editForme.editRonde{border-radius:50%;aspect-ratio:1/1}
+  .editForme.selectionnee{outline-width:3px;z-index:4}
+  .editForme.editEnfant{z-index:5}
+  .editPoignee{position:absolute;right:-7px;bottom:-7px;width:14px;height:14px;border-radius:50%;
+    cursor:nwse-resize;border:2px solid #fff;z-index:6}
+  .editPivot{position:absolute;width:18px;height:18px;margin-left:-9px;margin-top:-9px;cursor:crosshair;z-index:7;display:none}
+  .editPivot::before,.editPivot::after{content:'';position:absolute;background:#00e5ff}
+  .editPivot::before{left:50%;top:0;width:2px;height:100%;margin-left:-1px}
+  .editPivot::after{top:50%;left:0;height:2px;width:100%;margin-top:-1px}
+  .editPivotRond{position:absolute;left:50%;top:50%;width:7px;height:7px;margin:-3.5px 0 0 -3.5px;
+    border-radius:50%;border:2px solid #00e5ff;background:rgba(0,229,255,.3)}
+  .editForme[data-cle="ventilo"].selectionnee .editPivot{display:block}
+  .editForme.tourne{animation:tourner .1s linear infinite;filter:blur(1.5px);cursor:default}
+  .editForme.tourne .editPoignee,.editForme.tourne .editPivot{display:none}
+  @keyframes tourner{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+  .editPanneau{width:280px;flex-shrink:0;overflow-y:auto;font-size:11px;color:var(--white-dim);line-height:1.6}
+  .editPanneau h1{font-size:14px;color:var(--amber);margin-bottom:6px}
+  .editPanneau .sous{color:var(--mut);margin-bottom:14px}
+  .editLigne{border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-bottom:8px;cursor:pointer}
+  .editLigne.selectionnee{border-color:var(--amber);background:rgba(150,240,31,.06)}
+  .editLigne .nom{display:flex;align-items:center;gap:6px;font-weight:700;color:var(--white);margin-bottom:6px}
+  .editLigne .puce{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+  .editChamps{display:none;gap:6px;flex-wrap:wrap}
+  .editLigne.selectionnee .editChamps{display:flex}
+  .editChamps label{display:flex;flex-direction:column;gap:2px;font-size:9px;color:var(--mut)}
+  .editChamps input{width:58px;background:var(--panel2);border:1px solid var(--line);color:var(--white);
+    padding:2px 4px;font-family:inherit;font-size:10px;border-radius:4px}
+  .editBtns{margin-top:14px;display:flex;flex-direction:column;gap:6px}
+  .editBtns button{background:none;border:1px solid var(--line);color:var(--white-dim);padding:8px 10px;
+    border-radius:6px;font-family:inherit;cursor:pointer;font-size:11px}
+  .editBtns button:hover{border-color:var(--amber-faint)}
+  .editBtns button.principal{border-color:rgba(150,240,31,.5);color:var(--amber)}
+  .editBtns button.principal:hover{border-color:var(--amber)}
+  .editBtns button.actif{background:rgba(150,240,31,.15)}
+  .editStatut{margin-top:10px;font-size:11px;min-height:16px}
+  .editStatut.succes{color:var(--amber)}
+  .editStatut.erreur{color:#ff6a78}
 </style></head>
 <body><div class="wrap">
 <header>
   <h1>Machines connectées</h1>
-  <div style="margin-left:auto"><a class="lien" id="retour" href="/details">← Retour au tableau de bord</a></div>
+  <div style="margin-left:auto;display:flex;gap:8px">
+    <button type="button" class="lien" id="btnEdition">🛠 Mode édition</button>
+    <a class="lien" id="retour" href="/details">← Retour au tableau de bord</a>
+  </div>
   <div class="sub">Essai d'affichage façon carte ASIC — une machine AXECUBE connectée = une carte. Données réelles, rafraîchies toutes les 5 secondes.</div>
 </header>
 <div id="grille" class="grille"><div class="vide">Recherche des machines sur le réseau local…</div></div>
@@ -4214,6 +4356,39 @@ charger();setInterval(charger,5000);
     <div id="modalCarteHote"></div>
   </div>
 </div>
+<div id="panneauEdition" class="panneauEdition">
+  <div class="editFond"></div>
+  <div class="editContenu">
+    <div class="editZone">
+      <div class="editZoneInterne">
+        <img class="editBoard" src="/assets/bitaxe-board.png?v=${CACHE_CARTE}">
+        <div class="editForme" data-cle="ecran" style="outline-color:#e0e0e0"><div class="editPoignee" style="background:#e0e0e0"></div></div>
+        <div class="editForme editRonde" data-cle="fondNoir" style="outline-color:#0096ff"><div class="editPoignee" style="background:#0096ff"></div></div>
+        <div class="editForme editRonde" data-cle="ventilo" style="outline-color:#ff0096">
+          <div class="editPoignee" style="background:#ff0096"></div>
+          <div class="editPivot"><div class="editPivotRond"></div></div>
+          <div class="editForme editRonde editEnfant" data-cle="logoVentilo" style="outline-color:#ffdc00">
+            <div class="editPoignee" style="background:#ffdc00"></div>
+          </div>
+        </div>
+        <div class="editForme" data-cle="contourGlow" style="outline-color:#96f01f"><div class="editPoignee" style="background:#96f01f"></div></div>
+        <div class="editForme editRonde" data-cle="barreGlow" style="outline-color:#ff8800"><div class="editPoignee" style="background:#ff8800"></div></div>
+        <div class="editForme editRonde" data-cle="boutonVentilo" style="outline-color:#c800ff"><div class="editPoignee" style="background:#c800ff"></div></div>
+      </div>
+    </div>
+    <div class="editPanneau">
+      <h1>Mode édition</h1>
+      <div class="sous">Clique une forme pour la sélectionner, glisse-la ou tire sa poignée. La liste ci-dessous distingue chaque élément par sa couleur.</div>
+      <div id="editListe"></div>
+      <div class="editBtns">
+        <button type="button" id="btnEditTourner">▶ Tester la rotation</button>
+        <button type="button" id="btnEditEnregistrer" class="principal">💾 Enregistrer</button>
+        <button type="button" id="btnEditFermer">Fermer sans enregistrer</button>
+      </div>
+      <div id="editStatut" class="editStatut"></div>
+    </div>
+  </div>
+</div>
 </div>
 <script>
 const TOK=${JSON.stringify(jeton || '')};const Q=TOK?('?token='+TOK):'';
@@ -4222,10 +4397,57 @@ function fmtHR(h){if(!h)return'0 H/s';if(h>=1e12)return(h/1e12).toFixed(2)+' TH/
 function fmtD(d){if(!d)return'—';if(d>=1e12)return(d/1e12).toFixed(2)+' T';if(d>=1e9)return(d/1e9).toFixed(2)+' G';
   if(d>=1e6)return(d/1e6).toFixed(2)+' M';if(d>=1e3)return(d/1e3).toFixed(2)+' k';return d>=100?d.toFixed(0):d.toPrecision(3)}
 function fmtN(n){n=n||0;if(n>=1e6)return(n/1e6).toFixed(2)+'M';if(n>=1e3)return(n/1e3).toFixed(1)+'k';return String(Math.round(n))}
-function fmtPrix(p,sym){if(!p)return'—';if(p>=1e3)return Math.round(p/1000)+'k'+(sym||'');return Math.round(p)+(sym||'')}
+function fmtPrix(p,sym){if(!p)return'—';return Math.round(p).toLocaleString('fr-FR')+(sym||'')}
 function fmtUp(s){if(!s)return'—';s=Math.round(s);const j=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.floor(s%3600/60);
   return (j?j+'j ':'')+h+'h'+String(m).padStart(2,'0')}
 const LOGO_SVG='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 2l8 4.6v9.8L12 22l-8-4.6V6.6z"/><path d="M12 2v9M12 11L4 6.6M12 11l8-4.4"/></svg>';
+
+// --- Grille des 22 cubes CPU (loterie sur bestDiff) -- identique à recompenses.html,
+// pour que la couleur d'une carte corresponde exactement au cube réellement affiché
+// sur le classement en ligne.
+const SEUILS_CPU=[
+  200,300,500,750,1000,1500,2500,4000,
+  6000,10000,15000,25000,40000,
+  60000,
+  100000,150000,
+  200000,
+  300000,400000,500000,
+  750000,1000000
+];
+const NOMS_CUBE=[
+  'Néon I','Néon II','Néon III','Néon IV','Néon V','Néon VI','Néon VII','Néon VIII',
+  'Bicolore I','Bicolore II','Bicolore III','Bicolore IV','Bicolore V',
+  'Tricolore',
+  'Multicolore I','Multicolore II',
+  'Diamant',
+  'Diamant Émeraude','Diamant Saphir','Diamant Ruby',
+  'Multi-Gemmes I','Multi-Gemmes II'
+];
+const COULEURS_CUBE=[
+  '#8cff2e','#2e9bff','#ff3b3b','#b83bff','#2effe0','#ff9c2e','#ff2ea0','#f2e92e',
+  '#2effb0','#8c2eff','#ffb02e','#ff2ee0','#c8ff2e',
+  '#e8f0ff',
+  'rainbow','rainbow',
+  '#bff5ff',
+  '#10b981','#2563eb','#e11d48',
+  '#f2b90c','rainbow'
+];
+function niveauDe(bestDiff){
+  bestDiff = bestDiff||0;
+  let niveau = 0;
+  for(let i=0; i<SEUILS_CPU.length; i++){
+    if(bestDiff >= SEUILS_CPU[i]) niveau = i+1; else break;
+  }
+  return niveau;
+}
+// Renvoie {couleur, nom, niveau, rainbow} pour un bestDiff donné. Sous le niveau 1
+// (< 200 de difficulté), on reste sur le vert AXECUBE habituel -- pas de "faux cube".
+function infosCube(bestDiff){
+  const n=niveauDe(bestDiff);
+  if(n<1) return {couleur:'#96f01f', nom:null, niveau:0, rainbow:false};
+  const c=COULEURS_CUBE[n-1];
+  return {couleur: c==='rainbow' ? '#96f01f' : c, nom:NOMS_CUBE[n-1], niveau:n, rainbow: c==='rainbow'};
+}
 document.getElementById('retour').href='/details'+Q;
 
 // Sparkline SVG à partir d'un vrai historique (histHash), pas de données inventées.
@@ -4256,8 +4478,13 @@ function carteComplete(m, estMoi, idx, ventiloClasse){
   const acceptance=(m.accepted!=null && m.rejected!=null && (m.accepted+m.rejected)>0)
     ? ((m.accepted/(m.accepted+m.rejected))*100).toFixed(1)+'%' : '—';
   const blocBadge=(m.blocsTrouves>0)?'<span class="badgeBloc actif" title="'+m.blocsTrouves+' bloc'+(m.blocsTrouves>1?'s':'')+' trouv\u00e9'+(m.blocsTrouves>1?'s':'')+'">\ud83c\udfc6 '+m.blocsTrouves+'</span>':'';
-  return '<div class="carteMachine'+(enLigne?'':' hors-ligne')+'"'+(idx!=null?' data-idx="'+idx+'"':'')+'>'
-    +'<div class="ventilo'+(ventiloClasse?' '+ventiloClasse:'')+'"></div>'
+  const cle=(idx!=null?idx:(estMoi?'MOI':m.worker))+'';
+  const page=pageActuelle.get(cle)||0;
+  const cube=infosCube(m.bestDiff||0);
+  const nomCubeHtml=cube.nom?'<span class="nomCube">'+cube.nom+'</span>':'';
+  return '<div class="carteMachine'+(enLigne?'':' hors-ligne')+(cube.rainbow?' rainbow-tier':'')+'"'+(idx!=null?' data-idx="'+idx+'"':'')+' style="--couleur-cube:'+cube.couleur+'">'
+    +'<div class="fondNoir"></div>'
+    +'<div class="ventilo'+(ventiloClasse?' '+ventiloClasse:'')+'"><div class="logoVentilo"></div></div>'+'<button type="button" class="boutonVentilo" onclick="toggleVentilo(event)" title="Arr\u00eater/relancer le ventilateur (visuel)" aria-label="Basculer le ventilateur"></button>'
     +'<div class="contourGlow"></div>'
     +'<div class="barreGlow"></div>'
     +'<div class="ecran">'
@@ -4267,15 +4494,26 @@ function carteComplete(m, estMoi, idx, ventiloClasse){
       +'<div class="blocHash"><div class="ecranLabel">HASHRATE</div>'
         +'<div class="ecranHash">'+fmtHR(m.hashrate||0).replace(/ .*/,'')+'<span>'+ (fmtHR(m.hashrate||0).split(' ')[1]||'') +'</span></div>'
         +'<div class="spark">'+sparkSVG(m.hist)+'</div></div>'
-      +'<div class="eGrid"><div><span>UPTIME</span><b>'+fmtUp(m.uptime)+'</b></div>'
-        +'<div><span>THREADS</span><b>'+(m.threads||'—')+'</b></div></div>'
-      +'<div class="eGrid"><div><span>POOL</span><b title="'+(m.pool||'—')+'">'+(m.pool||'—')+'</b></div>'
-        +'<div><span>DIFFICULTÉ</span><b>'+fmtD(m.poolDiff||0)+'</b></div></div>'
-      +'<div class="eGrid"><div class="accent"><span>MEILLEURE</span><b>'+fmtD(m.bestDiff||0)+'</b></div>'
-        +'<div><span>SHARES</span><b>'+fmtN(m.accepted||0)+' <span class="rej">· '+fmtN(m.rejected||0)+'</span></b></div></div>'
-      +'<div class="eGrid"><div><span>ACCEPTATION</span><b>'+acceptance+'</b></div>'
-        +'<div class="accent"><span>COURS ₿</span><b>'+fmtPrix(m.btcPrice, m.btcSymbol)+'</b></div></div>'
+      +(page===0?(
+        '<div class="eGrid"><div><span>UPTIME</span><b>'+fmtUp(m.uptime)+'</b></div>'
+          +'<div><span>THREADS</span><b>'+(m.threads||'—')+'</b></div></div>'
+        +'<div class="eGrid"><div class="pool-nom"><span>POOL</span><b>'+(m.pool||'—')+'</b></div>'
+          +'<div><span>DIFFICULTÉ</span><b>'+fmtD(m.poolDiff||0)+'</b></div></div>'
+        +'<div class="eGrid"><div class="accent"><span>\ud83c\udfc6 MEILLEURE</span><b>'+fmtD(m.bestDiff||0)+nomCubeHtml+'</b></div>'
+          +'<div><span>SHARES</span><b>'+fmtN(m.accepted||0)+' <span class="rej">· '+fmtN(m.rejected||0)+'</span></b></div></div>'
+        +'<div class="eGrid"><div><span>ACCEPTATION</span><b>'+acceptance+'</b></div>'
+          +'<div class="accent"><span>COURS ₿</span><b>'+fmtPrix(m.btcPrice, m.btcSymbol)+'</b></div></div>'
+      ):(
+        '<div class="eGrid"><div><span>BLOC À MINER</span><b>'+(m.blocHauteur?m.blocHauteur.toLocaleString('fr-FR'):'—')+'</b></div>'
+          +'<div><span>BLOCS TROUV\u00c9S</span><b class="accent">'+(m.blocsTrouves||0)+'</b></div></div>'
+        +'<div class="eGrid"><div class="pool-nom" style="grid-column:1/-1"><span>POOL (COMPLET)</span><b>'+(m.pool||'—')+'</b></div></div>'
+        +'<div class="eGrid"><div><span>DIFFICULTÉ POOL</span><b>'+fmtD(m.poolDiff||0)+'</b></div>'
+          +'<div><span>MEILLEURE</span><b class="accent">'+fmtD(m.bestDiff||0)+'</b></div></div>'
+        +'<div class="eGrid"><div><span>SHARES ACC.</span><b>'+fmtN(m.accepted||0)+'</b></div>'
+          +'<div><span>SHARES REJ.</span><b>'+fmtN(m.rejected||0)+'</b></div></div>'
+      ))
     +'</div>'
+    +'<button type="button" class="flechePage" onclick="pageSuivante(event,\\''+cle+'\\')" title="Voir plus d\u2019infos" aria-label="Page suivante">\u203a</button>'
     +'<div class="nomMachine">'+(estMoi?'<span class="badgeMoi">MOI</span> ':'')+(m.worker||'—')+' · '+(m.cpu||'—')+'</div>'
   +'</div>';
 }
@@ -4286,8 +4524,13 @@ function carteComplete(m, estMoi, idx, ventiloClasse){
 function carteLegere(m, idx, ventiloClasse){
   const enLigne=(m.hashrate||0)>0;
   const blocBadge=(m.blocsTrouves>0)?'<span class="badgeBloc actif" title="'+m.blocsTrouves+' bloc'+(m.blocsTrouves>1?'s':'')+' trouv\u00e9'+(m.blocsTrouves>1?'s':'')+'">\ud83c\udfc6 '+m.blocsTrouves+'</span>':'';
-  return '<div class="carteMachine'+(enLigne?'':' hors-ligne')+'"'+(idx!=null?' data-idx="'+idx+'"':'')+'>'
-    +'<div class="ventilo'+(ventiloClasse?' '+ventiloClasse:'')+'"></div>'
+  const cle=(idx!=null?idx:m.worker)+'';
+  const page=pageActuelle.get(cle)||0;
+  const cube=infosCube(m.bestDiff||0);
+  const nomCubeHtml=cube.nom?'<span class="nomCube">'+cube.nom+'</span>':'';
+  return '<div class="carteMachine'+(enLigne?'':' hors-ligne')+(cube.rainbow?' rainbow-tier':'')+'"'+(idx!=null?' data-idx="'+idx+'"':'')+' style="--couleur-cube:'+cube.couleur+'">'
+    +'<div class="fondNoir"></div>'
+    +'<div class="ventilo'+(ventiloClasse?' '+ventiloClasse:'')+'"><div class="logoVentilo"></div></div>'+'<button type="button" class="boutonVentilo" onclick="toggleVentilo(event)" title="Arr\u00eater/relancer le ventilateur (visuel)" aria-label="Basculer le ventilateur"></button>'
     +'<div class="contourGlow"></div>'
     +'<div class="barreGlow"></div>'
     +'<div class="ecran">'
@@ -4296,13 +4539,52 @@ function carteLegere(m, idx, ventiloClasse){
         +'<div class="statut'+(enLigne?'':' off')+'"><span class="pt"></span><span>'+(enLigne?'MINING':'HORS LIGNE')+'</span></div></div>'
       +'<div class="blocHash"><div class="ecranLabel">HASHRATE</div>'
         +'<div class="ecranHash">'+fmtHR(m.hashrate||0).replace(/ .*/,'')+'<span>'+ (fmtHR(m.hashrate||0).split(' ')[1]||'') +'</span></div></div>'
-      +'<div class="eGrid"><div class="accent"><span>MEILLEURE</span><b>'+fmtD(m.bestDiff||0)+'</b></div>'
-        +'<div><span>SHARES</span><b>'+fmtN(m.accepted||0)+' <span class="rej">· '+fmtN(m.rejected||0)+'</span></b></div></div>'
-      +'<div class="eGrid"><div><span>POOL</span><b title="'+(m.pool||'—')+'">'+(m.pool||'—')+'</b></div>'
-        +'<div class="accent"><span>COURS ₿</span><b>'+fmtPrix(m.btcPrice, m.btcSymbol)+'</b></div></div>'
+      +(page===0?(
+        '<div class="eGrid"><div class="accent"><span>\ud83c\udfc6 MEILLEURE</span><b>'+fmtD(m.bestDiff||0)+nomCubeHtml+'</b></div>'
+          +'<div><span>SHARES</span><b>'+fmtN(m.accepted||0)+' <span class="rej">· '+fmtN(m.rejected||0)+'</span></b></div></div>'
+        +'<div class="eGrid"><div class="pool-nom"><span>POOL</span><b>'+(m.pool||'—')+'</b></div>'
+          +'<div class="accent"><span>COURS ₿</span><b>'+fmtPrix(m.btcPrice, m.btcSymbol)+'</b></div></div>'
+      ):(
+        '<div class="eGrid"><div><span>BLOC À MINER</span><b>'+(m.blocHauteur?m.blocHauteur.toLocaleString('fr-FR'):'—')+'</b></div>'
+          +'<div><span>BLOCS TROUV\u00c9S</span><b class="accent">'+(m.blocsTrouves||0)+'</b></div></div>'
+        +'<div class="eGrid"><div class="pool-nom" style="grid-column:1/-1"><span>POOL (COMPLET)</span><b>'+(m.pool||'—')+'</b></div></div>'
+      ))
     +'</div>'
+    +'<button type="button" class="flechePage" onclick="pageSuivante(event,\\''+cle+'\\')" title="Voir plus d\u2019infos" aria-label="Page suivante">\u203a</button>'
     +'<div class="nomMachine">'+(m.worker||'—')+' · '+(m.cpu||'—')+(m.ip?' · '+m.ip:'')+'</div>'
   +'</div>';
+}
+
+// Mémorise la page actuellement affichée (0 ou 1) pour chaque carte, par machine --
+// pour que le choix de page survive aux rafraîchissements automatiques (5s).
+const pageActuelle=new Map();
+function pageSuivante(e, cle){
+  e.stopPropagation();
+  const actuelle=pageActuelle.get(cle)||0;
+  pageActuelle.set(cle, actuelle===0?1:0);
+  // Ré-affiche immédiatement cette carte avec la nouvelle page, sans attendre le
+  // prochain rafraîchissement automatique.
+  const d=donneesActuelles[parseInt(cle,10)];
+  if(d){
+    const carte=e.currentTarget.closest('.carteMachine');
+    const vClasse=(d.m.hashrate||0)>0?'':'arrete';
+    carte.outerHTML = d.complete?carteComplete(d.m,d.estMoi,cle,vClasse):carteLegere(d.m,cle,vClasse);
+  }
+  activerDefilementPool();
+}
+// Active un défilement doux (va-et-vient) sur les noms de pool trop longs pour tenir
+// dans leur case, plutôt que de les couper brutalement.
+function activerDefilementPool(){
+  document.querySelectorAll('.pool-nom').forEach(el=>{
+    const b=el.querySelector('b');
+    if(!b) return;
+    el.classList.remove('defile');
+    b.style.removeProperty('--defilement');
+    if(b.scrollWidth > el.clientWidth + 2){
+      b.style.setProperty('--defilement', (-(b.scrollWidth-el.clientWidth+6))+'px');
+      el.classList.add('defile');
+    }
+  });
 }
 
 let donneesActuelles=[]; // {m, estMoi, complete} pour chaque carte affichée, indexé comme le rendu
@@ -4325,6 +4607,9 @@ async function charger(){
     ]);
     const btcPrice=repDetails && repDetails.marche && repDetails.marche.btcPrice;
     const btcSymbol=(repDetails && repDetails.marche && repDetails.marche.btcSymbol)||'$';
+    // La hauteur de bloc en cours est une donnée de la blockchain elle-même -- globale,
+    // identique pour toutes les machines, pas la peine de la redemander par machine.
+    const blocHauteur=repDetails && repDetails.bloc && repDetails.bloc.hauteur;
     let html='';
     donneesActuelles=[];
     // Ma propre machine (celle qui sert ce dashboard) — pas incluse dans /api/swarm
@@ -4343,6 +4628,7 @@ async function charger(){
         accepted: repDetails.loterie && repDetails.loterie.accepted,
         rejected: repDetails.loterie && repDetails.loterie.rejected,
         blocsTrouves: repDetails.loterie && repDetails.loterie.blocsTrouves,
+        blocHauteur,
         btcPrice, btcSymbol
       };
       donneesActuelles.push({m:moi, estMoi:true, complete:true});
@@ -4350,10 +4636,10 @@ async function charger(){
       html+=carteComplete(moi, true, donneesActuelles.length-1, vClasse);
     }
     const liste=(repSwarm && repSwarm.machines)||[];
-    // Le cours BTC n'est pas diffusé par chaque machine (c'est une donnée de marché
-    // globale, identique partout) -- on réutilise celui de cette machine pour toutes.
+    // Le cours BTC et la hauteur de bloc ne sont pas diffusés par chaque machine (ce sont
+    // des données globales, identiques partout) -- on les réutilise pour toutes.
     liste.forEach(m0=>{
-      const m=Object.assign({},m0,{btcPrice,btcSymbol});
+      const m=Object.assign({},m0,{btcPrice,btcSymbol,blocHauteur});
       donneesActuelles.push({m, estMoi:false, complete:false});
       const vClasse=calculerClasseVentilo(m.worker||m.machineId||('idx'+donneesActuelles.length), (m.hashrate||0)>0);
       html+=carteLegere(m, donneesActuelles.length-1, vClasse);
@@ -4363,6 +4649,7 @@ async function charger(){
       return;
     }
     grille.innerHTML=html;
+    activerDefilementPool();
     // Si la modale est ouverte, on rafraîchit aussi son contenu avec les données à jour
     // (pas seulement au premier clic), pour que le zoom reste "vivant".
     if(indexOuvert!=null && donneesActuelles[indexOuvert]) afficherModale(indexOuvert, false);
@@ -4381,11 +4668,23 @@ function afficherModale(idx, animer){
   indexOuvert=idx;
   const vClasse=(d.m.hashrate||0)>0 ? '' : 'arrete';
   modalHote.innerHTML=d.complete?carteComplete(d.m,d.estMoi,null,vClasse):carteLegere(d.m,null,vClasse);
+  activerDefilementPool();
   if(animer!==false) modal.classList.add('ouverte');
 }
 function fermerModale(){
   indexOuvert=null;
   modal.classList.remove('ouverte');
+}
+// Bouton blanc de la carte : arrête/relance le ventilo de cette carte précise, sans
+// ouvrir la fenêtre agrandie (stopPropagation) -- pratique pour vérifier le calibrage
+// visuel sans le flou de la rotation.
+function toggleVentilo(e){
+  e.stopPropagation();
+  const carte=e.currentTarget.closest('.carteMachine');
+  const vent=carte && carte.querySelector('.ventilo');
+  if(!vent) return;
+  const enCours=getComputedStyle(vent).animationPlayState!=='paused';
+  vent.style.animationPlayState = enCours ? 'paused' : 'running';
 }
 document.getElementById('grille').addEventListener('click', e=>{
   const carte=e.target.closest('.carteMachine');
@@ -4397,8 +4696,212 @@ modal.querySelector('.modalFond').addEventListener('click', fermerModale);
 modal.querySelector('.modalFermer').addEventListener('click', fermerModale);
 document.addEventListener('keydown', e=>{ if(e.key==='Escape') fermerModale(); });
 
+// ============================================================================
+// MODE ÉDITION : ajuster position/taille de tous les calques directement sur
+// cette page, sans repasser par un outil externe. "Enregistrer" écrit la config
+// dans assets/config-visuel.json côté serveur, relue au prochain rafraîchissement.
+// ============================================================================
+const configInitiale = ${JSON.stringify(cv)};
+const DEFINITIONS_EDITION = [
+  {cle:'ecran',        label:'ÉCRAN (contenu)',        couleur:'#e0e0e0', parent:'board', hauteur:true},
+  {cle:'fondNoir',      label:'FOND NOIR (cache hélice)',couleur:'#0096ff', parent:'board', hauteur:false},
+  {cle:'ventilo',       label:'VENTILATEUR (tourne)',    couleur:'#ff0096', parent:'board', hauteur:false, pivot:true},
+  {cle:'logoVentilo',   label:'LOGO (solidaire ventilo)',couleur:'#ffdc00', parent:'ventilo', hauteur:false},
+  {cle:'contourGlow',   label:'LISERÉ VERT (contour)',   couleur:'#96f01f', parent:'board', hauteur:true},
+  {cle:'barreGlow',     label:'BARRE LED (socle)',       couleur:'#ff8800', parent:'board', hauteur:true},
+  {cle:'boutonVentilo', label:'BOUTON BLANC (cliquable)',couleur:'#c800ff', parent:'board', hauteur:false},
+];
+let configEnCours = JSON.parse(JSON.stringify(configInitiale));
+let formeSelectionnee = null;
+
+const panneauEdition=document.getElementById('panneauEdition');
+const editBoard=panneauEdition.querySelector('.editBoard');
+const editVentiloEl=panneauEdition.querySelector('.editForme[data-cle="ventilo"]');
+const editListe=document.getElementById('editListe');
+const editStatut=document.getElementById('editStatut');
+
+function appliquerFormeDepuisConfig(cle){
+  const def=DEFINITIONS_EDITION.find(d=>d.cle===cle);
+  const el=panneauEdition.querySelector('.editForme[data-cle="'+cle+'"]');
+  const c=configEnCours[cle];
+  el.style.left=c.left+'%'; el.style.top=c.top+'%'; el.style.width=c.width+'%';
+  if(def.hauteur) el.style.height=c.height+'%';
+  if(def.pivot){
+    let pivot=el.querySelector(':scope > .editPivot');
+    pivot.style.left=c.pivotX+'%'; pivot.style.top=c.pivotY+'%';
+    el.style.transformOrigin=c.pivotX+'% '+c.pivotY+'%';
+  }
+}
+DEFINITIONS_EDITION.forEach(d=>appliquerFormeDepuisConfig(d.cle));
+
+function construireLigne(def){
+  const div=document.createElement('div');
+  div.className='editLigne';
+  div.dataset.cle=def.cle;
+  const c=configEnCours[def.cle];
+  let champs = '<label>LEFT %<input type="number" step="0.01" data-champ="left" value="'+c.left+'"></label>'
+    +'<label>TOP %<input type="number" step="0.01" data-champ="top" value="'+c.top+'"></label>'
+    +'<label>WIDTH %<input type="number" step="0.01" data-champ="width" value="'+c.width+'"></label>';
+  if(def.hauteur) champs += '<label>HEIGHT %<input type="number" step="0.01" data-champ="height" value="'+c.height+'"></label>';
+  if(def.pivot){
+    champs += '<label>PIVOT X %<input type="number" step="0.01" data-champ="pivotX" value="'+c.pivotX+'"></label>'
+      +'<label>PIVOT Y %<input type="number" step="0.01" data-champ="pivotY" value="'+c.pivotY+'"></label>';
+  }
+  div.innerHTML = '<div class="nom"><span class="puce" style="background:'+def.couleur+'"></span>'+def.label+'</div>'
+    +'<div class="editChamps">'+champs+'</div>';
+  div.addEventListener('click', e=>{
+    if(e.target.tagName!=='INPUT') selectionnerForme(def.cle);
+  });
+  div.querySelectorAll('input').forEach(inp=>{
+    inp.addEventListener('input', ()=>{
+      const champ=inp.dataset.champ;
+      configEnCours[def.cle][champ]=parseFloat(inp.value)||0;
+      appliquerFormeDepuisConfig(def.cle);
+    });
+  });
+  return div;
+}
+DEFINITIONS_EDITION.forEach(def=> editListe.appendChild(construireLigne(def)) );
+
+function selectionnerForme(cle){
+  formeSelectionnee=cle;
+  panneauEdition.querySelectorAll('.editForme').forEach(el=>el.classList.toggle('selectionnee', el.dataset.cle===cle));
+  editListe.querySelectorAll('.editLigne').forEach(el=>el.classList.toggle('selectionnee', el.dataset.cle===cle));
+}
+panneauEdition.querySelectorAll('.editForme').forEach(el=>{
+  el.addEventListener('mousedown', e=>{
+    if(el.classList.contains('tourne')) return;
+    if(e.target.classList.contains('editPoignee') || e.target.closest('.editPivot')) return;
+    // Ne sélectionne pas le parent si on clique sur son enfant imbriqué (logo)
+    if(el.dataset.cle==='ventilo' && e.target.closest('[data-cle="logoVentilo"]')) return;
+    selectionnerForme(el.dataset.cle);
+  });
+});
+
+function rafraichirChampsListe(cle){
+  const ligne=editListe.querySelector('.editLigne[data-cle="'+cle+'"]');
+  const c=configEnCours[cle];
+  ligne.querySelectorAll('input').forEach(inp=>{ inp.value=c[inp.dataset.champ]; });
+}
+
+// Glisser / redimensionner chaque forme
+let glisse=null, dxG=0, dyG=0, redim=null;
+panneauEdition.addEventListener('mousedown', e=>{
+  const poignee=e.target.closest('.editPoignee');
+  const pivotEl=e.target.closest('.editPivot');
+  const forme=e.target.closest('.editForme');
+  if(pivotEl){
+    const cle=pivotEl.closest('.editForme').dataset.cle;
+    if(configEnCours[cle] && 'pivotX' in configEnCours[cle]){
+      glissePivotCle=cle; e.preventDefault(); e.stopPropagation();
+    }
+    return;
+  }
+  if(poignee){
+    const cle=poignee.parentElement.dataset.cle;
+    if(panneauEdition.querySelector('.editForme[data-cle="'+cle+'"]').classList.contains('tourne')) return;
+    redim=cle; e.preventDefault(); e.stopPropagation();
+    return;
+  }
+  if(forme){
+    if(forme.classList.contains('tourne')) return;
+    if(forme.dataset.cle==='ventilo' && e.target.closest('[data-cle="logoVentilo"]')) return;
+    const cle=forme.dataset.cle;
+    glisse=cle;
+    const r=forme.getBoundingClientRect();
+    dxG=e.clientX-r.left; dyG=e.clientY-r.top;
+    e.preventDefault();
+  }
+});
+let glissePivotCle=null;
+window.addEventListener('mousemove', e=>{
+  if(glisse){
+    const def=DEFINITIONS_EDITION.find(d=>d.cle===glisse);
+    const refEl = def.parent==='ventilo' ? editVentiloEl : editBoard;
+    const br=refEl.getBoundingClientRect();
+    let x=e.clientX-br.left-dxG, y=e.clientY-br.top-dyG;
+    configEnCours[glisse].left=parseFloat((x/br.width*100).toFixed(2));
+    configEnCours[glisse].top=parseFloat((y/br.height*100).toFixed(2));
+    appliquerFormeDepuisConfig(glisse); rafraichirChampsListe(glisse);
+  }
+  if(redim){
+    const def=DEFINITIONS_EDITION.find(d=>d.cle===redim);
+    const refEl = def.parent==='ventilo' ? editVentiloEl : editBoard;
+    const br=refEl.getBoundingClientRect();
+    const formeEl=panneauEdition.querySelector('.editForme[data-cle="'+redim+'"]');
+    const fr=formeEl.getBoundingClientRect();
+    const w=e.clientX-fr.left;
+    configEnCours[redim].width=parseFloat(Math.max(0.5,w/br.width*100).toFixed(2));
+    if(def.hauteur){
+      const h=e.clientY-fr.top;
+      configEnCours[redim].height=parseFloat(Math.max(0.5,h/br.height*100).toFixed(2));
+    }
+    appliquerFormeDepuisConfig(redim); rafraichirChampsListe(redim);
+  }
+  if(glissePivotCle){
+    const formeEl=panneauEdition.querySelector('.editForme[data-cle="'+glissePivotCle+'"]');
+    const vr=formeEl.getBoundingClientRect();
+    let x=e.clientX-vr.left, y=e.clientY-vr.top;
+    configEnCours[glissePivotCle].pivotX=parseFloat((x/vr.width*100).toFixed(2));
+    configEnCours[glissePivotCle].pivotY=parseFloat((y/vr.height*100).toFixed(2));
+    appliquerFormeDepuisConfig(glissePivotCle); rafraichirChampsListe(glissePivotCle);
+  }
+});
+window.addEventListener('mouseup', ()=>{ glisse=null; redim=null; glissePivotCle=null; });
+
+// Ouvrir / fermer le panneau
+document.getElementById('btnEdition').addEventListener('click', ()=>{
+  configEnCours = JSON.parse(JSON.stringify(configVisuelActuelle()));
+  DEFINITIONS_EDITION.forEach(d=>{ appliquerFormeDepuisConfig(d.cle); rafraichirChampsListe(d.cle); });
+  panneauEdition.classList.add('ouvert');
+  editStatut.textContent=''; editStatut.className='editStatut';
+});
+function configVisuelActuelle(){
+  // Repart de la config actuellement enregistrée côté serveur si on l'a déjà rechargée,
+  // sinon celle injectée au chargement de la page.
+  return window._configVisuelServeur || configInitiale;
+}
+document.getElementById('btnEditFermer').addEventListener('click', ()=>{
+  panneauEdition.classList.remove('ouvert');
+});
+
+// Tester la rotation (ventilo + logo enfant tournent ensemble, comme en prod)
+const btnEditTourner=document.getElementById('btnEditTourner');
+btnEditTourner.addEventListener('click', ()=>{
+  const t=editVentiloEl.classList.toggle('tourne');
+  btnEditTourner.textContent = t ? '⏸ Arrêter' : '▶ Tester la rotation';
+  btnEditTourner.classList.toggle('actif', t);
+});
+
+// Enregistrer : envoie la config au serveur, qui l'écrit sur disque et l'applique
+// immédiatement (sans redémarrage nécessaire).
+document.getElementById('btnEditEnregistrer').addEventListener('click', async ()=>{
+  editStatut.textContent='Enregistrement…'; editStatut.className='editStatut';
+  try{
+    const r=await fetch('/api/config-visuel'+Q, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(configEnCours)
+    });
+    const j=await r.json();
+    if(j.ok){
+      window._configVisuelServeur = configEnCours;
+      editStatut.textContent='Enregistré ! Rechargement de la page…';
+      editStatut.className='editStatut succes';
+      setTimeout(()=>location.reload(), 900);
+    } else {
+      editStatut.textContent='Erreur : '+(j.erreur||'inconnue');
+      editStatut.className='editStatut erreur';
+    }
+  }catch(e){
+    editStatut.textContent='Erreur réseau, réessaie.';
+    editStatut.className='editStatut erreur';
+  }
+});
+
 charger();setInterval(charger,5000);
 </script></body></html>`;
+  }
 
   const JOUR_DETAIL_HTML = `<!DOCTYPE html>
 <html lang="fr"><head><meta charset="utf-8">
@@ -4537,6 +5040,15 @@ function fmtD(d){if(!d)return'—';if(d>=1e12)return(d/1e12).toFixed(2)+' T';if(
       });
       return;
     }
+    if (url.pathname === '/assets/logo-ventilo.png') {
+      const cheminLogo = path.join(__dirname, 'assets', 'logo-ventilo.png');
+      fs.readFile(cheminLogo, (err, data) => {
+        if (err) { res.writeHead(404); res.end(); return; }
+        res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=86400' });
+        res.end(data);
+      });
+      return;
+    }
     if (url.pathname === '/visite') {
       const cheminVisite = path.join(__dirname, 'pages', 'visite.html');
       fs.readFile(cheminVisite, 'utf8', (err, data) => {
@@ -4606,6 +5118,37 @@ function fmtD(d){if(!d)return'—';if(d>=1e12)return(d/1e12).toFixed(2)+' T';if(
         .sort((a, b) => b.hashrate - a.hashrate);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ moi: { machineId, worker: workerName, cpu: cpuModel, hashrate: state.hashrate }, machines: liste }));
+    } else if (url.pathname === '/api/config-visuel' && req.method === 'GET') {
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+      res.end(JSON.stringify(configVisuel));
+    } else if (url.pathname === '/api/config-visuel' && req.method === 'POST') {
+      // Reçoit la config éditée depuis le mode édition de /machines, la valide
+      // sommairement (structure attendue uniquement, pas de code exécutable possible
+      // puisqu'on ne stocke que des nombres), puis l'écrit sur disque pour qu'elle
+      // survive aux redémarrages.
+      let corps = '';
+      req.on('data', chunk => { corps += chunk; if (corps.length > 20000) req.destroy(); });
+      req.on('end', () => {
+        try {
+          const recu = JSON.parse(corps);
+          const nouvelle = {};
+          for (const cle of Object.keys(CONFIG_VISUEL_DEFAUT)) {
+            const section = recu[cle] || {};
+            nouvelle[cle] = {};
+            for (const champ of Object.keys(CONFIG_VISUEL_DEFAUT[cle])) {
+              const v = Number(section[champ]);
+              nouvelle[cle][champ] = Number.isFinite(v) ? v : CONFIG_VISUEL_DEFAUT[cle][champ];
+            }
+          }
+          configVisuel = nouvelle;
+          sauvegarderConfigVisuel(configVisuel);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: true }));
+        } catch {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: false, erreur: 'JSON invalide' }));
+        }
+      });
     } else if (url.pathname === '/api/details') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
@@ -4674,7 +5217,7 @@ function fmtD(d){if(!d)return'—';if(d>=1e12)return(d/1e12).toFixed(2)+' T';if(
       res.end(JOUR_DETAIL_HTML);
     } else if (url.pathname === '/machines') {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-      res.end(MACHINES_HTML);
+      res.end(genererMachinesHTML());
     } else if (url.pathname === '/decouvrir') {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(DECOUVRIR_HTML);

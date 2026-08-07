@@ -157,7 +157,7 @@
 // ============================================================================
 // Config -- à synchroniser avec recompenses.html si l'échelle ou les noms changent.
 // ============================================================================
-const SEUIL_CPU=200, NIVEAUX_CPU=22;
+const SEUIL_CPU=200, NIVEAUX_CPU=22; // SEUIL_CPU conservé pour compat, plus utilisé pour le calcul
 const PALIERS=[
   {cle:'bronze', nom:'BRONZE', seuil:100},
   {cle:'argent', nom:'ARGENT', seuil:1000},
@@ -166,12 +166,31 @@ const PALIERS=[
   {cle:'diamant', nom:'DIAMANT', seuil:1000000},
   {cle:'legende', nom:'LÉGENDE', seuil:10000000},
 ];
+// Grille non-linéaire -- voir recompenses.html pour le détail du raisonnement.
+// Doit rester strictement identique entre les deux fichiers.
+const SEUILS_CPU=[
+  200,300,500,750,1000,1500,2500,4000,
+  6000,10000,15000,25000,40000,
+  60000,
+  100000,150000,
+  200000,
+  300000,400000,500000,
+  750000,1000000
+];
 const NOMS_CUBE=[
   'Néon I','Néon II','Néon III','Néon IV','Néon V','Néon VI','Néon VII','Néon VIII',
-  'Néon Bicolore I','Néon Bicolore II','Néon Bicolore III','Néon Bicolore IV','Néon Bicolore V',
-  'Néon Tricolore','Néon Multicolore I','Néon Multicolore II','Cube Diamant',
-  'Diamant Émeraude','Diamant Saphir','Diamant Ruby','Diamant Multi-Gemmes I','Diamant Multi-Gemmes II'
+  'Bicolore I','Bicolore II','Bicolore III','Bicolore IV','Bicolore V',
+  'Tricolore','Multicolore I','Multicolore II','Diamant',
+  'Diamant Émeraude','Diamant Saphir','Diamant Ruby','Multi-Gemmes I','Multi-Gemmes II'
 ];
+function niveauDe(bestDiff){
+  bestDiff = bestDiff||0;
+  let niveau = 0;
+  for(let i=0; i<SEUILS_CPU.length; i++){
+    if(bestDiff >= SEUILS_CPU[i]) niveau = i+1; else break;
+  }
+  return niveau;
+}
 
 let walletPubkey=null;
 let signatureCourante=null; // {message, signature} -- réutilisée pour tous les appels API tant que le wallet reste connecté
@@ -312,8 +331,8 @@ document.getElementById('btnRattacher').addEventListener('click', async ()=>{
 function recalculerCubes(){
   mesCubes=[];
   for(const m of mesMachines){
-    const niveauMax=Math.min(NIVEAUX_CPU, Math.floor((m.bestDiff||0)/SEUIL_CPU)+1);
-    if((m.bestDiff||0)>=0 && niveauMax>=1){
+    const niveauMax=niveauDe(m.bestDiff);
+    if(niveauMax>=1){
       for(let n=1;n<=niveauMax;n++){
         mesCubes.push({
           id:'cpu-'+n+'-'+m.machineId,

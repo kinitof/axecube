@@ -201,18 +201,43 @@ const PALIERS=[
   {cle:'diamant', nom:'DIAMANT', emoji:'💎', seuil:1000000, classe:''},
   {cle:'legende', nom:'LÉGENDE', emoji:'🔥', seuil:10000000, classe:''},
 ];
-const SEUIL_CPU=200; // une tranche = 200 de MEILLEURE DIFFICULTÉ (bestDiff) -- système loterie
-const NIVEAUX_CPU=22; // fixe : 22 cubes disponibles (icones cube-p01..p22), plafond à 22*200=4400
-// Noms des 22 cubes CPU, du plus commun (Néon I) au plus rare (Diamant Multi-Gemmes II).
+const SEUIL_CPU=200; // conservé pour compat historique -- plus utilisé pour le calcul (voir SEUILS_CPU ci-dessous)
+const NIVEAUX_CPU=22; // fixe : 22 cubes disponibles (icones cube-p01..p22)
+// Grille non-linéaire calibrée sur des données réelles de petits mineurs CPU/ESP32
+// (Public Pool, NerdMiner Pool, AxeMiner Pool) : les premiers cubes arrivent vite,
+// les derniers restent réellement exceptionnels. Remplace l'ancienne échelle fixe
+// de 200 en 200 (plafonnée à 4400), qui ne laissait aucune place aux gros coups de
+// chance déjà observés en conditions réelles (ex. 194 420 sur NerdMiner).
+const SEUILS_CPU=[
+  200,300,500,750,1000,1500,2500,4000,
+  6000,10000,15000,25000,40000,
+  60000,
+  100000,150000,
+  200000,
+  300000,400000,500000,
+  750000,1000000
+];
+// Noms des 22 cubes CPU, du plus commun (Néon I) au plus rare (Multi-Gemmes II).
 const NOMS_CUBE=[
   'Néon I','Néon II','Néon III','Néon IV','Néon V','Néon VI','Néon VII','Néon VIII',
-  'Néon Bicolore I','Néon Bicolore II','Néon Bicolore III','Néon Bicolore IV','Néon Bicolore V',
-  'Néon Tricolore',
-  'Néon Multicolore I','Néon Multicolore II',
-  'Cube Diamant',
+  'Bicolore I','Bicolore II','Bicolore III','Bicolore IV','Bicolore V',
+  'Tricolore',
+  'Multicolore I','Multicolore II',
+  'Diamant',
   'Diamant Émeraude','Diamant Saphir','Diamant Ruby',
-  'Diamant Multi-Gemmes I','Diamant Multi-Gemmes II'
+  'Multi-Gemmes I','Multi-Gemmes II'
 ];
+// Trouve le niveau (1-22) correspondant à un bestDiff selon la grille non-linéaire
+// ci-dessus. Retourne 0 si le seuil du niveau 1 (200) n'est pas encore atteint --
+// aucun cube "offert" par défaut, contrairement à l'ancien calcul linéaire.
+function niveauDe(bestDiff){
+  bestDiff = bestDiff||0;
+  let niveau = 0;
+  for(let i=0; i<SEUILS_CPU.length; i++){
+    if(bestDiff >= SEUILS_CPU[i]) niveau = i+1; else break;
+  }
+  return niveau;
+}
 // Couleur du halo par cube (même ordre que NOMS_CUBE) -- 'rainbow' = halo multicolore.
 // Ajuste librement ces valeurs pour matcher exactement la couleur réelle de tes images.
 const COULEURS_CUBE=[
@@ -405,10 +430,8 @@ function rendreDifficulte(mineurs){
 
 function rendreCpu(mineurs){
   // Système loterie : le niveau dépend du meilleur tirage (bestDiff), pas du volume miné.
-  // Plafonné à 22 niveaux fixes (22 icônes disponibles, seuil max = 22*200 = 4400 de difficulté) --
-  // un bestDiff au-delà de 4400 reste affiché au niveau 22, pas de niveau 23+ fantôme.
-  // Cube k couvre la tranche [200*(k-1), 200*k[ -- ex: cube1=0-199, cube2=200-399...
-  const niveauDe=(bestDiff)=>Math.min(NIVEAUX_CPU, Math.floor((bestDiff||0)/SEUIL_CPU)+1);
+  // Grille non-linéaire (voir SEUILS_CPU) -- un bestDiff au-delà du seuil du niveau 22
+  // reste affiché au niveau 22, pas de niveau 23+ fantôme.
   const nbNiveaux=NIVEAUX_CPU;
 
   const parNiveau=Array.from({length:nbNiveaux},()=>[]);
@@ -418,7 +441,7 @@ function rendreCpu(mineurs){
   }
   let debloquesTotal=0;
   const html=Array.from({length:nbNiveaux},(_,i)=>{
-    const niveau=i+1, seuil=(niveau-1)*SEUIL_CPU;
+    const niveau=i+1, seuil=SEUILS_CPU[i];
     const tenants=parNiveau[i].sort((a,b)=>(b.bestDiff||0)-(a.bestDiff||0));
     const vide=tenants.length===0;
     if(!vide) debloquesTotal++;
@@ -449,7 +472,7 @@ function rendre(){
 
   const ensembleMineurs=new Set();
   mineurs.forEach(m=>{
-    if(palierDe(m.accepted)>=0 || Math.floor((m.bestDiff||0)/SEUIL_CPU)>=1 || palierPiocheDe(m.totalHashes)>=0) ensembleMineurs.add(m.worker);
+    if(palierDe(m.accepted)>=0 || niveauDe(m.bestDiff)>=1 || palierPiocheDe(m.totalHashes)>=0) ensembleMineurs.add(m.worker);
   });
   document.getElementById('statMineurs').textContent=ensembleMineurs.size;
 
