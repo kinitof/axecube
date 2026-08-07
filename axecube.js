@@ -61,6 +61,12 @@ function empreinteFichier(cheminRelatif) {
 const CACHE_CARTE = empreinteFichier(path.join('assets', 'bitaxe-board.png'));
 const CACHE_VENTILO = empreinteFichier(path.join('assets', 'fan-blade.png'));
 const CACHE_LOGO_VENTILO = empreinteFichier(path.join('assets', 'logo-ventilo.png'));
+// Empreinte partagée pour toutes les variantes de carte par palier (assets/machines/) --
+// basée sur l'heure de démarrage du serveur (fiable même si un fichier existant est
+// simplement écrasé sans renommage, contrairement à la date du dossier qui ne bouge
+// pas toujours dans ce cas). Un redémarrage suffit donc à rafraîchir le cache pour
+// n'importe laquelle des 22 images.
+const CACHE_MACHINES = String(Date.now());
 
 // --- Configuration visuelle éditable ---
 // Toutes les positions/tailles des éléments de la carte "machines" (page /machines),
@@ -1003,6 +1009,14 @@ function main() {
                           + 'Communaute active (Multi NerdMiner, Bitaxe, NMMiner, NerdAxe tous presents '
                           + 'sur ce pool) -- outil "Miner Lookup" public sur pool.nerdminer.io pour '
                           + 'verifier son propre statut par adresse.' },
+    axeminer:       { host: 'pool.axeminer.com', port: 7777, mode: 'solo', compte: false, diffMin: 0.01,
+                      note: 'Solo (AxeMiner Pool, "Where Small Miners Make Big Swings"), aucun compte '
+                          + 'requis -- adresse BTC directe utilisee comme nom de worker, mot de passe "x". '
+                          + 'Port 7777 officiellement dedie aux "Small USB Lottery Miner" 1-1000 kH/s '
+                          + '(NMMiner, Nerdminer, BitsyMiner, ESP-32), difficulte plancher confirmee a 0.01 '
+                          + '-- tres largement adaptee au CPU, shares tres frequents attendus. Port 7778 '
+                          + 'separe existe pour les Bitaxe/petits ASIC (400 GH/s-4.5 TH/s, plancher 512), '
+                          + 'non utilise ici. Pool explicitement non recommande pour Antminer ou gros ASIC.' },
     ocean:          { host: 'mine.ocean.xyz', port: 3334, mode: 'solo', compte: false, diffMin: 1,
                       note: 'Solo (OCEAN, fonde par Luke Dashjr -- developpeur Bitcoin Core -- et '
                           + 'soutenu par Jack Dorsey), aucun compte ni KYC requis -- adresse BTC directe. '
@@ -3649,6 +3663,7 @@ setInterval(majSwarm,6000);majSwarm();
     <option value="solopool">public-pool.io — 🟢 Idéal CPU</option>
     <option value="nmminer-solo">NMMiner Solo — 🟢 Idéal CPU (pensé pour ESP32)</option>
     <option value="nerdminer-solo">NerdMiner Pool — 🟢 Idéal CPU (communauté active depuis 2023)</option>
+    <option value="axeminer">AxeMiner Pool — 🟢 Idéal CPU (port dédié petits mineurs)</option>
     <option value="ocean">OCEAN — 🟡 Réputé (fondé par Luke Dashjr), 2% de frais sur bloc trouvé</option>
     <option value="solopool-com">SoloPool.com (EU) — 🟢 Client CPU dédié, ratio Solo Split ajustable</option>
     <option value="mineshop-solo">Mineshop.eu — 🟡 Correct, shares moyens</option>
@@ -3913,7 +3928,7 @@ async function charger(){
   const lienMachines=document.getElementById('l_machines');
   if(lienMachines) lienMachines.href='/machines'+Q;
   const HOTE_VERS_PRESET={'public-pool.io':'solopool','solo.stratum.braiins.com':'braiins-solo',
-    'solo.ckpool.org':'ckpool','stratum-de.solo.mineshop.eu':'mineshop-solo','solobtc.nmminer.com':'nmminer-solo','pool.nerdminer.io':'nerdminer-solo','mine.ocean.xyz':'ocean','eu.solopool.com':'solopool-com'};
+    'solo.ckpool.org':'ckpool','stratum-de.solo.mineshop.eu':'mineshop-solo','solobtc.nmminer.com':'nmminer-solo','pool.nerdminer.io':'nerdminer-solo','pool.axeminer.com':'axeminer','mine.ocean.xyz':'ocean','eu.solopool.com':'solopool-com'};
   const selPool=document.getElementById('sel_pool');
   const cleActuelle=HOTE_VERS_PRESET[d.pool.hote]||'';
   if(selPool && document.activeElement!==selPool){ selPool.value=cleActuelle; afficherNotePool(cleActuelle); }
@@ -3927,6 +3942,9 @@ const NOTES_POOL={
   'nerdminer-solo':{c:'var(--amber)',t:'🟢 Pool communautaire établi depuis 2023, très actif (Bitaxe, NMMiner, '
     +'NerdAxe et Multi NerdMiner y cohabitent) -- outil de vérification publique par adresse disponible sur '
     +'pool.nerdminer.io.'},
+  axeminer:{c:'var(--amber)',t:'🟢 "Where Small Miners Make Big Swings" -- port 7777 officiellement dédié aux '
+    +'petits mineurs USB (NMMiner, NerdMiner, ESP-32), difficulté plancher confirmée à 0.01 -- shares très '
+    +'fréquents attendus sur CPU.'},
   ocean:{c:'#e8b64a',t:'🟡 Pool réputé fondé par Luke Dashjr (développeur Bitcoin Core) et soutenu par Jack '
     +'Dorsey -- design non-custodial, aucun compte requis. 2% de frais, mais uniquement prélevés si un bloc '
     +'est réellement trouvé -- jamais sur les parts normales.'},
@@ -4173,7 +4191,7 @@ charger();setInterval(charger,5000);
   .sub{font-size:11px;color:var(--mut);margin-top:8px;flex-basis:100%}
   .grille{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:18px;justify-items:center}
   .carteMachine{position:relative;width:100%;max-width:215px;aspect-ratio:1023/1537;container-type:size;container-name:carte;
-    background-image:url('/assets/bitaxe-board.png?v=${CACHE_CARTE}');background-size:contain;background-repeat:no-repeat;
+    background-image:var(--carte-image, url('/assets/bitaxe-board.png?v=${CACHE_CARTE}'));background-size:contain;background-repeat:no-repeat;
     filter:drop-shadow(0 10px 24px rgba(0,0,0,.55))}
   .carteMachine.hors-ligne{filter:grayscale(1) opacity(.45)}
   .carteMachine.hors-ligne .contourGlow,.carteMachine.hors-ligne .barreGlow{animation-play-state:paused;opacity:.15}
@@ -4214,6 +4232,7 @@ charger();setInterval(charger,5000);
   /* Paliers "rainbow" (Multicolore I/II, Multi-Gemmes II) : le liseré cycle toutes les
      couleurs au lieu d'une teinte fixe, pour bien les distinguer des paliers unis. */
   .carteMachine.rainbow-tier .contourGlow,.carteMachine.rainbow-tier .barreGlow{animation-name:respirerGlow,arcEnCiel;animation-duration:2.6s,4s;animation-timing-function:ease-in-out,linear;animation-iteration-count:infinite,infinite}
+  .carteMachine.rainbow-tier .ecranLogo{animation:arcEnCiel 4s linear infinite}
   @keyframes arcEnCiel{from{filter:hue-rotate(0deg) saturate(1.4)}to{filter:hue-rotate(360deg) saturate(1.4)}}
   /* Badge "bloc trouvé" : cachée par défaut, apparaît seulement si blocsTrouves>0 */
   .badgeBloc{display:none;align-items:center;gap:4px;background:rgba(150,240,31,.16);color:var(--amber);
@@ -4225,7 +4244,7 @@ charger();setInterval(charger,5000);
     border-radius:2%/1.6%;overflow:hidden;background:#05070a;
     display:grid;grid-template-rows:9% 19% 15% 15% 15% 13%;row-gap:2%;padding:5% 6%;box-sizing:border-box}
   .eLigne{height:100%;min-height:0;display:flex;align-items:center;justify-content:space-between;min-width:0}
-  .ecranLogo{display:flex;align-items:center;gap:5px;font-weight:700;color:var(--white);font-size:min(9.5cqw,29cqh,29px);
+  .ecranLogo{display:flex;align-items:center;gap:5px;font-weight:700;color:var(--couleur-cube,var(--white));font-size:min(9.5cqw,29cqh,29px);
     min-width:0;flex-shrink:1;overflow:hidden;white-space:nowrap}
   .ecranLogo span{overflow:hidden;text-overflow:ellipsis}
   .ecranLogo svg{width:1.1em;height:1.1em}
@@ -4424,7 +4443,7 @@ const NOMS_CUBE=[
   'Multi-Gemmes I','Multi-Gemmes II'
 ];
 const COULEURS_CUBE=[
-  '#8cff2e','#2e9bff','#ff3b3b','#b83bff','#2effe0','#ff9c2e','#ff2ea0','#f2e92e',
+  '#8cff2e','#2e9bff','#ff3b3b','#b83bff','#2effe0','#ff9c2e','#ff2ea0','#fd5f00',
   '#2effb0','#8c2eff','#ffb02e','#ff2ee0','#c8ff2e',
   '#e8f0ff',
   'rainbow','rainbow',
@@ -4440,13 +4459,22 @@ function niveauDe(bestDiff){
   }
   return niveau;
 }
-// Renvoie {couleur, nom, niveau, rainbow} pour un bestDiff donné. Sous le niveau 1
-// (< 200 de difficulté), on reste sur le vert AXECUBE habituel -- pas de "faux cube".
+// Renvoie {couleur, nom, niveau, rainbow, imageCarte} pour un bestDiff donné. Sous le
+// niveau 1 (< 200 de difficulté), on reste sur le vert AXECUBE et la carte par défaut --
+// pas de "faux cube".
+const CACHE_MACHINES='${CACHE_MACHINES}';
 function infosCube(bestDiff){
   const n=niveauDe(bestDiff);
-  if(n<1) return {couleur:'#96f01f', nom:null, niveau:0, rainbow:false};
+  if(n<1) return {couleur:'#96f01f', nom:null, niveau:0, rainbow:false, imageCarte:null};
   const c=COULEURS_CUBE[n-1];
-  return {couleur: c==='rainbow' ? '#96f01f' : c, nom:NOMS_CUBE[n-1], niveau:n, rainbow: c==='rainbow'};
+  const numero=String(n).padStart(2,'0');
+  return {
+    couleur: c==='rainbow' ? '#96f01f' : c,
+    nom:NOMS_CUBE[n-1],
+    niveau:n,
+    rainbow: c==='rainbow',
+    imageCarte:'/assets/machines/niveau-'+numero+'.png?v='+CACHE_MACHINES
+  };
 }
 document.getElementById('retour').href='/details'+Q;
 
@@ -4482,7 +4510,8 @@ function carteComplete(m, estMoi, idx, ventiloClasse){
   const page=pageActuelle.get(cle)||0;
   const cube=infosCube(m.bestDiff||0);
   const nomCubeHtml=cube.nom?'<span class="nomCube">'+cube.nom+'</span>':'';
-  return '<div class="carteMachine'+(enLigne?'':' hors-ligne')+(cube.rainbow?' rainbow-tier':'')+'"'+(idx!=null?' data-idx="'+idx+'"':'')+' style="--couleur-cube:'+cube.couleur+'">'
+  const imgStyle=cube.imageCarte?('--carte-image:url(\\''+cube.imageCarte+'\\');'):'';
+  return '<div class="carteMachine'+(enLigne?'':' hors-ligne')+(cube.rainbow?' rainbow-tier':'')+'"'+(idx!=null?' data-idx="'+idx+'"':'')+' style="--couleur-cube:'+cube.couleur+';'+imgStyle+'">'
     +'<div class="fondNoir"></div>'
     +'<div class="ventilo'+(ventiloClasse?' '+ventiloClasse:'')+'"><div class="logoVentilo"></div></div>'+'<button type="button" class="boutonVentilo" onclick="toggleVentilo(event)" title="Arr\u00eater/relancer le ventilateur (visuel)" aria-label="Basculer le ventilateur"></button>'
     +'<div class="contourGlow"></div>'
@@ -4528,7 +4557,8 @@ function carteLegere(m, idx, ventiloClasse){
   const page=pageActuelle.get(cle)||0;
   const cube=infosCube(m.bestDiff||0);
   const nomCubeHtml=cube.nom?'<span class="nomCube">'+cube.nom+'</span>':'';
-  return '<div class="carteMachine'+(enLigne?'':' hors-ligne')+(cube.rainbow?' rainbow-tier':'')+'"'+(idx!=null?' data-idx="'+idx+'"':'')+' style="--couleur-cube:'+cube.couleur+'">'
+  const imgStyle=cube.imageCarte?('--carte-image:url(\\''+cube.imageCarte+'\\');'):'';
+  return '<div class="carteMachine'+(enLigne?'':' hors-ligne')+(cube.rainbow?' rainbow-tier':'')+'"'+(idx!=null?' data-idx="'+idx+'"':'')+' style="--couleur-cube:'+cube.couleur+';'+imgStyle+'">'
     +'<div class="fondNoir"></div>'
     +'<div class="ventilo'+(ventiloClasse?' '+ventiloClasse:'')+'"><div class="logoVentilo"></div></div>'+'<button type="button" class="boutonVentilo" onclick="toggleVentilo(event)" title="Arr\u00eater/relancer le ventilateur (visuel)" aria-label="Basculer le ventilateur"></button>'
     +'<div class="contourGlow"></div>'
@@ -5046,6 +5076,26 @@ function fmtD(d){if(!d)return'—';if(d>=1e12)return(d/1e12).toFixed(2)+' T';if(
         if (err) { res.writeHead(404); res.end(); return; }
         res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=86400' });
         res.end(data);
+      });
+      return;
+    }
+    if (/^\/assets\/machines\/niveau-(\d{2})\.png$/.test(url.pathname)) {
+      // Une variante de carte par palier de cube (1 à 22). Repli automatique sur la
+      // carte par défaut si ce palier précis n'a pas encore d'image fournie -- pas
+      // besoin de tout avoir d'un coup, on complète au fur et à mesure.
+      const cheminNiveau = path.join(__dirname, 'assets', 'machines', path.basename(url.pathname));
+      fs.readFile(cheminNiveau, (err, data) => {
+        if (!err) {
+          res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=86400' });
+          res.end(data);
+          return;
+        }
+        const cheminDefaut = path.join(__dirname, 'assets', 'bitaxe-board.png');
+        fs.readFile(cheminDefaut, (err2, data2) => {
+          if (err2) { res.writeHead(404); res.end(); return; }
+          res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=86400' });
+          res.end(data2);
+        });
       });
       return;
     }

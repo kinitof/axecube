@@ -1,0 +1,42 @@
+{
+  "ecran": {
+    "left": 23.85,
+    "top": 4.49,
+    "width": 51.29,
+    "height": 41.31
+  },
+  "fondNoir": {
+    "left": 26.42,
+    "top": 55.3,
+    "width": 46.97
+  },
+  "ventilo": {
+    "left": 23.5,
+    "top": 53.71,
+    "width": 53,
+    "pivotX": 50.69,
+    "pivotY": 48.18
+  },
+  "logoVentilo": {
+    "left": 33.27,
+    "top": 31.38,
+    "width": 35
+  },
+  "contourGlow": {
+    "left": 4.32,
+    "top": 1.86,
+    "width": 90.58,
+    "height": 86.18
+  },
+  "barreGlow": {
+    "left": 21.02,
+    "top": 95.32,
+    "width": 60.12,
+    "height": 1.95
+  },
+  "boutonVentilo": {
+    "left": 20,
+    "top": 49.68,
+    "width": 4.96
+  }
+}
