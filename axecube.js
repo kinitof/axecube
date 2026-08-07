@@ -4118,8 +4118,8 @@ charger();setInterval(charger,5000);
   .lien:hover{border-color:var(--amber)}
   h1{font-size:16px;font-weight:600;color:var(--amber);text-shadow:var(--glow)}
   .sub{font-size:11px;color:var(--mut);margin-top:8px;flex-basis:100%}
-  .grille{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:16px;justify-items:center}
-  .carteMachine{position:relative;width:100%;max-width:190px;aspect-ratio:1023/1537;container-type:size;container-name:carte;
+  .grille{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:18px;justify-items:center}
+  .carteMachine{position:relative;width:100%;max-width:215px;aspect-ratio:1023/1537;container-type:size;container-name:carte;
     background-image:url('/assets/bitaxe-board.png?v=${AXECUBE_VERSION}');background-size:contain;background-repeat:no-repeat;
     filter:drop-shadow(0 10px 24px rgba(0,0,0,.55))}
   .carteMachine.hors-ligne{filter:grayscale(1) opacity(.45)}
@@ -4127,17 +4127,17 @@ charger();setInterval(charger,5000);
   /* Ventilateur : disque de pales extrait de la photo, tourne par-dessus le cadre fixe */
   .ventilo{position:absolute;left:23.95%;top:56.60%;width:42.03%;aspect-ratio:1/1;
     background-image:url('/assets/fan-blade.png?v=${AXECUBE_VERSION}');background-size:contain;background-repeat:no-repeat;
-    animation:tournerVentilo .35s linear infinite;transform-origin:center center;
-    filter:blur(1.1px);will-change:transform}
+    animation:tournerVentilo .1s linear infinite;transform-origin:center center;
+    filter:blur(1.8px);will-change:transform}
   @keyframes tournerVentilo{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
   /* Liseré vert du contour de la carte : pulse doucement comme si elle était sous tension */
   .contourGlow{position:absolute;left:1.96%;top:1.3%;width:96.08%;height:87.18%;border-radius:4.5%/3.8%;
-    pointer-events:none;box-shadow:0 0 0 1.5px rgba(150,240,31,.55), 0 0 14px 2px rgba(150,240,31,.35);
+    pointer-events:none;box-shadow:0 0 0 0.35cqw rgba(150,240,31,.6), 0 0 1.3cqw 0.15cqw rgba(150,240,31,.4);
     animation:respirerGlow 2.6s ease-in-out infinite}
   /* Barre LED du socle : même pulsation, léger décalage pour un effet plus vivant */
   .barreGlow{position:absolute;left:21.02%;top:95.32%;width:60.12%;height:1.95%;border-radius:50%;
     pointer-events:none;background:radial-gradient(ellipse at center, rgba(150,240,31,.9), rgba(150,240,31,0) 75%);
-    filter:blur(3px);animation:respirerGlow 2.6s ease-in-out infinite;animation-delay:.3s}
+    filter:blur(0.35cqw);animation:respirerGlow 2.6s ease-in-out infinite;animation-delay:.3s}
   @keyframes respirerGlow{0%,100%{opacity:.55}50%{opacity:1}}
   /* Badge "bloc trouvé" : cachée par défaut, apparaît seulement si blocsTrouves>0 */
   .badgeBloc{display:none;align-items:center;gap:4px;background:rgba(150,240,31,.16);color:var(--amber);
@@ -4183,6 +4183,17 @@ charger();setInterval(charger,5000);
   .badgeMoi{display:inline-block;background:rgba(150,240,31,.14);color:var(--amber);border:1px solid rgba(150,240,31,.4);
     font-size:9px;font-weight:700;letter-spacing:.06em;padding:1px 6px;border-radius:8px;margin-right:5px;vertical-align:middle}
   .vide{color:var(--mut);font-size:12px;padding:30px 0}
+  .carteMachine{cursor:pointer;transition:transform .15s}
+  .carteMachine:hover{transform:translateY(-3px)}
+  .modalCarte{display:none;position:fixed;inset:0;z-index:50;align-items:center;justify-content:center;padding:30px}
+  .modalCarte.ouverte{display:flex}
+  .modalFond{position:absolute;inset:0;background:rgba(3,5,4,.82);backdrop-filter:blur(3px)}
+  .modalContenu{position:relative;width:min(80vw,440px)}
+  .modalContenu .carteMachine{cursor:default;max-width:none}
+  .modalContenu .carteMachine:hover{transform:none}
+  .modalFermer{position:absolute;top:-38px;right:0;background:none;border:1px solid var(--amber-faint);
+    color:var(--amber);width:30px;height:30px;border-radius:50%;font-size:14px;cursor:pointer;font-family:inherit}
+  .modalFermer:hover{border-color:var(--amber)}
 </style></head>
 <body><div class="wrap">
 <header>
@@ -4191,6 +4202,13 @@ charger();setInterval(charger,5000);
   <div class="sub">Essai d'affichage façon carte ASIC — une machine AXECUBE connectée = une carte. Données réelles, rafraîchies toutes les 5 secondes.</div>
 </header>
 <div id="grille" class="grille"><div class="vide">Recherche des machines sur le réseau local…</div></div>
+<div id="modalCarte" class="modalCarte">
+  <div class="modalFond"></div>
+  <div class="modalContenu">
+    <button class="modalFermer" aria-label="Fermer">✕</button>
+    <div id="modalCarteHote"></div>
+  </div>
+</div>
 </div>
 <script>
 const TOK=${JSON.stringify(jeton || '')};const Q=TOK?('?token='+TOK):'';
@@ -4228,12 +4246,12 @@ function sparkSVG(hist){
 
 // Carte complète : utilisée pour MA machine, dont on connaît tous les détails
 // (uptime, threads, difficulté, acceptation, historique réel...).
-function carteComplete(m, estMoi){
+function carteComplete(m, estMoi, idx){
   const enLigne=(m.hashrate||0)>0;
   const acceptance=(m.accepted!=null && m.rejected!=null && (m.accepted+m.rejected)>0)
     ? ((m.accepted/(m.accepted+m.rejected))*100).toFixed(1)+'%' : '—';
   const blocBadge=(m.blocsTrouves>0)?'<span class="badgeBloc actif" title="'+m.blocsTrouves+' bloc'+(m.blocsTrouves>1?'s':'')+' trouv\u00e9'+(m.blocsTrouves>1?'s':'')+'">\ud83c\udfc6 '+m.blocsTrouves+'</span>':'';
-  return '<div class="carteMachine'+(enLigne?'':' hors-ligne')+'">'
+  return '<div class="carteMachine'+(enLigne?'':' hors-ligne')+'"'+(idx!=null?' data-idx="'+idx+'"':'')+'>'
     +'<div class="ventilo"></div>'
     +'<div class="contourGlow"></div>'
     +'<div class="barreGlow"></div>'
@@ -4260,10 +4278,10 @@ function carteComplete(m, estMoi){
 // Carte allégée : utilisée pour les autres machines du réseau, dont on ne connaît
 // que ce qu'elles diffusent réellement (pas d'uptime, threads ni température --
 // on ne les invente pas).
-function carteLegere(m){
+function carteLegere(m, idx){
   const enLigne=(m.hashrate||0)>0;
   const blocBadge=(m.blocsTrouves>0)?'<span class="badgeBloc actif" title="'+m.blocsTrouves+' bloc'+(m.blocsTrouves>1?'s':'')+' trouv\u00e9'+(m.blocsTrouves>1?'s':'')+'">\ud83c\udfc6 '+m.blocsTrouves+'</span>':'';
-  return '<div class="carteMachine'+(enLigne?'':' hors-ligne')+'">'
+  return '<div class="carteMachine'+(enLigne?'':' hors-ligne')+'"'+(idx!=null?' data-idx="'+idx+'"':'')+'>'
     +'<div class="ventilo"></div>'
     +'<div class="contourGlow"></div>'
     +'<div class="barreGlow"></div>'
@@ -4282,6 +4300,7 @@ function carteLegere(m){
   +'</div>';
 }
 
+let donneesActuelles=[]; // {m, estMoi, complete} pour chaque carte affichée, indexé comme le rendu
 async function charger(){
   const grille=document.getElementById('grille');
   try{
@@ -4292,6 +4311,7 @@ async function charger(){
     const btcPrice=repDetails && repDetails.marche && repDetails.marche.btcPrice;
     const btcSymbol=(repDetails && repDetails.marche && repDetails.marche.btcSymbol)||'$';
     let html='';
+    donneesActuelles=[];
     // Ma propre machine (celle qui sert ce dashboard) — pas incluse dans /api/swarm
     // qui ne liste que les *autres* machines détectées sur le réseau.
     if(repDetails && repDetails.perf){
@@ -4310,21 +4330,55 @@ async function charger(){
         blocsTrouves: repDetails.loterie && repDetails.loterie.blocsTrouves,
         btcPrice, btcSymbol
       };
-      html+=carteComplete(moi, true);
+      donneesActuelles.push({m:moi, estMoi:true, complete:true});
+      html+=carteComplete(moi, true, donneesActuelles.length-1);
     }
     const liste=(repSwarm && repSwarm.machines)||[];
     // Le cours BTC n'est pas diffusé par chaque machine (c'est une donnée de marché
     // globale, identique partout) -- on réutilise celui de cette machine pour toutes.
-    html+=liste.map(m=>carteLegere(Object.assign({},m,{btcPrice,btcSymbol}))).join('');
+    liste.forEach(m0=>{
+      const m=Object.assign({},m0,{btcPrice,btcSymbol});
+      donneesActuelles.push({m, estMoi:false, complete:false});
+      html+=carteLegere(m, donneesActuelles.length-1);
+    });
     if(!html){
       grille.innerHTML='<div class="vide">Aucune machine AXECUBE détectée pour l\\'instant.</div>';
       return;
     }
     grille.innerHTML=html;
+    // Si la modale est ouverte, on rafraîchit aussi son contenu avec les données à jour
+    // (pas seulement au premier clic), pour que le zoom reste "vivant".
+    if(indexOuvert!=null && donneesActuelles[indexOuvert]) afficherModale(indexOuvert, false);
   }catch(e){
     grille.innerHTML='<div class="vide">Recherche réseau indisponible.</div>';
   }
 }
+
+// --- Agrandissement d'une carte au clic ---
+let indexOuvert=null;
+const modal=document.getElementById('modalCarte');
+const modalHote=document.getElementById('modalCarteHote');
+function afficherModale(idx, animer){
+  const d=donneesActuelles[idx];
+  if(!d) return;
+  indexOuvert=idx;
+  modalHote.innerHTML=d.complete?carteComplete(d.m,d.estMoi):carteLegere(d.m);
+  if(animer!==false) modal.classList.add('ouverte');
+}
+function fermerModale(){
+  indexOuvert=null;
+  modal.classList.remove('ouverte');
+}
+document.getElementById('grille').addEventListener('click', e=>{
+  const carte=e.target.closest('.carteMachine');
+  if(!carte) return;
+  const idx=carte.getAttribute('data-idx');
+  if(idx!=null) afficherModale(parseInt(idx,10));
+});
+modal.querySelector('.modalFond').addEventListener('click', fermerModale);
+modal.querySelector('.modalFermer').addEventListener('click', fermerModale);
+document.addEventListener('keydown', e=>{ if(e.key==='Escape') fermerModale(); });
+
 charger();setInterval(charger,5000);
 </script></body></html>`;
 
