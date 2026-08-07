@@ -4123,13 +4123,18 @@ charger();setInterval(charger,5000);
     background-image:url('/assets/bitaxe-board.png?v=${AXECUBE_VERSION}');background-size:contain;background-repeat:no-repeat;
     filter:drop-shadow(0 10px 24px rgba(0,0,0,.55))}
   .carteMachine.hors-ligne{filter:grayscale(1) opacity(.45)}
-  .carteMachine.hors-ligne .ventilo,.carteMachine.hors-ligne .contourGlow,.carteMachine.hors-ligne .barreGlow{animation-play-state:paused;opacity:.15}
-  /* Ventilateur : disque de pales extrait de la photo, tourne par-dessus le cadre fixe */
+  .carteMachine.hors-ligne .contourGlow,.carteMachine.hors-ligne .barreGlow{animation-play-state:paused;opacity:.15}
+  /* Ventilateur : disque de pales extrait de la photo, tourne par-dessus le cadre fixe.
+     Trois états : tourne à pleine vitesse (par défaut), ralentit progressivement au moment
+     précis où la machine tombe hors ligne (joué une seule fois), puis reste immobile. */
   .ventilo{position:absolute;left:23.95%;top:56.60%;width:42.03%;aspect-ratio:1/1;
     background-image:url('/assets/fan-blade.png?v=${AXECUBE_VERSION}');background-size:contain;background-repeat:no-repeat;
     animation:tournerVentilo .1s linear infinite;transform-origin:center center;
     filter:blur(1.8px);will-change:transform}
+  .ventilo.ralentit{animation:ralentirVentilo 1.8s cubic-bezier(.25,.1,.25,1) 1 forwards;filter:blur(1.2px)}
+  .ventilo.arrete{animation:none;transform:rotate(0deg);filter:none;opacity:.6}
   @keyframes tournerVentilo{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+  @keyframes ralentirVentilo{from{transform:rotate(0deg)}to{transform:rotate(1080deg)}}
   /* Liseré vert du contour de la carte : pulse doucement comme si elle était sous tension */
   .contourGlow{position:absolute;left:1.96%;top:1.3%;width:96.08%;height:87.18%;border-radius:4.5%/3.8%;
     pointer-events:none;box-shadow:0 0 0 0.35cqw rgba(150,240,31,.6), 0 0 1.3cqw 0.15cqw rgba(150,240,31,.4);
@@ -4246,13 +4251,13 @@ function sparkSVG(hist){
 
 // Carte complète : utilisée pour MA machine, dont on connaît tous les détails
 // (uptime, threads, difficulté, acceptation, historique réel...).
-function carteComplete(m, estMoi, idx){
+function carteComplete(m, estMoi, idx, ventiloClasse){
   const enLigne=(m.hashrate||0)>0;
   const acceptance=(m.accepted!=null && m.rejected!=null && (m.accepted+m.rejected)>0)
     ? ((m.accepted/(m.accepted+m.rejected))*100).toFixed(1)+'%' : '—';
   const blocBadge=(m.blocsTrouves>0)?'<span class="badgeBloc actif" title="'+m.blocsTrouves+' bloc'+(m.blocsTrouves>1?'s':'')+' trouv\u00e9'+(m.blocsTrouves>1?'s':'')+'">\ud83c\udfc6 '+m.blocsTrouves+'</span>':'';
   return '<div class="carteMachine'+(enLigne?'':' hors-ligne')+'"'+(idx!=null?' data-idx="'+idx+'"':'')+'>'
-    +'<div class="ventilo"></div>'
+    +'<div class="ventilo'+(ventiloClasse?' '+ventiloClasse:'')+'"></div>'
     +'<div class="contourGlow"></div>'
     +'<div class="barreGlow"></div>'
     +'<div class="ecran">'
@@ -4278,11 +4283,11 @@ function carteComplete(m, estMoi, idx){
 // Carte allégée : utilisée pour les autres machines du réseau, dont on ne connaît
 // que ce qu'elles diffusent réellement (pas d'uptime, threads ni température --
 // on ne les invente pas).
-function carteLegere(m, idx){
+function carteLegere(m, idx, ventiloClasse){
   const enLigne=(m.hashrate||0)>0;
   const blocBadge=(m.blocsTrouves>0)?'<span class="badgeBloc actif" title="'+m.blocsTrouves+' bloc'+(m.blocsTrouves>1?'s':'')+' trouv\u00e9'+(m.blocsTrouves>1?'s':'')+'">\ud83c\udfc6 '+m.blocsTrouves+'</span>':'';
   return '<div class="carteMachine'+(enLigne?'':' hors-ligne')+'"'+(idx!=null?' data-idx="'+idx+'"':'')+'>'
-    +'<div class="ventilo"></div>'
+    +'<div class="ventilo'+(ventiloClasse?' '+ventiloClasse:'')+'"></div>'
     +'<div class="contourGlow"></div>'
     +'<div class="barreGlow"></div>'
     +'<div class="ecran">'
@@ -4301,6 +4306,16 @@ function carteLegere(m, idx){
 }
 
 let donneesActuelles=[]; // {m, estMoi, complete} pour chaque carte affichée, indexé comme le rendu
+// Mémorise le dernier statut en-ligne connu de chaque machine (clé = worker, ou "MOI")
+// pour ne déclencher l'animation de ralenti du ventilo qu'au moment exact où elle
+// tombe hors ligne, et pas à chaque rafraîchissement tant qu'elle le reste.
+const dernierStatut=new Map();
+function calculerClasseVentilo(cle, enLigne){
+  const etaitEnLigne=dernierStatut.has(cle)?dernierStatut.get(cle):enLigne;
+  dernierStatut.set(cle, enLigne);
+  if(enLigne) return '';
+  return etaitEnLigne ? 'ralentit' : 'arrete';
+}
 async function charger(){
   const grille=document.getElementById('grille');
   try{
@@ -4331,7 +4346,8 @@ async function charger(){
         btcPrice, btcSymbol
       };
       donneesActuelles.push({m:moi, estMoi:true, complete:true});
-      html+=carteComplete(moi, true, donneesActuelles.length-1);
+      const vClasse=calculerClasseVentilo('MOI', (moi.hashrate||0)>0);
+      html+=carteComplete(moi, true, donneesActuelles.length-1, vClasse);
     }
     const liste=(repSwarm && repSwarm.machines)||[];
     // Le cours BTC n'est pas diffusé par chaque machine (c'est une donnée de marché
@@ -4339,7 +4355,8 @@ async function charger(){
     liste.forEach(m0=>{
       const m=Object.assign({},m0,{btcPrice,btcSymbol});
       donneesActuelles.push({m, estMoi:false, complete:false});
-      html+=carteLegere(m, donneesActuelles.length-1);
+      const vClasse=calculerClasseVentilo(m.worker||m.machineId||('idx'+donneesActuelles.length), (m.hashrate||0)>0);
+      html+=carteLegere(m, donneesActuelles.length-1, vClasse);
     });
     if(!html){
       grille.innerHTML='<div class="vide">Aucune machine AXECUBE détectée pour l\\'instant.</div>';
@@ -4362,7 +4379,8 @@ function afficherModale(idx, animer){
   const d=donneesActuelles[idx];
   if(!d) return;
   indexOuvert=idx;
-  modalHote.innerHTML=d.complete?carteComplete(d.m,d.estMoi):carteLegere(d.m);
+  const vClasse=(d.m.hashrate||0)>0 ? '' : 'arrete';
+  modalHote.innerHTML=d.complete?carteComplete(d.m,d.estMoi,null,vClasse):carteLegere(d.m,null,vClasse);
   if(animer!==false) modal.classList.add('ouverte');
 }
 function fermerModale(){
