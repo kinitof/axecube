@@ -4198,6 +4198,9 @@ charger();setInterval(charger,5000);
     background-image:var(--carte-image, url('/assets/bitaxe-board.png?v=${CACHE_CARTE}'));background-size:contain;background-repeat:no-repeat;
     filter:drop-shadow(0 10px 24px rgba(0,0,0,.55))}
   .carteMachine.hors-ligne{filter:grayscale(1) opacity(.45)}
+  /* Pause manuelle (bouton ventilo) : léger assombrissement, distinct du vrai "hors ligne"
+     détecté sur le réseau -- ici la machine mine toujours, seul l'affichage est en pause. */
+  .carteMachine.pause-manuelle .ecran{opacity:.55;transition:opacity .6s ease}
   .carteMachine.hors-ligne .contourGlow,.carteMachine.hors-ligne .barreGlow{animation-play-state:paused;opacity:.15}
   /* Fond noir rond : cache l'hélice imprimée sur la photo d'origine, pour que seul le
      ventilateur animé (ci-dessous) soit visible en train de tourner par-dessus. */
@@ -4287,7 +4290,7 @@ charger();setInterval(charger,5000);
     font-size:min(5cqw,15cqh,15px);line-height:1;padding:0;font-family:inherit}
   .flechePage:hover{background:rgba(150,240,31,.18);border-color:var(--amber)}
   .pool-nom{overflow:hidden}
-  .pool-nom b{display:inline-block;white-space:nowrap}
+  .pool-nom b{display:inline-block;white-space:nowrap;overflow:visible;text-overflow:clip}
   .pool-nom.defile b{animation:defilerPool 7s linear infinite}
   @keyframes defilerPool{
     0%,8%{transform:translateX(0)}
@@ -4594,6 +4597,10 @@ function carteLegere(m, idx, ventiloClasse){
 // Mémorise la page actuellement affichée (0 ou 1) pour chaque carte, par machine --
 // pour que le choix de page survive aux rafraîchissements automatiques (5s).
 const pageActuelle=new Map();
+// Même principe pour la pause manuelle du ventilo (bouton) : sans cette mémoire, le
+// rafraîchissement automatique (5s) effacerait la pause en régénérant la carte avec
+// l'état "en marche" par défaut à chaque fois.
+const ventiloPauseManuelle=new Map();
 function pageSuivante(e, cle){
   e.stopPropagation();
   const actuelle=pageActuelle.get(cle)||0;
@@ -4668,8 +4675,10 @@ async function charger(){
         btcPrice, btcSymbol
       };
       donneesActuelles.push({m:moi, estMoi:true, complete:true});
-      const vClasse=calculerClasseVentilo('MOI', (moi.hashrate||0)>0);
-      html+=carteComplete(moi, true, donneesActuelles.length-1, vClasse);
+      const idxMoi=donneesActuelles.length-1;
+      let vClasse=calculerClasseVentilo('MOI', (moi.hashrate||0)>0);
+      if(ventiloPauseManuelle.get(String(idxMoi))) vClasse='arrete';
+      html+=carteComplete(moi, true, idxMoi, vClasse);
     }
     const liste=(repSwarm && repSwarm.machines)||[];
     // Le cours BTC et la hauteur de bloc ne sont pas diffusés par chaque machine (ce sont
@@ -4677,8 +4686,13 @@ async function charger(){
     liste.forEach(m0=>{
       const m=Object.assign({},m0,{btcPrice,btcSymbol,blocHauteur});
       donneesActuelles.push({m, estMoi:false, complete:false});
-      const vClasse=calculerClasseVentilo(m.worker||m.machineId||('idx'+donneesActuelles.length), (m.hashrate||0)>0);
-      html+=carteLegere(m, donneesActuelles.length-1, vClasse);
+      const idxM=donneesActuelles.length-1;
+      let vClasse=calculerClasseVentilo(m.worker||m.machineId||('idx'+idxM), (m.hashrate||0)>0);
+      // La pause manuelle (bouton) prime sur l'état détecté automatiquement, et survit
+      // ainsi au rafraîchissement de la carte toutes les 5s -- sans ça, le ventilo
+      // repartirait tout seul dès le prochain refresh alors que la machine mine toujours.
+      if(ventiloPauseManuelle.get(String(idxM))) vClasse='arrete';
+      html+=carteLegere(m, idxM, vClasse);
     });
     if(!html){
       grille.innerHTML='<div class="vide">Aucune machine AXECUBE détectée pour l\\'instant.</div>';
@@ -4719,8 +4733,28 @@ function toggleVentilo(e){
   const carte=e.currentTarget.closest('.carteMachine');
   const vent=carte && carte.querySelector('.ventilo');
   if(!vent) return;
-  const enCours=getComputedStyle(vent).animationPlayState!=='paused';
-  vent.style.animationPlayState = enCours ? 'paused' : 'running';
+  const cle=carte.getAttribute('data-idx');
+  const arrete = vent.classList.contains('arrete') || vent.classList.contains('ralentit');
+  if(!arrete){
+    // Coupure : on rejoue le vrai ralenti progressif (même animation que lors d'une
+    // vraie déconnexion) plutôt qu'un arrêt net, pour un effet réaliste. La carte se
+    // met en "pause visuelle" pendant que le ventilateur termine sa décélération.
+    if(cle!=null) ventiloPauseManuelle.set(cle, true);
+    vent.classList.remove('arrete');
+    vent.classList.add('ralentit');
+    carte.classList.add('pause-manuelle');
+    clearTimeout(vent._minuteurArret);
+    vent._minuteurArret = setTimeout(()=>{
+      vent.classList.remove('ralentit');
+      vent.classList.add('arrete');
+    }, 1800); // durée exacte de l'animation ralentirVentilo
+  } else {
+    // Redémarrage : retour direct à pleine vitesse.
+    if(cle!=null) ventiloPauseManuelle.delete(cle);
+    clearTimeout(vent._minuteurArret);
+    vent.classList.remove('ralentit','arrete');
+    carte.classList.remove('pause-manuelle');
+  }
 }
 document.getElementById('grille').addEventListener('click', e=>{
   const carte=e.target.closest('.carteMachine');
