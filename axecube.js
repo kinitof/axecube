@@ -3680,7 +3680,7 @@ setInterval(majSwarm,6000);majSwarm();
 <div class="card full"><div id="d_workers" class="loading">Interrogation du pool…</div></div>
 
 <h2 id="h_swarm">🌐 ESSAIM LOCAL (RÉSEAU) <span style="font-size:9px;color:var(--mut)">autres machines AXECUBE détectées sur ce réseau</span>
-  <a id="l_machines" href="/machines" target="_blank" rel="noopener" style="font-size:9px;color:var(--amber-dim);text-decoration:none;margin-left:8px">↗ vue cartes (essai)</a></h2>
+  <a id="l_machines" href="/machines" rel="noopener" style="font-size:9px;color:var(--amber-dim);text-decoration:none;margin-left:8px">↗ vue cartes (essai)</a></h2>
 <div class="card full"><div id="d_swarm" class="loading">Recherche sur le réseau local…</div></div>
 
 <h2 id="h_leader">CLASSEMENT AXECUBE <a id="l_via" href="#" style="font-size:9px;color:var(--amber-dim);text-decoration:none"></a></h2>
@@ -4453,7 +4453,7 @@ const COULEURS_CUBE=[
   'rainbow','rainbow',
   '#bff5ff',
   '#10b981','#2563eb','#e11d48',
-  '#f2b90c','rainbow'
+  'rainbow','rainbow'
 ];
 function niveauDe(bestDiff){
   bestDiff = bestDiff||0;
