@@ -925,6 +925,15 @@ maj(); setInterval(maj, 2000);
  *  soit un niveau de pression thermique qualitatif (Apple Silicon). Renvoie null si le
  *  démon n'est pas installé/lancé -- entièrement optionnel, jamais bloquant. */
 function lireEtatThermiqueReel() {
+  if (process.platform === 'win32') {
+    // Valeur mise en cache par le sondage périodique en arrière-plan (voir
+    // demarrerLectureTemperatureWindows plus bas) -- on ne relance jamais PowerShell
+    // à chaque appel de cette fonction, ce serait bien trop lent pour l'API du dashboard.
+    if (temperatureWindowsCache && (Date.now() - temperatureWindowsCache.quand) < 20000) {
+      return { type: 'temperature', valeur: temperatureWindowsCache.valeur };
+    }
+    return null;
+  }
   if (process.platform !== 'darwin') return null;
   try {
     const contenu = fs.readFileSync('/tmp/axecube-temp.log', 'utf8');
@@ -942,6 +951,39 @@ function lireEtatThermiqueReel() {
   } catch { /* fichier absent -- démon non installé, fonctionnalité optionnelle */ }
   return null;
 }
+
+// --- Windows : température CPU réelle via LibreHardwareMonitor -----------------------
+// Windows n'expose pas la température CPU nativement de façon fiable (contrairement à
+// macOS avec powermetrics) -- on s'appuie sur LibreHardwareMonitor (gratuit, open-source),
+// qui doit tourner EN ADMINISTRATEUR pour publier ses capteurs via WMI. Si l'outil n'est
+// pas installé/lancé, la requête échoue silencieusement et on se rabat sur l'indicateur
+// de throttling basé sur le hashrate (déjà actif sur toutes les plateformes) -- aucun
+// crash, fonctionnalité entièrement optionnelle comme sur Mac.
+let temperatureWindowsCache = null; // { valeur, quand } ou null si jamais lu / indisponible
+function demarrerLectureTemperatureWindows() {
+  if (process.platform !== 'win32') return;
+  const { exec } = require('child_process');
+  // On prend le MAX parmi les capteurs "température package/total CPU" habituels,
+  // pour rester compatible Intel (Package) et AMD (Tdie/Tctl) sans savoir à l'avance
+  // quel capteur exact porte le nom sur la machine de l'utilisateur.
+  const commande = 'powershell -NoProfile -NonInteractive -Command "'
+    + "Get-CimInstance -Namespace root/LibreHardwareMonitor -ClassName Sensor -ErrorAction Stop "
+    + "| Where-Object { $_.SensorType -eq 'Temperature' -and ("
+    + "$_.Name -like '*Package*' -or $_.Name -like '*CPU Total*' -or $_.Name -like '*Tdie*' -or $_.Name -like '*Core Max*'"
+    + ") } | Measure-Object -Property Value -Maximum | Select-Object -ExpandProperty Maximum"
+    + '"';
+  function lire() {
+    exec(commande, { timeout: 4000, windowsHide: true }, (err, stdout) => {
+      if (err) { temperatureWindowsCache = null; return; }
+      const v = parseFloat(String(stdout).trim());
+      if (Number.isFinite(v)) temperatureWindowsCache = { valeur: v, quand: Date.now() };
+      else temperatureWindowsCache = null;
+    });
+  }
+  lire();
+  setInterval(lire, 8000); // toutes les 8s -- assez réactif, sans spammer PowerShell
+}
+demarrerLectureTemperatureWindows();
 
 function main() {
   const args = parseArgs(process.argv);
@@ -1933,6 +1975,47 @@ function main() {
     state.threads = n;
   }
 
+  // --- Garde-fou thermique automatique -------------------------------------------
+  // Réduit progressivement les cœurs actifs si la température CPU réelle dépasse un
+  // seuil, et les remonte quand ça redescend (avec une marge -- hystérésis -- pour
+  // éviter d'osciller sans arrêt autour du seuil). Ne s'active QUE si une sonde réelle
+  // est disponible (macOS avec le démon powermetrics, ou Windows avec LibreHardwareMonitor
+  // lancé en administrateur) -- sans sonde, rien ne change automatiquement (ex. Mac
+  // fanless dont le silicium se régule déjà tout seul, ou Windows sans l'outil installé).
+  //
+  // controleThermiqueDesactive : volontairement PAS dans `state` (jamais persisté sur
+  // disque, jamais sauvegardé). Une simple variable de ce process en mémoire vive --
+  // donc à chaque redémarrage d'AXECUBE, ce drapeau repart TOUJOURS à false (protection
+  // active par défaut). Impossible de rester bloqué en "désactivé" sans s'en rendre compte
+  // d'une session à l'autre, par design.
+  let controleThermiqueDesactive = false;
+  const seuilTempMax = Math.max(50, parseFloat(args['temp-max'] || process.env.AXECUBE_TEMP_MAX || '85'));
+  const seuilTempRelance = Math.max(40, Math.min(seuilTempMax - 5,
+    parseFloat(args['temp-relance'] || process.env.AXECUBE_TEMP_RELANCE || String(seuilTempMax - 10))));
+  let threadsAvantReductionThermique = null; // nombre de cœurs voulu avant une éventuelle réduction
+  let derniereActionThermique = 0;
+  const DELAI_ENTRE_ACTIONS_THERMIQUES_MS = 20000; // laisse le temps à une action de faire effet avant la suivante
+  setInterval(() => {
+    if (controleThermiqueDesactive) return; // désactivé manuellement pour cette session
+    const etat = lireEtatThermiqueReel();
+    if (!etat || etat.type !== 'temperature') return; // pas de sonde réelle -- rien à faire ici
+    const maintenant = Date.now();
+    if (maintenant - derniereActionThermique < DELAI_ENTRE_ACTIONS_THERMIQUES_MS) return;
+    if (etat.valeur >= seuilTempMax && state.threads > 1) {
+      if (threadsAvantReductionThermique === null) threadsAvantReductionThermique = state.threads;
+      const nouveauN = state.threads - 1;
+      log('warn', `🌡️  Température élevée (${etat.valeur.toFixed(0)}°C ≥ ${seuilTempMax}°C) — réduction à ${nouveauN} cœur${nouveauN > 1 ? 's' : ''} pour protéger le processeur.`);
+      setThreads(nouveauN);
+      derniereActionThermique = maintenant;
+    } else if (etat.valeur <= seuilTempRelance && threadsAvantReductionThermique !== null && state.threads < threadsAvantReductionThermique) {
+      const nouveauN = Math.min(threadsAvantReductionThermique, state.threads + 1);
+      log('ok', `🌡️  Température redescendue (${etat.valeur.toFixed(0)}°C ≤ ${seuilTempRelance}°C) — remontée à ${nouveauN} cœur${nouveauN > 1 ? 's' : ''}.`);
+      setThreads(nouveauN);
+      derniereActionThermique = maintenant;
+      if (state.threads >= threadsAvantReductionThermique) threadsAvantReductionThermique = null;
+    }
+  }, 10000);
+
   let threadsAvantPause = threads;
   function basculerMinage(actif) {
     if (actif === state.actif) return;
@@ -2798,6 +2881,19 @@ function main() {
       <button class="donPopupFermer" onclick="testerCelebrationBloc()" style="color:var(--amber);border-color:var(--amber-faint)">🎉 Simuler un bloc trouvé (test)</button>
     </div>
     <div class="donPopupTexte" style="margin-top:16px;border-top:1px solid var(--line);padding-top:14px">
+      <b style="color:var(--amber)">🌡️ Contrôle thermique automatique</b> — réduit les cœurs
+      actifs si une vraie sonde de température détecte une surchauffe, puis les remonte
+      une fois refroidi. <span id="thermiqueEtat" style="color:var(--white-dim)">…</span>
+      <div style="color:var(--mut);font-size:11px;margin-top:6px">
+        ⚠️ Si tu le désactives, ça ne dure QUE pour cette session -- redevient actif
+        automatiquement au prochain démarrage d'AXECUBE. Jamais bloqué en mode désactivé
+        d'une session à l'autre, par sécurité.
+      </div>
+    </div>
+    <div class="donPopupActions">
+      <button class="donPopupFermer" id="btnThermiqueToggle" onclick="basculerControleThermique()" style="color:var(--amber);border-color:var(--amber-faint)">…</button>
+    </div>
+    <div class="donPopupTexte" style="margin-top:16px;border-top:1px solid var(--line);padding-top:14px">
       <b style="color:var(--amber)">⚖ Solo Split</b> — uniquement sur SoloPool.com. Dose le
       ratio entre minage solo (jackpot complet) et minage pool (petits paiements réguliers),
       part par part. <span id="soloSplitEtat" style="color:var(--white-dim)"></span>
@@ -2820,7 +2916,28 @@ function main() {
 const L=${JSON.stringify(t.ui)};const TOK=${JSON.stringify(jeton || '')};const Q=TOK?('?token='+TOK):'';
 function ouvrirPopupDon(){document.getElementById('donPopup').style.display='flex';}
 function fermerPopupDon(){document.getElementById('donPopup').style.display='none';}
-function ouvrirPopupParametres(){document.getElementById('paramPopup').style.display='flex';}
+function ouvrirPopupParametres(){
+  document.getElementById('paramPopup').style.display='flex';
+  majAffichageThermique();
+}
+function majAffichageThermique(){
+  const actif = dernierStats ? (dernierStats.controleThermiqueActif!==false) : true;
+  const etatEl=document.getElementById('thermiqueEtat');
+  const btnEl=document.getElementById('btnThermiqueToggle');
+  if(!etatEl||!btnEl) return;
+  etatEl.textContent = actif ? '— actuellement ACTIF.' : '— actuellement DÉSACTIVÉ pour cette session.';
+  btnEl.textContent = actif ? '🌡️ Désactiver pour cette session' : '🌡️ Réactiver maintenant';
+}
+async function basculerControleThermique(){
+  const actif = dernierStats ? (dernierStats.controleThermiqueActif!==false) : true;
+  const route = actif ? '/api/thermique-desactiver' : '/api/thermique-activer';
+  try{
+    const r=await fetch(route+Q);
+    const j=await r.json();
+    if(dernierStats) dernierStats.controleThermiqueActif = j.controleThermiqueActif;
+    majAffichageThermique();
+  }catch(e){}
+}
 function fermerPopupParametres(){document.getElementById('paramPopup').style.display='none';}
 function celebrerBloc(permanent){
   const badge=document.querySelector('.blocBadge');
@@ -5194,6 +5311,7 @@ function fmtD(d){if(!d)return'—';if(d>=1e12)return(d/1e12).toFixed(2)+' T';if(
         bestDiff: state.bestDiff, bestProofHeader: state.bestProofHeader || null,
         bestDiffRecent: state.bestDiffRecent || 0, bestProofHeaderRecent: state.bestProofHeaderRecent || null,
         thermalReel: lireEtatThermiqueReel(),
+        controleThermiqueActif: !controleThermiqueDesactive,
         recordExterne: state.recordExterne || 0,
         paliersAtteints: state.paliersAtteints || {},
         poolDiff: state.poolDiff, netDiff: state.netDiff,
@@ -5361,6 +5479,17 @@ function fmtD(d){if(!d)return'—';if(d>=1e12)return(d/1e12).toFixed(2)+' T';if(
       if (!state.calibEnCours) calibrer();
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ demarre: true }));
+    } else if (url.pathname === '/api/thermique-desactiver') {
+      controleThermiqueDesactive = true;
+      log('warn', '🌡️  Contrôle thermique automatique désactivé manuellement pour cette session (redevient actif au prochain démarrage).');
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ controleThermiqueActif: false }));
+    } else if (url.pathname === '/api/thermique-activer') {
+      controleThermiqueDesactive = false;
+      threadsAvantReductionThermique = null; // repart proprement, sans réduction "en attente" fantôme
+      log('ok', '🌡️  Contrôle thermique automatique réactivé.');
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ controleThermiqueActif: true }));
     } else {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(DASHBOARD_HTML);
