@@ -4198,9 +4198,6 @@ charger();setInterval(charger,5000);
     background-image:var(--carte-image, url('/assets/bitaxe-board.png?v=${CACHE_CARTE}'));background-size:contain;background-repeat:no-repeat;
     filter:drop-shadow(0 10px 24px rgba(0,0,0,.55))}
   .carteMachine.hors-ligne{filter:grayscale(1) opacity(.45)}
-  /* Pause manuelle (bouton ventilo) : léger assombrissement, distinct du vrai "hors ligne"
-     détecté sur le réseau -- ici la machine mine toujours, seul l'affichage est en pause. */
-  .carteMachine.pause-manuelle .ecran{opacity:.55;transition:opacity .6s ease}
   .carteMachine.hors-ligne .contourGlow,.carteMachine.hors-ligne .barreGlow{animation-play-state:paused;opacity:.15}
   /* Fond noir rond : cache l'hélice imprimée sur la photo d'origine, pour que seul le
      ventilateur animé (ci-dessous) soit visible en train de tourner par-dessus. */
@@ -4214,7 +4211,7 @@ charger();setInterval(charger,5000);
     animation:tournerVentilo .1s linear infinite;transform-origin:${cv.ventilo.pivotX}% ${cv.ventilo.pivotY}%;
     filter:blur(1.8px);will-change:transform}
   .ventilo.ralentit{animation:ralentirVentilo 1.8s cubic-bezier(.25,.1,.25,1) 1 forwards;filter:blur(1.2px)}
-  .ventilo.arrete{animation:none;transform:rotate(0deg);filter:none;opacity:.6}
+  .ventilo.arrete{animation:none;transform:rotate(0deg);filter:none}
   /* Logo : enfant du ventilateur, donc tourne automatiquement avec lui (solidaire des pales).
      mix-blend-mode:screen fait disparaître son fond noir sans avoir besoin de détourage. */
   .logoVentilo{position:absolute;left:${cv.logoVentilo.left}%;top:${cv.logoVentilo.top}%;width:${cv.logoVentilo.width}%;aspect-ratio:1/1;
@@ -4508,6 +4505,15 @@ function sparkSVG(hist){
     +'</svg>';
 }
 
+// Identifiant STABLE d'une machine (nom du worker, ou machineId à défaut) -- contrairement
+// à sa position dans la liste (idx), qui peut changer d'un rafraîchissement à l'autre si
+// l'ordre des machines bouge (tri par hashrate). Utilisé pour toute mémoire censée survivre
+// aux rafraîchissements (page affichée, pause manuelle du ventilo) -- jamais pour indexer
+// dans donneesActuelles, où l'index numérique reste nécessaire.
+function cleStableDe(m, estMoi, idxSecours){
+  return (estMoi ? 'MOI' : (m.worker || m.machineId || ('idx'+idxSecours))) + '';
+}
+
 // Carte complète : utilisée pour MA machine, dont on connaît tous les détails
 // (uptime, threads, difficulté, acceptation, historique réel...).
 function carteComplete(m, estMoi, idx, ventiloClasse){
@@ -4515,12 +4521,12 @@ function carteComplete(m, estMoi, idx, ventiloClasse){
   const acceptance=(m.accepted!=null && m.rejected!=null && (m.accepted+m.rejected)>0)
     ? ((m.accepted/(m.accepted+m.rejected))*100).toFixed(1)+'%' : '—';
   const blocBadge=(m.blocsTrouves>0)?'<span class="badgeBloc actif" title="'+m.blocsTrouves+' bloc'+(m.blocsTrouves>1?'s':'')+' trouv\u00e9'+(m.blocsTrouves>1?'s':'')+'">\ud83c\udfc6 '+m.blocsTrouves+'</span>':'';
-  const cle=(idx!=null?idx:(estMoi?'MOI':m.worker))+'';
-  const page=pageActuelle.get(cle)||0;
+  const cleStable=cleStableDe(m, estMoi, idx);
+  const page=pageActuelle.get(cleStable)||0;
   const cube=infosCube(m.bestDiff||0);
   const nomCubeHtml=cube.nom?'<span class="nomCube">'+cube.nom+'</span>':'';
   const imgStyle=(cube.imageCarte?('--carte-image:url(\\''+cube.imageCarte+'\\');'):'')+(cube.imageLogo?('--logo-cube:url(\\''+cube.imageLogo+'\\');'):'');
-  return '<div class="carteMachine'+(enLigne?'':' hors-ligne')+(cube.rainbow?' rainbow-tier':'')+'"'+(idx!=null?' data-idx="'+idx+'"':'')+' style="--couleur-cube:'+cube.couleur+';'+imgStyle+'">'
+  return '<div class="carteMachine'+(enLigne?'':' hors-ligne')+(cube.rainbow?' rainbow-tier':'')+'"'+(idx!=null?' data-idx="'+idx+'"':'')+' data-cle="'+cleStable+'" style="--couleur-cube:'+cube.couleur+';'+imgStyle+'">'
     +'<div class="fondNoir"></div>'
     +'<div class="ventilo'+(ventiloClasse?' '+ventiloClasse:'')+'"><div class="logoVentilo"></div></div>'+'<button type="button" class="boutonVentilo" onclick="toggleVentilo(event)" title="Arr\u00eater/relancer le ventilateur (visuel)" aria-label="Basculer le ventilateur"></button>'
     +'<div class="contourGlow"></div>'
@@ -4551,7 +4557,7 @@ function carteComplete(m, estMoi, idx, ventiloClasse){
           +'<div><span>SHARES REJ.</span><b>'+fmtN(m.rejected||0)+'</b></div></div>'
       ))
     +'</div>'
-    +'<button type="button" class="flechePage" onclick="pageSuivante(event,\\''+cle+'\\')" title="Voir plus d\u2019infos" aria-label="Page suivante">\u203a</button>'
+    +'<button type="button" class="flechePage" onclick="pageSuivante(event,'+idx+')" title="Voir plus d\u2019infos" aria-label="Page suivante">\u203a</button>'
     +'<div class="nomMachine">'+(estMoi?'<span class="badgeMoi">MOI</span> ':'')+(m.worker||'—')+' · '+(m.cpu||'—')+'</div>'
   +'</div>';
 }
@@ -4562,12 +4568,12 @@ function carteComplete(m, estMoi, idx, ventiloClasse){
 function carteLegere(m, idx, ventiloClasse){
   const enLigne=(m.hashrate||0)>0;
   const blocBadge=(m.blocsTrouves>0)?'<span class="badgeBloc actif" title="'+m.blocsTrouves+' bloc'+(m.blocsTrouves>1?'s':'')+' trouv\u00e9'+(m.blocsTrouves>1?'s':'')+'">\ud83c\udfc6 '+m.blocsTrouves+'</span>':'';
-  const cle=(idx!=null?idx:m.worker)+'';
-  const page=pageActuelle.get(cle)||0;
+  const cleStable=cleStableDe(m, false, idx);
+  const page=pageActuelle.get(cleStable)||0;
   const cube=infosCube(m.bestDiff||0);
   const nomCubeHtml=cube.nom?'<span class="nomCube">'+cube.nom+'</span>':'';
   const imgStyle=(cube.imageCarte?('--carte-image:url(\\''+cube.imageCarte+'\\');'):'')+(cube.imageLogo?('--logo-cube:url(\\''+cube.imageLogo+'\\');'):'');
-  return '<div class="carteMachine'+(enLigne?'':' hors-ligne')+(cube.rainbow?' rainbow-tier':'')+'"'+(idx!=null?' data-idx="'+idx+'"':'')+' style="--couleur-cube:'+cube.couleur+';'+imgStyle+'">'
+  return '<div class="carteMachine'+(enLigne?'':' hors-ligne')+(cube.rainbow?' rainbow-tier':'')+'"'+(idx!=null?' data-idx="'+idx+'"':'')+' data-cle="'+cleStable+'" style="--couleur-cube:'+cube.couleur+';'+imgStyle+'">'
     +'<div class="fondNoir"></div>'
     +'<div class="ventilo'+(ventiloClasse?' '+ventiloClasse:'')+'"><div class="logoVentilo"></div></div>'+'<button type="button" class="boutonVentilo" onclick="toggleVentilo(event)" title="Arr\u00eater/relancer le ventilateur (visuel)" aria-label="Basculer le ventilateur"></button>'
     +'<div class="contourGlow"></div>'
@@ -4589,7 +4595,7 @@ function carteLegere(m, idx, ventiloClasse){
         +'<div class="eGrid"><div class="pool-nom" style="grid-column:1/-1"><span>POOL (COMPLET)</span><b>'+(m.pool||'—')+'</b></div></div>'
       ))
     +'</div>'
-    +'<button type="button" class="flechePage" onclick="pageSuivante(event,\\''+cle+'\\')" title="Voir plus d\u2019infos" aria-label="Page suivante">\u203a</button>'
+    +'<button type="button" class="flechePage" onclick="pageSuivante(event,'+idx+')" title="Voir plus d\u2019infos" aria-label="Page suivante">\u203a</button>'
     +'<div class="nomMachine">'+(m.worker||'—')+' · '+(m.cpu||'—')+(m.ip?' · '+m.ip:'')+'</div>'
   +'</div>';
 }
@@ -4601,18 +4607,18 @@ const pageActuelle=new Map();
 // rafraîchissement automatique (5s) effacerait la pause en régénérant la carte avec
 // l'état "en marche" par défaut à chaque fois.
 const ventiloPauseManuelle=new Map();
-function pageSuivante(e, cle){
+function pageSuivante(e, idx){
   e.stopPropagation();
-  const actuelle=pageActuelle.get(cle)||0;
-  pageActuelle.set(cle, actuelle===0?1:0);
+  const d=donneesActuelles[idx];
+  if(!d) return;
+  const cleStable=cleStableDe(d.m, d.estMoi, idx);
+  const actuelle=pageActuelle.get(cleStable)||0;
+  pageActuelle.set(cleStable, actuelle===0?1:0);
   // Ré-affiche immédiatement cette carte avec la nouvelle page, sans attendre le
   // prochain rafraîchissement automatique.
-  const d=donneesActuelles[parseInt(cle,10)];
-  if(d){
-    const carte=e.currentTarget.closest('.carteMachine');
-    const vClasse=(d.m.hashrate||0)>0?'':'arrete';
-    carte.outerHTML = d.complete?carteComplete(d.m,d.estMoi,cle,vClasse):carteLegere(d.m,cle,vClasse);
-  }
+  const carte=e.currentTarget.closest('.carteMachine');
+  const vClasse=(d.m.hashrate||0)>0?'':'arrete';
+  carte.outerHTML = d.complete?carteComplete(d.m,d.estMoi,idx,vClasse):carteLegere(d.m,idx,vClasse);
   activerDefilementPool();
 }
 // Active un défilement doux (va-et-vient) sur les noms de pool trop longs pour tenir
@@ -4677,7 +4683,7 @@ async function charger(){
       donneesActuelles.push({m:moi, estMoi:true, complete:true});
       const idxMoi=donneesActuelles.length-1;
       let vClasse=calculerClasseVentilo('MOI', (moi.hashrate||0)>0);
-      if(ventiloPauseManuelle.get(String(idxMoi))) vClasse='arrete';
+      if(ventiloPauseManuelle.get(cleStableDe(moi, true, idxMoi))) vClasse='arrete';
       html+=carteComplete(moi, true, idxMoi, vClasse);
     }
     const liste=(repSwarm && repSwarm.machines)||[];
@@ -4691,7 +4697,9 @@ async function charger(){
       // La pause manuelle (bouton) prime sur l'état détecté automatiquement, et survit
       // ainsi au rafraîchissement de la carte toutes les 5s -- sans ça, le ventilo
       // repartirait tout seul dès le prochain refresh alors que la machine mine toujours.
-      if(ventiloPauseManuelle.get(String(idxM))) vClasse='arrete';
+      // Clé STABLE (nom du worker), pas la position dans la liste -- qui peut changer
+      // d'un rafraîchissement à l'autre si l'ordre des machines bouge (tri par hashrate).
+      if(ventiloPauseManuelle.get(cleStableDe(m, false, idxM))) vClasse='arrete';
       html+=carteLegere(m, idxM, vClasse);
     });
     if(!html){
@@ -4716,7 +4724,8 @@ function afficherModale(idx, animer){
   const d=donneesActuelles[idx];
   if(!d) return;
   indexOuvert=idx;
-  const vClasse=(d.m.hashrate||0)>0 ? '' : 'arrete';
+  let vClasse=(d.m.hashrate||0)>0 ? '' : 'arrete';
+  if(ventiloPauseManuelle.get(cleStableDe(d.m, d.estMoi, idx))) vClasse='arrete';
   modalHote.innerHTML=d.complete?carteComplete(d.m,d.estMoi,null,vClasse):carteLegere(d.m,null,vClasse);
   activerDefilementPool();
   if(animer!==false) modal.classList.add('ouverte');
@@ -4733,16 +4742,16 @@ function toggleVentilo(e){
   const carte=e.currentTarget.closest('.carteMachine');
   const vent=carte && carte.querySelector('.ventilo');
   if(!vent) return;
-  const cle=carte.getAttribute('data-idx');
+  const cle=carte.getAttribute('data-cle');
   const arrete = vent.classList.contains('arrete') || vent.classList.contains('ralentit');
   if(!arrete){
     // Coupure : on rejoue le vrai ralenti progressif (même animation que lors d'une
-    // vraie déconnexion) plutôt qu'un arrêt net, pour un effet réaliste. La carte se
-    // met en "pause visuelle" pendant que le ventilateur termine sa décélération.
+    // vraie déconnexion) plutôt qu'un arrêt net, pour un effet réaliste. Seul le
+    // ventilateur s'assombrit à l'arrêt (déjà géré par .ventilo.arrete) -- l'écran
+    // reste stable, pour éviter toute incohérence au rafraîchissement automatique.
     if(cle!=null) ventiloPauseManuelle.set(cle, true);
     vent.classList.remove('arrete');
     vent.classList.add('ralentit');
-    carte.classList.add('pause-manuelle');
     clearTimeout(vent._minuteurArret);
     vent._minuteurArret = setTimeout(()=>{
       vent.classList.remove('ralentit');
@@ -4753,7 +4762,6 @@ function toggleVentilo(e){
     if(cle!=null) ventiloPauseManuelle.delete(cle);
     clearTimeout(vent._minuteurArret);
     vent.classList.remove('ralentit','arrete');
-    carte.classList.remove('pause-manuelle');
   }
 }
 document.getElementById('grille').addEventListener('click', e=>{
