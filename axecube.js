@@ -1975,46 +1975,13 @@ function main() {
     state.threads = n;
   }
 
-  // --- Garde-fou thermique automatique -------------------------------------------
-  // Réduit progressivement les cœurs actifs si la température CPU réelle dépasse un
-  // seuil, et les remonte quand ça redescend (avec une marge -- hystérésis -- pour
-  // éviter d'osciller sans arrêt autour du seuil). Ne s'active QUE si une sonde réelle
-  // est disponible (macOS avec le démon powermetrics, ou Windows avec LibreHardwareMonitor
-  // lancé en administrateur) -- sans sonde, rien ne change automatiquement (ex. Mac
-  // fanless dont le silicium se régule déjà tout seul, ou Windows sans l'outil installé).
-  //
   // controleThermiqueDesactive : volontairement PAS dans `state` (jamais persisté sur
   // disque, jamais sauvegardé). Une simple variable de ce process en mémoire vive --
   // donc à chaque redémarrage d'AXECUBE, ce drapeau repart TOUJOURS à false (protection
   // active par défaut). Impossible de rester bloqué en "désactivé" sans s'en rendre compte
-  // d'une session à l'autre, par design.
+  // d'une session à l'autre, par design. Contrôle le garde-fou thermique existant plus
+  // bas (celui qui s'appuie sur lireEtatThermiqueReel), pas de système redondant ici.
   let controleThermiqueDesactive = false;
-  const seuilTempMax = Math.max(50, parseFloat(args['temp-max'] || process.env.AXECUBE_TEMP_MAX || '85'));
-  const seuilTempRelance = Math.max(40, Math.min(seuilTempMax - 5,
-    parseFloat(args['temp-relance'] || process.env.AXECUBE_TEMP_RELANCE || String(seuilTempMax - 10))));
-  let threadsAvantReductionThermique = null; // nombre de cœurs voulu avant une éventuelle réduction
-  let derniereActionThermique = 0;
-  const DELAI_ENTRE_ACTIONS_THERMIQUES_MS = 20000; // laisse le temps à une action de faire effet avant la suivante
-  setInterval(() => {
-    if (controleThermiqueDesactive) return; // désactivé manuellement pour cette session
-    const etat = lireEtatThermiqueReel();
-    if (!etat || etat.type !== 'temperature') return; // pas de sonde réelle -- rien à faire ici
-    const maintenant = Date.now();
-    if (maintenant - derniereActionThermique < DELAI_ENTRE_ACTIONS_THERMIQUES_MS) return;
-    if (etat.valeur >= seuilTempMax && state.threads > 1) {
-      if (threadsAvantReductionThermique === null) threadsAvantReductionThermique = state.threads;
-      const nouveauN = state.threads - 1;
-      log('warn', `🌡️  Température élevée (${etat.valeur.toFixed(0)}°C ≥ ${seuilTempMax}°C) — réduction à ${nouveauN} cœur${nouveauN > 1 ? 's' : ''} pour protéger le processeur.`);
-      setThreads(nouveauN);
-      derniereActionThermique = maintenant;
-    } else if (etat.valeur <= seuilTempRelance && threadsAvantReductionThermique !== null && state.threads < threadsAvantReductionThermique) {
-      const nouveauN = Math.min(threadsAvantReductionThermique, state.threads + 1);
-      log('ok', `🌡️  Température redescendue (${etat.valeur.toFixed(0)}°C ≤ ${seuilTempRelance}°C) — remontée à ${nouveauN} cœur${nouveauN > 1 ? 's' : ''}.`);
-      setThreads(nouveauN);
-      derniereActionThermique = maintenant;
-      if (state.threads >= threadsAvantReductionThermique) threadsAvantReductionThermique = null;
-    }
-  }, 10000);
 
   let threadsAvantPause = threads;
   function basculerMinage(actif) {
@@ -2050,10 +2017,11 @@ function main() {
   // la situation redevient normale pendant plusieurs vérifications d'affilée.
   // Entièrement silencieux/inactif si le démon n'est pas installé (lireEtatThermiqueReel
   // renvoie alors null à chaque fois).
-  const SEUIL_TEMP_REDUCTION_C = 85;
+  const SEUIL_TEMP_REDUCTION_C = Math.max(50, parseFloat(args['temp-max'] || process.env.AXECUBE_TEMP_MAX || '85'));
   let normalConsecutif = 0;
   setInterval(() => {
     if (!state.actif) return; // en pause, rien à ajuster
+    if (controleThermiqueDesactive) return; // désactivé manuellement pour cette session (⚙ Paramètres)
     const etat = lireEtatThermiqueReel();
     if (!etat) return;
     const chaud = etat.type === 'temperature'
