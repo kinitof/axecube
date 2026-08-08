@@ -67,6 +67,10 @@ const CACHE_LOGO_VENTILO = empreinteFichier(path.join('assets', 'logo-ventilo.pn
 // pas toujours dans ce cas). Un redémarrage suffit donc à rafraîchir le cache pour
 // n'importe laquelle des 22 images.
 const CACHE_MACHINES = String(Date.now());
+// Même principe pour les logos de cube au centre du ventilateur (assets/cubes/) --
+// mêmes noms de fichiers que sur le classement en ligne (cube-p01.png..cube-p22.png),
+// pour pouvoir réutiliser directement les mêmes images sans les renommer.
+const CACHE_CUBES = String(Date.now());
 
 // --- Configuration visuelle éditable ---
 // Toutes les positions/tailles des éléments de la carte "machines" (page /machines),
@@ -4211,7 +4215,7 @@ charger();setInterval(charger,5000);
   /* Logo : enfant du ventilateur, donc tourne automatiquement avec lui (solidaire des pales).
      mix-blend-mode:screen fait disparaître son fond noir sans avoir besoin de détourage. */
   .logoVentilo{position:absolute;left:${cv.logoVentilo.left}%;top:${cv.logoVentilo.top}%;width:${cv.logoVentilo.width}%;aspect-ratio:1/1;
-    background-image:url('/assets/logo-ventilo.png?v=${CACHE_LOGO_VENTILO}');background-size:contain;background-repeat:no-repeat;
+    background-image:var(--logo-cube, url('/assets/logo-ventilo.png?v=${CACHE_LOGO_VENTILO}'));background-size:contain;background-repeat:no-repeat;
     mix-blend-mode:screen}
   @keyframes tournerVentilo{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
   @keyframes ralentirVentilo{from{transform:rotate(0deg)}to{transform:rotate(1080deg)}}
@@ -4443,7 +4447,7 @@ const NOMS_CUBE=[
   'Multi-Gemmes I','Multi-Gemmes II'
 ];
 const COULEURS_CUBE=[
-  '#8cff2e','#2e9bff','#ff3b3b','#b83bff','#2effe0','#ff9c2e','#ff2ea0','#fd5f00',
+  '#8cff2e','#2e9bff','#0a278b','#fc33b4','#2effe0','#ff9c2e','#ff2ea0','#fd5f00',
   '#2effb0','#8c2eff','#ffb02e','#ff2ee0','#c8ff2e',
   '#e8f0ff',
   'rainbow','rainbow',
@@ -4459,13 +4463,14 @@ function niveauDe(bestDiff){
   }
   return niveau;
 }
-// Renvoie {couleur, nom, niveau, rainbow, imageCarte} pour un bestDiff donné. Sous le
-// niveau 1 (< 200 de difficulté), on reste sur le vert AXECUBE et la carte par défaut --
-// pas de "faux cube".
+// Renvoie {couleur, nom, niveau, rainbow, imageCarte, imageLogo} pour un bestDiff donné.
+// Sous le niveau 1 (< 200 de difficulté), on reste sur le vert AXECUBE, la carte et le
+// logo par défaut -- pas de "faux cube".
 const CACHE_MACHINES='${CACHE_MACHINES}';
+const CACHE_CUBES='${CACHE_CUBES}';
 function infosCube(bestDiff){
   const n=niveauDe(bestDiff);
-  if(n<1) return {couleur:'#96f01f', nom:null, niveau:0, rainbow:false, imageCarte:null};
+  if(n<1) return {couleur:'#96f01f', nom:null, niveau:0, rainbow:false, imageCarte:null, imageLogo:null};
   const c=COULEURS_CUBE[n-1];
   const numero=String(n).padStart(2,'0');
   return {
@@ -4473,7 +4478,8 @@ function infosCube(bestDiff){
     nom:NOMS_CUBE[n-1],
     niveau:n,
     rainbow: c==='rainbow',
-    imageCarte:'/assets/machines/niveau-'+numero+'.png?v='+CACHE_MACHINES
+    imageCarte:'/assets/machines/niveau-'+numero+'.png?v='+CACHE_MACHINES,
+    imageLogo:'/assets/cubes/cube-p'+numero+'.png?v='+CACHE_CUBES
   };
 }
 document.getElementById('retour').href='/details'+Q;
@@ -4510,7 +4516,7 @@ function carteComplete(m, estMoi, idx, ventiloClasse){
   const page=pageActuelle.get(cle)||0;
   const cube=infosCube(m.bestDiff||0);
   const nomCubeHtml=cube.nom?'<span class="nomCube">'+cube.nom+'</span>':'';
-  const imgStyle=cube.imageCarte?('--carte-image:url(\\''+cube.imageCarte+'\\');'):'';
+  const imgStyle=(cube.imageCarte?('--carte-image:url(\\''+cube.imageCarte+'\\');'):'')+(cube.imageLogo?('--logo-cube:url(\\''+cube.imageLogo+'\\');'):'');
   return '<div class="carteMachine'+(enLigne?'':' hors-ligne')+(cube.rainbow?' rainbow-tier':'')+'"'+(idx!=null?' data-idx="'+idx+'"':'')+' style="--couleur-cube:'+cube.couleur+';'+imgStyle+'">'
     +'<div class="fondNoir"></div>'
     +'<div class="ventilo'+(ventiloClasse?' '+ventiloClasse:'')+'"><div class="logoVentilo"></div></div>'+'<button type="button" class="boutonVentilo" onclick="toggleVentilo(event)" title="Arr\u00eater/relancer le ventilateur (visuel)" aria-label="Basculer le ventilateur"></button>'
@@ -4557,7 +4563,7 @@ function carteLegere(m, idx, ventiloClasse){
   const page=pageActuelle.get(cle)||0;
   const cube=infosCube(m.bestDiff||0);
   const nomCubeHtml=cube.nom?'<span class="nomCube">'+cube.nom+'</span>':'';
-  const imgStyle=cube.imageCarte?('--carte-image:url(\\''+cube.imageCarte+'\\');'):'';
+  const imgStyle=(cube.imageCarte?('--carte-image:url(\\''+cube.imageCarte+'\\');'):'')+(cube.imageLogo?('--logo-cube:url(\\''+cube.imageLogo+'\\');'):'');
   return '<div class="carteMachine'+(enLigne?'':' hors-ligne')+(cube.rainbow?' rainbow-tier':'')+'"'+(idx!=null?' data-idx="'+idx+'"':'')+' style="--couleur-cube:'+cube.couleur+';'+imgStyle+'">'
     +'<div class="fondNoir"></div>'
     +'<div class="ventilo'+(ventiloClasse?' '+ventiloClasse:'')+'"><div class="logoVentilo"></div></div>'+'<button type="button" class="boutonVentilo" onclick="toggleVentilo(event)" title="Arr\u00eater/relancer le ventilateur (visuel)" aria-label="Basculer le ventilateur"></button>'
@@ -5091,6 +5097,26 @@ function fmtD(d){if(!d)return'—';if(d>=1e12)return(d/1e12).toFixed(2)+' T';if(
           return;
         }
         const cheminDefaut = path.join(__dirname, 'assets', 'bitaxe-board.png');
+        fs.readFile(cheminDefaut, (err2, data2) => {
+          if (err2) { res.writeHead(404); res.end(); return; }
+          res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=86400' });
+          res.end(data2);
+        });
+      });
+      return;
+    }
+    if (/^\/assets\/cubes\/cube-p(\d{2})\.png$/.test(url.pathname)) {
+      // Le logo au centre du ventilateur, par palier -- mêmes noms de fichiers que sur
+      // le classement en ligne. Repli sur le logo vert fixe si ce palier n'a pas encore
+      // son image dédiée.
+      const cheminCube = path.join(__dirname, 'assets', 'cubes', path.basename(url.pathname));
+      fs.readFile(cheminCube, (err, data) => {
+        if (!err) {
+          res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=86400' });
+          res.end(data);
+          return;
+        }
+        const cheminDefaut = path.join(__dirname, 'assets', 'logo-ventilo.png');
         fs.readFile(cheminDefaut, (err2, data2) => {
           if (err2) { res.writeHead(404); res.end(); return; }
           res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=86400' });
