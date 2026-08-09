@@ -3006,8 +3006,15 @@ function main() {
       statut de vente d'une pièce de la collection (gratuit / à venir / achat + remise),
       directement depuis ta machine. Nécessite ton mot de passe admin (configuré côté
       Netlify).
+      <div style="color:var(--mut);font-size:10.5px;margin-top:8px;line-height:1.5">
+        ⚠️ Le champ ci-dessous attend l'<b style="color:var(--white-dim)">identifiant technique du fichier</b>
+        (celui utilisé pour le nom de fichier, ex: <code style="color:var(--amber)">machine-51</code>) --
+        <b>pas</b> le nom d'affichage (ex: "Aurora Cyber" ne fonctionnera pas). Minuscules,
+        chiffres et tirets uniquement, aucun espace.
+      </div>
       <div style="display:flex;flex-direction:column;gap:6px;margin-top:10px">
-        <input type="text" id="adminItemId" placeholder="Identifiant de la pièce (ex: machine-51)"
+        <input type="text" id="adminItemId" placeholder="ex: machine-51 (pas le nom d'affichage)"
+          oninput="this.style.borderColor = /^[a-z0-9-]*$/.test(this.value) ? 'var(--line)' : '#e05a5a'"
           style="background:var(--panel2);border:1px solid var(--line);color:var(--white);padding:7px 9px;border-radius:6px;font-family:inherit;font-size:11px">
         <div style="display:flex;gap:6px;flex-wrap:wrap">
           <select id="adminStatut" onchange="basculerChampsAdminPrix()"
@@ -3117,6 +3124,11 @@ async function enregistrerOffreAdmin(){
   const mdpSaisi=document.getElementById('adminMotDePasse').value;
   const motDePasse = mdpSaisi || _motDePasseAdminSession;
   if(!itemId){ etatEl.textContent='Identifiant de pièce requis.'; etatEl.style.color='#e05a5a'; return; }
+  if(!/^[a-z0-9-]+$/i.test(itemId)){
+    etatEl.textContent='❌ Identifiant invalide -- utilise le nom technique du fichier (ex: machine-51), pas le nom d\\'affichage.';
+    etatEl.style.color='#e05a5a';
+    return;
+  }
   if(!motDePasse){ etatEl.textContent='Mot de passe admin requis.'; etatEl.style.color='#e05a5a'; return; }
   etatEl.textContent='Enregistrement…'; etatEl.style.color='var(--white-dim)';
   try{
