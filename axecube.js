@@ -129,6 +129,27 @@ const PALIERS = [
   { cle: 'legende',  nom: 'LÉGENDE',  seuil: 10000000 },
 ];
 
+// Grille des 22 cubes CPU (système loterie sur bestDiff) -- doit rester STRICTEMENT
+// identique à celle de recompenses.html / mes-recompenses.html / telecharger-media.js.
+// Sert ici à savoir quels paliers demander au serveur de récompenses.
+const SEUILS_CPU = [
+  200, 300, 500, 750, 1000, 1500, 2500, 4000,
+  6000, 10000, 15000, 25000, 40000,
+  60000,
+  100000, 150000,
+  200000,
+  300000, 400000, 500000,
+  750000, 1000000,
+];
+function niveauDeCube(bestDiff) {
+  bestDiff = Number(bestDiff) || 0;
+  let niveau = 0;
+  for (let i = 0; i < SEUILS_CPU.length; i++) {
+    if (bestDiff >= SEUILS_CPU[i]) niveau = i + 1; else break;
+  }
+  return niveau;
+}
+
 function sha256d(buf) {
   return crypto.createHash('sha256').update(
     crypto.createHash('sha256').update(buf).digest()
@@ -1377,6 +1398,124 @@ function main() {
     });
     req.on('timeout', () => req.destroy(new Error('timeout')));
     req.on('error', cb);
+  }
+
+  /* ------------------------- Récupération des récompenses ------------------------- *
+   * Télécharge automatiquement, dans assets/machines/ et assets/cubes/, les images
+   * correspondant aux paliers RÉELLEMENT atteints par cette machine (vérifié côté
+   * serveur via le vrai bestDiff enregistré, jamais celui annoncé localement). Ne
+   * retélécharge jamais un fichier déjà présent -- rapide au second appel. */
+  function recupererUnMedia(type, niveau, cb) {
+    if (!leaderboardUrl) return cb(new Error('classement désactivé'));
+    const numero = String(niveau).padStart(2, '0');
+    const url = `${leaderboardUrl}/.netlify/functions/telecharger-media?machineId=${encodeURIComponent(machineId)}&type=${type}&niveau=${niveau}`;
+    const req = https.get(url, { timeout: 10000, headers: { 'User-Agent': 'axecube/1.0' } }, (res) => {
+      const morceaux = [];
+      res.on('data', (c) => morceaux.push(c));
+      res.on('end', () => {
+        const corps = Buffer.concat(morceaux);
+        if (res.statusCode !== 200) {
+          let raison = 'HTTP ' + res.statusCode;
+          try { raison = JSON.parse(corps.toString('utf8')).erreur || raison; } catch { /* corps non-JSON */ }
+          return cb(new Error(raison));
+        }
+        cb(null, corps);
+      });
+    });
+    req.on('timeout', () => req.destroy(new Error('timeout')));
+    req.on('error', cb);
+  }
+
+  /** Liste les pièces premium ACTUELLEMENT marquées gratuites par l'admin (via
+   *  admin-offres.js) -- lecture publique, pas de vérification de palier ici : un
+   *  cadeau explicite du créateur ne dépend jamais de la performance de minage,
+   *  contrairement aux 22 cartes Genèse. */
+  function listerPremiumGratuits(cb) {
+    if (!leaderboardUrl) return cb(null, []);
+    const url = `${leaderboardUrl}/.netlify/functions/offres-premium`;
+    const req = https.get(url, { timeout: 10000, headers: { 'User-Agent': 'axecube/1.0' } }, (res) => {
+      const morceaux = [];
+      res.on('data', (c) => morceaux.push(c));
+      res.on('end', () => {
+        try {
+          const j = JSON.parse(Buffer.concat(morceaux).toString('utf8'));
+          const offres = j.offres || {};
+          const gratuits = Object.keys(offres).filter((id) => offres[id] && offres[id].statut === 'gratuit');
+          cb(null, gratuits);
+        } catch (e) { cb(e, []); }
+      });
+    });
+    req.on('timeout', () => req.destroy(new Error('timeout')));
+    req.on('error', () => cb(null, [])); // classement indisponible -- pas bloquant, juste 0 pièce premium ce coup-ci
+  }
+
+  function recupererUnPremiumGratuit(itemId, cb) {
+    if (!leaderboardUrl) return cb(new Error('classement désactivé'));
+    const url = `${leaderboardUrl}/.netlify/functions/telecharger-premium-gratuit?itemId=${encodeURIComponent(itemId)}`;
+    const req = https.get(url, { timeout: 10000, headers: { 'User-Agent': 'axecube/1.0' } }, (res) => {
+      const morceaux = [];
+      res.on('data', (c) => morceaux.push(c));
+      res.on('end', () => {
+        const corps = Buffer.concat(morceaux);
+        if (res.statusCode !== 200) {
+          let raison = 'HTTP ' + res.statusCode;
+          try { raison = JSON.parse(corps.toString('utf8')).erreur || raison; } catch { /* corps non-JSON */ }
+          return cb(new Error(raison));
+        }
+        cb(null, corps);
+      });
+    });
+    req.on('timeout', () => req.destroy(new Error('timeout')));
+    req.on('error', cb);
+  }
+
+  function recupererRecompenses(cb) {
+    const niveauGagne = niveauDeCube(state.bestDiff);
+    listerPremiumGratuits((_errPremium, itemsPremiumGratuits) => {
+      const taches = [];
+      for (let n = 1; n <= niveauGagne; n++) {
+        taches.push({ type: 'machine', niveau: n, dossier: 'machines', prefixe: 'niveau' });
+        taches.push({ type: 'cube', niveau: n, dossier: 'cubes', prefixe: 'cube-p' });
+      }
+      // Pièces premium actuellement offertes gratuitement -- dossier séparé (assets/premium/)
+      // pour ne jamais se mélanger avec la collection Genèse des 22 paliers.
+      itemsPremiumGratuits.forEach((itemId) => {
+        taches.push({ type: 'premium', itemId, dossier: 'premium', nomFichier: `${itemId}.png` });
+      });
+
+      const resultat = { telecharges: [], dejaPresents: [], echecs: [], niveauGagne };
+      let restantes = taches.length;
+      if (restantes === 0) return cb(null, resultat);
+      taches.forEach((tache) => {
+        const nomFichier = tache.nomFichier || `${tache.prefixe}-${String(tache.niveau).padStart(2, '0')}.png`;
+        const cheminLocal = path.join(__dirname, 'assets', tache.dossier, nomFichier);
+        const etiquette = tache.type === 'premium' ? `premium ${tache.itemId}` : `${tache.type} ${String(tache.niveau).padStart(2, '0')}`;
+        if (fs.existsSync(cheminLocal)) {
+          resultat.dejaPresents.push(etiquette);
+          if (--restantes === 0) cb(null, resultat);
+          return;
+        }
+        const surReponse = (err, donnees) => {
+          if (err) {
+            resultat.echecs.push(etiquette + ' (' + err.message + ')');
+          } else {
+            try {
+              fs.mkdirSync(path.dirname(cheminLocal), { recursive: true });
+              fs.writeFileSync(cheminLocal, donnees);
+              resultat.telecharges.push(etiquette);
+            } catch (e) {
+              resultat.echecs.push(etiquette + ' (écriture: ' + e.message + ')');
+            }
+          }
+          if (--restantes === 0) cb(null, resultat);
+        };
+        if (tache.type === 'premium') {
+          recupererUnPremiumGratuit(tache.itemId, surReponse);
+        } else {
+          recupererUnMedia(tache.type, tache.niveau, surReponse);
+        }
+      });
+    });
   }
 
   const SOURCES = [
@@ -2708,6 +2847,7 @@ function main() {
         <button class="mini-btn" id="phonebtn" onclick="lienTelephone()" title="Lien pour votre téléphone" style="display:none">📱</button>
         <button class="mini-btn" id="exportbtn" onclick="exporterLogs()" title="Exporter les logs (.txt)">⬇</button>
         <button class="mini-btn" onclick="location.href='/decouvrir'+Q" title="Découvrir le minage Bitcoin">?</button>
+        <button class="mini-btn" onclick="recupererRecompenses()" title="Récupérer les images des paliers gagnés">🎁</button>
         <button class="mini-btn" onclick="ouvrirPopupParametres()" title="Paramètres" style="font-size:19px">⚙</button>
         <button class="mini-btn" onclick="location.href='/visite'+Q" title="Visite guidée interactive">🧭</button>
       </div>
@@ -2887,6 +3027,30 @@ function fermerPopupDon(){document.getElementById('donPopup').style.display='non
 function ouvrirPopupParametres(){
   document.getElementById('paramPopup').style.display='flex';
   majAffichageThermique();
+}
+async function recupererRecompenses(){
+  const btn=[...document.querySelectorAll('.mini-btn')].find(b=>b.title==='Récupérer les images des paliers gagnés');
+  const texteOriginal=btn?btn.textContent:'';
+  if(btn){btn.textContent='⏳';btn.disabled=true;}
+  try{
+    const r=await fetch('/api/recuperer-recompenses'+Q);
+    const j=await r.json();
+    if(!j.ok){ alert('Erreur : '+(j.erreur||'inconnue')); return; }
+    if(j.niveauGagne<1){
+      alert('Aucun palier atteint pour l\\'instant -- continuez à miner !');
+    } else if(j.telecharges.length){
+      alert('🎁 '+j.telecharges.length+' image(s) récupérée(s) avec succès !\\n\\n'+j.telecharges.join('\\n')
+        +(j.echecs.length?'\\n\\n⚠️ Échecs :\\n'+j.echecs.join('\\n'):''));
+    } else if(j.echecs.length){
+      alert('⚠️ Aucune nouvelle image récupérée.\\n\\nÉchecs :\\n'+j.echecs.join('\\n'));
+    } else {
+      alert('✅ Toutes vos récompenses sont déjà installées (palier '+j.niveauGagne+').');
+    }
+  }catch(e){
+    alert('Erreur réseau, réessayez.');
+  }finally{
+    if(btn){btn.textContent=texteOriginal||'🎁';btn.disabled=false;}
+  }
 }
 function majAffichageThermique(){
   const actif = dernierStats ? (dernierStats.controleThermiqueActif!==false) : true;
@@ -5458,6 +5622,22 @@ function fmtD(d){if(!d)return'—';if(d>=1e12)return(d/1e12).toFixed(2)+' T';if(
       log('ok', '🌡️  Contrôle thermique automatique réactivé.');
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ controleThermiqueActif: true }));
+    } else if (url.pathname === '/api/recuperer-recompenses') {
+      recupererRecompenses((err, resultat) => {
+        if (err) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: false, erreur: err.message }));
+          return;
+        }
+        if (resultat.telecharges.length) {
+          log('ok', `🎁 Récompenses récupérées : ${resultat.telecharges.join(', ')}.`);
+        }
+        if (resultat.echecs.length) {
+          log('warn', `⚠️  Certaines récompenses n'ont pas pu être récupérées : ${resultat.echecs.join(', ')}.`);
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(Object.assign({ ok: true }, resultat)));
+      });
     } else {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(DASHBOARD_HTML);
