@@ -2867,7 +2867,7 @@ function main() {
     <canvas id="spark" width="360" height="44"></canvas>
     <div class="record">
       <div class="lbl">${t.ui.record}</div>
-      <div class="val"><span id="best">—</span><span class="cup-big">🏆</span><span class="planete" id="planeteBtn" onclick="location.href=LEADER_URL+(LEADER_URL.includes('?')?'&':'?')+'back='+encodeURIComponent(location.origin+'/details'+Q)" title="Voir le classement communautaire" style="display:none">🌍</span></div>
+      <div class="val"><span id="best">—</span><span class="cup-big">🏆</span><span class="planete" id="planeteBtn" onclick="location.href=LEADER_URL+(LEADER_URL.includes('?')?'&':'?')+'back='+encodeURIComponent(location.origin+'/details'+Q)" title="Voir le classement communautaire" style="display:none">🌍</span><span class="planete" id="boutiqueBtn" onclick="window.open(LEADER_URL+'/boutique.html','_blank')" title="Découvrir la collection Premium" style="display:none">🛒</span></div>
     </div>
     <button class="badgeChip" id="badgeChip" style="display:none" onclick="ouvrirPopupPalier(PALIERS_CLIENT[dernierPalierIdx],true)">
       <span id="badgeChipIcone">🥉</span>
@@ -3326,6 +3326,7 @@ let leadTick=0;
 async function majLead(s){
   const box=document.getElementById('leadPreview');
   document.getElementById('planeteBtn').style.display=LEADER_URL?'inline-block':'none';
+  document.getElementById('boutiqueBtn').style.display=LEADER_URL?'inline-block':'none';
   document.getElementById('classementBandeau').style.display=LEADER_URL?'block':'none';
   if(!LEADER_URL||!s){box.style.display='none';return;}
   leadTick++;
