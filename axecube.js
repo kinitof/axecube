@@ -3002,6 +3002,36 @@ function main() {
       <button class="donPopupFermer" id="btnThermiqueToggle" onclick="basculerControleThermique()" style="color:var(--amber);border-color:var(--amber-faint)">…</button>
     </div>
     <div class="donPopupTexte" style="margin-top:16px;border-top:1px solid var(--line);padding-top:14px">
+      <b style="color:var(--amber)">🛒 Gestion Boutique Premium (admin)</b> — définis le
+      statut de vente d'une pièce de la collection (gratuit / à venir / achat + remise),
+      directement depuis ta machine. Nécessite ton mot de passe admin (configuré côté
+      Netlify).
+      <div style="display:flex;flex-direction:column;gap:6px;margin-top:10px">
+        <input type="text" id="adminItemId" placeholder="Identifiant de la pièce (ex: machine-51)"
+          style="background:var(--panel2);border:1px solid var(--line);color:var(--white);padding:7px 9px;border-radius:6px;font-family:inherit;font-size:11px">
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <select id="adminStatut" onchange="basculerChampsAdminPrix()"
+            style="background:var(--panel2);border:1px solid var(--line);color:var(--white);padding:7px 9px;border-radius:6px;font-family:inherit;font-size:11px">
+            <option value="a_venir">À venir</option>
+            <option value="gratuit">Gratuit</option>
+            <option value="achat">Achat</option>
+          </select>
+          <div id="adminChampsPrix" style="display:none;gap:6px">
+            <input type="number" id="adminPrix" placeholder="Prix €" min="0"
+              style="width:80px;background:var(--panel2);border:1px solid var(--line);color:var(--white);padding:7px 9px;border-radius:6px;font-family:inherit;font-size:11px">
+            <input type="number" id="adminRemise" placeholder="Remise %" min="0" max="90"
+              style="width:80px;background:var(--panel2);border:1px solid var(--line);color:var(--white);padding:7px 9px;border-radius:6px;font-family:inherit;font-size:11px">
+          </div>
+        </div>
+        <input type="password" id="adminMotDePasse" placeholder="Mot de passe admin"
+          style="background:var(--panel2);border:1px solid var(--line);color:var(--white);padding:7px 9px;border-radius:6px;font-family:inherit;font-size:11px">
+      </div>
+      <div id="adminBoutiqueEtat" style="font-size:11px;margin-top:8px;min-height:16px"></div>
+    </div>
+    <div class="donPopupActions">
+      <button class="donPopupFermer" onclick="enregistrerOffreAdmin()" style="color:var(--amber);border-color:var(--amber-faint)">💾 Enregistrer cette offre</button>
+    </div>
+    <div class="donPopupTexte" style="margin-top:16px;border-top:1px solid var(--line);padding-top:14px">
       <b style="color:var(--amber)">⚖ Solo Split</b> — uniquement sur SoloPool.com. Dose le
       ratio entre minage solo (jackpot complet) et minage pool (petits paiements réguliers),
       part par part. <span id="soloSplitEtat" style="color:var(--white-dim)"></span>
@@ -3069,6 +3099,46 @@ async function basculerControleThermique(){
     if(dernierStats) dernierStats.controleThermiqueActif = j.controleThermiqueActif;
     majAffichageThermique();
   }catch(e){}
+}
+function basculerChampsAdminPrix(){
+  const statut=document.getElementById('adminStatut').value;
+  document.getElementById('adminChampsPrix').style.display = statut==='achat' ? 'flex' : 'none';
+}
+// Mémorisé juste le temps de cette page ouverte -- jamais écrit sur disque, jamais
+// dans localStorage. Rouvrir AXECUBE (ou recharger la page) le fait oublier, par sécurité.
+let _motDePasseAdminSession='';
+async function enregistrerOffreAdmin(){
+  const etatEl=document.getElementById('adminBoutiqueEtat');
+  if(!LEADER_URL){ etatEl.textContent='Classement communautaire non configuré.'; etatEl.style.color='#e05a5a'; return; }
+  const itemId=document.getElementById('adminItemId').value.trim();
+  const statut=document.getElementById('adminStatut').value;
+  const prix=document.getElementById('adminPrix').value;
+  const remise=document.getElementById('adminRemise').value;
+  const mdpSaisi=document.getElementById('adminMotDePasse').value;
+  const motDePasse = mdpSaisi || _motDePasseAdminSession;
+  if(!itemId){ etatEl.textContent='Identifiant de pièce requis.'; etatEl.style.color='#e05a5a'; return; }
+  if(!motDePasse){ etatEl.textContent='Mot de passe admin requis.'; etatEl.style.color='#e05a5a'; return; }
+  etatEl.textContent='Enregistrement…'; etatEl.style.color='var(--white-dim)';
+  try{
+    const r=await fetch(LEADER_URL+'/.netlify/functions/admin-offres', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({motDePasse, itemId, statut, prix, remise})
+    });
+    const j=await r.json();
+    if(j.ok){
+      _motDePasseAdminSession=motDePasse; // évite de la ressaisir pour la prochaine pièce, cette session
+      document.getElementById('adminMotDePasse').value='';
+      etatEl.textContent='✅ Enregistré : '+itemId+' → '+statut;
+      etatEl.style.color='var(--amber)';
+    } else {
+      etatEl.textContent='❌ '+(j.erreur||'erreur inconnue');
+      etatEl.style.color='#e05a5a';
+    }
+  }catch(e){
+    etatEl.textContent='❌ Erreur réseau.';
+    etatEl.style.color='#e05a5a';
+  }
 }
 function fermerPopupParametres(){document.getElementById('paramPopup').style.display='none';}
 function celebrerBloc(permanent){
