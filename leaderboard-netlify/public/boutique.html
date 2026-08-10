@@ -78,6 +78,21 @@ async function chargerTout(){
     grille.innerHTML = '<div class="vide">La collection Premium arrive bientôt.</div>';
     return;
   }
+  // machineId transmis par le dashboard AXECUBE (bouton 🛒) -- indispensable pour que
+  // l'obtention enregistre la possession sur LA BONNE machine. Sans lui, impossible
+  // d'obtenir quoi que ce soit (l'image n'est jamais téléchargée en tant que fichier --
+  // seule l'autorisation d'accès, liée à une machine précise, est enregistrée).
+  const machineId = new URLSearchParams(location.search).get('machineId') || '';
+  let possedees = new Set();
+  if(machineId){
+    try{
+      const r = await fetch('/.netlify/functions/mes-possessions-premium?machineId='+encodeURIComponent(machineId));
+      possedees = new Set((await r.json()).items || []);
+    }catch(e){ /* pas grave, on affichera juste tout comme "à obtenir" */ }
+  } else {
+    grille.insertAdjacentHTML('beforebegin', '<div class="vide" style="padding:14px 20px;margin-top:20px;border:1px solid var(--amber);border-radius:10px;color:var(--amber);font-size:12px">'
+      +'⚠️ Ouvre cette boutique depuis le bouton 🛒 de ton dashboard AXECUBE : sans ça, impossible d\'associer ce que tu obtiens à ta machine.</div>');
+  }
   grille.innerHTML = items.map(id => {
     const offre = offres[id];
     const classeGratuit = offre && offre.statut === 'gratuit' ? ' gratuit' : '';
@@ -91,19 +106,40 @@ async function chargerTout(){
       </div>
       <div class="carteInfo">
         <div class="carteNom">${id}</div>
-        ${rendrePied(id, offre)}
-        <div class="noteRestriction">Nécessite d'avoir atteint le palier minimum requis pour l'installer, même après achat (les pièces gratuites sont sans condition).</div>
+        ${rendrePied(id, offre, machineId, possedees.has(id))}
+        <div class="noteRestriction">Nécessite d'avoir atteint le palier minimum requis pour l'installer, même après achat (les pièces gratuites sont sans condition). L'image n'est jamais téléchargée en tant que fichier -- seule l'autorisation d'accès est enregistrée, activable depuis ⚙ Paramètres sur ton dashboard.</div>
       </div>
     </div>`;
   }).join('');
 }
 
-function rendrePied(id, offre){
+async function obtenirGratuit(id, machineId, btn){
+  if(!machineId){ alert('Ouvre cette boutique depuis le bouton 🛒 de ton dashboard AXECUBE d\'abord.'); return; }
+  btn.disabled = true; btn.textContent = '⏳...';
+  try{
+    const r = await fetch('/.netlify/functions/acquerir-premium-gratuit?itemId='+id+'&machineId='+encodeURIComponent(machineId));
+    const j = await r.json();
+    if(!r.ok || !j.ok){ btn.textContent = '⚠️ Échec'; btn.title = j.erreur || 'erreur inconnue'; return; }
+    btn.textContent = '✓ Obtenue';
+    btn.classList.remove('actif');
+    btn.title = 'Active-la depuis ⚙ Paramètres sur ton dashboard AXECUBE';
+  }catch(e){
+    btn.disabled = false; btn.textContent = 'Obtenir'; btn.title = 'Erreur réseau, réessaie';
+  }
+}
+
+function rendrePied(id, offre, machineId, dejaPossedee){
   const statut = offre ? offre.statut : 'a_venir';
   if(statut === 'gratuit'){
+    if(dejaPossedee){
+      return `<div class="cartePied">
+        <div class="prix" style="color:var(--green)">Gratuit</div>
+        <button class="btn" disabled title="Active-la depuis ⚙ Paramètres sur ton dashboard AXECUBE">✓ Obtenue</button>
+      </div>`;
+    }
     return `<div class="cartePied">
       <div class="prix" style="color:var(--green)">Gratuit</div>
-      <a class="btn actif" href="/.netlify/functions/telecharger-premium-gratuit?itemId=${id}" download>Télécharger</a>
+      <button class="btn actif" onclick="obtenirGratuit('${id}','${machineId}',this)">Obtenir</button>
     </div>`;
   }
   if(statut === 'achat'){

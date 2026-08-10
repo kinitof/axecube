@@ -1474,6 +1474,98 @@ function main() {
     req.on('error', cb);
   }
 
+  /** Liste les pièces Premium RÉELLEMENT possédées par CETTE machine (registre serveur,
+   *  alimenté quand un téléchargement a été fait depuis boutique.html avec ce machineId).
+   *  C'est ce registre, et lui seul, qui fait foi pour l'activation en skin -- jamais le
+   *  simple fait qu'une pièce soit actuellement gratuite en boutique (qui peut changer
+   *  à tout moment sans retirer ce qu'un mineur a déjà obtenu). */
+  function listerPossessionsPremium(cb) {
+    if (!leaderboardUrl) return cb(null, []);
+    const url = `${leaderboardUrl}/.netlify/functions/mes-possessions-premium?machineId=${encodeURIComponent(machineId)}`;
+    const req = https.get(url, { timeout: 10000, headers: { 'User-Agent': 'axecube/1.0' } }, (res) => {
+      const morceaux = [];
+      res.on('data', (c) => morceaux.push(c));
+      res.on('end', () => {
+        try {
+          const j = JSON.parse(Buffer.concat(morceaux).toString('utf8'));
+          cb(null, Array.isArray(j.items) ? j.items : []);
+        } catch (e) { cb(e, []); }
+      });
+    });
+    req.on('timeout', () => req.destroy(new Error('timeout')));
+    req.on('error', () => cb(null, []));
+  }
+
+  /** Récupère l'image complète d'une pièce déjà POSSÉDÉE par cette machine (indépendamment
+   *  de son statut actuel en boutique -- une pièce obtenue gratuitement hier reste
+   *  accessible même si elle passe en "achat" aujourd'hui). */
+  function recupererUnPremiumPossede(itemId, cb) {
+    if (!leaderboardUrl) return cb(new Error('classement désactivé'));
+    const url = `${leaderboardUrl}/.netlify/functions/telecharger-premium-possede?itemId=${encodeURIComponent(itemId)}&machineId=${encodeURIComponent(machineId)}`;
+    const req = https.get(url, { timeout: 10000, headers: { 'User-Agent': 'axecube/1.0' } }, (res) => {
+      const morceaux = [];
+      res.on('data', (c) => morceaux.push(c));
+      res.on('end', () => {
+        const corps = Buffer.concat(morceaux);
+        if (res.statusCode !== 200) {
+          let raison = 'HTTP ' + res.statusCode;
+          try { raison = JSON.parse(corps.toString('utf8')).erreur || raison; } catch { /* corps non-JSON */ }
+          return cb(new Error(raison));
+        }
+        cb(null, corps);
+      });
+    });
+    req.on('timeout', () => req.destroy(new Error('timeout')));
+    req.on('error', cb);
+  }
+
+  /** Active un skin Premium : ne fait JAMAIS de copie locale de l'image -- seule
+   *  l'AUTORISATION (state.skinPremiumActif, un simple identifiant texte) est stockée sur
+   *  cette machine. L'image elle-même reste hébergée en ligne et n'est jamais écrite sur
+   *  disque ; elle est chargée à la demande via le proxy /assets/premium/<id>.png (voir
+   *  route serveur), qui revérifie la possession à chaque affichage. On vérifie quand
+   *  même la possession ici, une fois, pour renvoyer tout de suite un message clair côté
+   *  interface plutôt que de laisser échouer silencieusement au premier affichage. */
+  function activerSkinPremiumDirect(itemId, cb) {
+    if (!/^[a-z0-9-]{1,60}$/i.test(itemId || '')) return cb(new Error('identifiant invalide'));
+    listerPossessionsPremium((_err, possedees) => {
+      if (!possedees.includes(itemId)) {
+        return cb(new Error('pièce non possédée -- obtiens-la d\'abord depuis la boutique (bouton 🛒)'));
+      }
+      state.skinPremiumActif = itemId;
+      stateDirty = true;
+      saveState();
+      soumettreRecordLeaderboard(false); // propage immédiatement au classement public
+      cb(null, {});
+    });
+  }
+
+  /** Revérifie périodiquement que le skin actif est TOUJOURS possédé par cette machine.
+   *  Nécessaire pour le jour où une pièce peut être revendue/transférée (Mint + marché
+   *  secondaire) : si le registre de possession ne la liste plus pour ce machineId (parce
+   *  qu'elle a changé de propriétaire), le skin est retiré automatiquement -- jamais
+   *  affiché sans possession valide, même si le fichier PNG traîne encore localement. */
+  function revaliderSkinPremiumActif() {
+    if (!state.skinPremiumActif) return;
+    const skinActuel = state.skinPremiumActif;
+    listerPossessionsPremium((err, possedees) => {
+      if (err) return; // classement injoignable -- on ne retire rien sur un simple souci réseau
+      if (state.skinPremiumActif !== skinActuel) return; // a changé entre-temps, rien à faire
+      if (!possedees.includes(skinActuel)) {
+        state.skinPremiumActif = null;
+        stateDirty = true;
+        saveState();
+        log('warn', `🎨 Skin Premium "${skinActuel}" retiré automatiquement -- cette machine n'en est plus propriétaire (revente/transfert détecté). Retour au palier Genèse.`);
+        soumettreRecordLeaderboard(false);
+      }
+    });
+  }
+  // Vérifie au démarrage (après un court délai, le temps que leaderboardUrl/machineId
+  // soient bien prêts), puis toutes les 10 minutes -- pas besoin de plus fréquent, la
+  // perte de possession n'est jamais instantanée (il faut un Mint + une vente).
+  setTimeout(revaliderSkinPremiumActif, 15000);
+  setInterval(revaliderSkinPremiumActif, 600000);
+
   function recupererRecompenses(cb) {
     const niveauGagne = niveauDeCube(state.bestDiff);
     listerPremiumGratuits((_errPremium, itemsPremiumGratuits) => {
@@ -1839,15 +1931,12 @@ function main() {
     }
   }
   chargerBanque(reseauCle);
-  // Recharge le skin Premium choisi la dernière fois -- vérifie qu'il existe encore
-  // physiquement dans assets/premium/ avant de le réactiver (l'utilisateur a pu supprimer
-  // le fichier entre-temps ; dans ce cas on retombe silencieusement sur le palier Genèse).
+  // Recharge le skin Premium choisi la dernière fois -- juste un identifiant texte, aucun
+  // fichier à vérifier (l'image n'est jamais stockée localement). La revalidation de
+  // possession (revaliderSkinPremiumActif, ~15s après démarrage) confirmera ensuite que
+  // cette machine possède toujours réellement la pièce.
   if (skinPremiumSauvegarde && /^[a-z0-9-]{1,60}$/i.test(skinPremiumSauvegarde)) {
-    try {
-      if (fs.existsSync(path.join(__dirname, 'assets', 'premium', skinPremiumSauvegarde + '.png'))) {
-        state.skinPremiumActif = skinPremiumSauvegarde;
-      }
-    } catch { /* pas grave, reste sans skin */ }
+    state.skinPremiumActif = skinPremiumSauvegarde;
   }
   log('info', t.recordCharge(state.bestDiff > 0 ? formatDiff(state.bestDiff) : '—', state.accepted, formatHashrate(state.totalHashes).replace('/s', '')));
 
@@ -2888,7 +2977,7 @@ function main() {
     <canvas id="spark" width="360" height="44"></canvas>
     <div class="record">
       <div class="lbl">${t.ui.record}</div>
-      <div class="val"><span id="best">—</span><span class="cup-big">🏆</span><span class="planete" id="planeteBtn" onclick="location.href=LEADER_URL+(LEADER_URL.includes('?')?'&':'?')+'back='+encodeURIComponent(location.origin+'/details'+Q)" title="Voir le classement communautaire" style="display:none">🌍</span><span class="planete" id="boutiqueBtn" onclick="window.open(LEADER_URL+'/boutique.html','_blank')" title="Découvrir la collection Premium" style="display:none">🛒</span></div>
+      <div class="val"><span id="best">—</span><span class="cup-big">🏆</span><span class="planete" id="planeteBtn" onclick="location.href=LEADER_URL+(LEADER_URL.includes('?')?'&':'?')+'back='+encodeURIComponent(location.origin+'/details'+Q)" title="Voir le classement communautaire" style="display:none">🌍</span><span class="planete" id="boutiqueBtn" onclick="window.open(LEADER_URL+'/boutique.html?machineId='+encodeURIComponent(MACHINE_ID),'_blank')" title="Découvrir la collection Premium" style="display:none">🛒</span></div>
     </div>
     <button class="badgeChip" id="badgeChip" style="display:none" onclick="ouvrirPopupPalier(PALIERS_CLIENT[dernierPalierIdx],true)">
       <span id="badgeChipIcone">🥉</span>
@@ -3064,8 +3153,10 @@ function main() {
       l'apparence de <b style="color:var(--white-dim)">ta</b> carte affichée ici. Ton vrai
       palier Genèse (cube gagné, couleur, effet arc-en-ciel) n'est <b style="color:var(--amber)">jamais
       modifié</b> par ce choix, et ta machine des récompenses continue de figurer normalement
-      sur "Mes récompenses gagnées". Seules les pièces Premium <b style="color:var(--white-dim)">déjà
-      téléchargées</b> sur cette machine (depuis la boutique) apparaissent ci-dessous.
+      sur "Mes récompenses gagnées". Choisis parmi les pièces que tu <b style="color:var(--white-dim)">possèdes
+      réellement</b> (obtenues via le bouton 🛒 boutique) -- l'image n'est <b style="color:var(--amber)">jamais
+      enregistrée sur ton disque</b>, elle reste chargée à la demande depuis le service en
+      ligne, qui revérifie ta possession à chaque fois (utile le jour où tu revends la pièce).
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">
         <select id="skinPremiumSelect"
           style="flex:1;min-width:160px;background:var(--panel2);border:1px solid var(--line);color:var(--white);padding:7px 9px;border-radius:6px;font-family:inherit;font-size:11px">
@@ -3075,7 +3166,7 @@ function main() {
       <div id="skinPremiumEtat" style="font-size:11px;margin-top:8px;min-height:16px;color:var(--white-dim)"></div>
     </div>
     <div class="donPopupActions">
-      <button class="donPopupFermer" onclick="appliquerSkinPremium()" style="color:var(--amber);border-color:var(--amber-faint)">✨ Utiliser ce skin</button>
+      <button class="donPopupFermer" onclick="appliquerSkinPremium()" style="color:var(--amber);border-color:var(--amber-faint)">✨ Activer ce skin</button>
       <button class="donPopupFermer" onclick="retirerSkinPremium()">↩️ Revenir au palier Genèse</button>
     </div>
     <div class="donPopupTexte" style="margin-top:16px;border-top:1px solid var(--line);padding-top:14px">
@@ -3114,20 +3205,21 @@ async function chargerSkinPremiumLocal(){
   const etat=document.getElementById('skinPremiumEtat');
   if(!sel) return;
   try{
-    const [rItems,rDetails]=await Promise.all([
-      fetch('/api/premium-locaux'+Q).then(r=>r.json()).catch(()=>({items:[]})),
+    const [rDispo,rDetails]=await Promise.all([
+      fetch('/api/premium-disponibles'+Q).then(r=>r.json()).catch(()=>({items:[]})),
       fetch('/api/details'+Q).then(r=>r.ok?r.json():null).catch(()=>null)
     ]);
     const actif=(rDetails&&rDetails.skinPremiumActif)||'';
+    const possedees=(rDispo.items||[]).slice().sort();
     sel.innerHTML='<option value="">Aucun (palier Genèse)</option>'
-      +(rItems.items||[]).map(id=>'<option value="'+id+'"'+(id===actif?' selected':'')+'>'+id+'</option>').join('');
+      +possedees.map(id=>'<option value="'+id+'"'+(id===actif?' selected':'')+'>'+id+'</option>').join('');
     etat.textContent=actif?('Skin actif actuellement : '+actif):'Aucun skin Premium actif -- affichage du palier Genèse normal.';
     etat.style.color=actif?'var(--amber)':'var(--white-dim)';
-    if(!rItems.items||!rItems.items.length){
-      etat.textContent='Aucune pièce Premium téléchargée sur cette machine pour l\\'instant -- va sur la boutique pour en récupérer une.';
+    if(!possedees.length){
+      etat.textContent='Tu ne possèdes aucune pièce Premium pour l\\'instant -- obtiens-en une depuis le bouton 🛒.';
     }
   }catch(e){
-    etat.textContent='⚠️ Impossible de charger la liste des pièces Premium locales.';
+    etat.textContent='⚠️ Impossible de charger la liste des pièces Premium.';
     etat.style.color='#e05a5a';
   }
 }
@@ -3136,12 +3228,14 @@ async function appliquerSkinPremium(){
   const etat=document.getElementById('skinPremiumEtat');
   const id=sel?sel.value:'';
   if(!id){ etat.textContent='Choisis d\\'abord une pièce dans la liste (ou utilise "Revenir au palier Genèse" pour retirer un skin déjà actif).'; etat.style.color='#e0a05a'; return; }
-  etat.textContent='⏳ Application en cours...'; etat.style.color='var(--white-dim)';
+  etat.textContent='⏳ Activation en cours (récupération interne si besoin)...'; etat.style.color='var(--white-dim)';
   try{
-    const r=await fetch('/api/skin-premium?id='+encodeURIComponent(id)+(Q?'&'+Q.slice(1):''));
+    // Une seule route : télécharge en interne (si pas déjà présent) PUIS active --
+    // aucun fichier ne passe par le dossier Téléchargements du navigateur.
+    const r=await fetch('/api/activer-skin-premium?id='+encodeURIComponent(id)+(Q?'&'+Q.slice(1):''));
     const j=await r.json();
     if(!r.ok||!j.ok){ etat.textContent='⚠️ '+(j.erreur||'échec inconnu'); etat.style.color='#e05a5a'; return; }
-    etat.textContent='✅ Skin "'+id+'" appliqué -- ton vrai palier Genèse n\\'a pas changé.';
+    etat.textContent='✅ Skin "'+id+'" activé -- ton vrai palier Genèse n\\'a pas changé.';
     etat.style.color='var(--amber)';
     tick();
   }catch(e){ etat.textContent='⚠️ Erreur réseau.'; etat.style.color='#e05a5a'; }
@@ -3263,6 +3357,7 @@ async function appliquerSoloSplit(){
   try{await fetch('/api/solo-split?n='+n+(Q?'&token='+TOK:''));}catch(e){}
 }
 const LEADER_URL=${JSON.stringify(leaderboardUrl || '')};
+const MACHINE_ID=${JSON.stringify(machineId || '')};
 const hist=[];let curThreads=0,maxThreads=1;let pipWin=null,pipDoc=null;let changementEnCours=false;
 let adresseCourante='',lanCourant=null;
 function exporterLogs(){
@@ -4117,6 +4212,7 @@ setInterval(majSwarm,6000);majSwarm();
 <script>
 const TOK=${JSON.stringify(jeton || '')};const Q=TOK?('?token='+TOK):'';
 const LEADER_URL=${JSON.stringify(leaderboardUrl || '')};
+const MACHINE_ID=${JSON.stringify(machineId || '')};
 let T={};
 function fmtHR(h){if(!h)return'0 H/s';if(h>=1e12)return(h/1e12).toFixed(2)+' TH/s';if(h>=1e9)return(h/1e9).toFixed(2)+' GH/s';
   if(h>=1e6)return(h/1e6).toFixed(2)+' MH/s';if(h>=1e3)return(h/1e3).toFixed(2)+' kH/s';return h.toFixed(0)+' H/s'}
@@ -5606,32 +5702,47 @@ function fmtD(d){if(!d)return'—';if(d>=1e12)return(d/1e12).toFixed(2)+' T';if(
       return;
     }
     if (/^\/assets\/premium\/([a-z0-9-]{1,60})\.png$/i.test(url.pathname)) {
-      // Image complète d'une pièce Premium déjà téléchargée localement par l'utilisateur
-      // (via boutique.html / telecharger-premium-gratuit.js). Pas de repli par défaut ici
-      // -- si le fichier n'existe pas localement, 404 tout simplement (l'utilisateur ne
-      // possède pas/plus cette pièce sur cette machine).
-      const cheminPremium = path.join(__dirname, 'assets', 'premium', path.basename(url.pathname));
-      fs.readFile(cheminPremium, (err, data) => {
-        if (err) { res.writeHead(404); res.end(); return; }
-        res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=86400' });
-        res.end(data);
+      // Image d'un skin Premium possédé -- JAMAIS écrite sur disque : chargée à la demande
+      // depuis le service en ligne (telecharger-premium-possede.js, qui revérifie la
+      // possession à chaque appel). Ce proxy garantit que seule une AUTORISATION existe
+      // localement (state.skinPremiumActif), jamais l'image elle-même -- indispensable
+      // pour qu'une revente future coupe l'accès immédiatement, sans avoir à supprimer un
+      // quelconque fichier sur l'ordinateur du précédent propriétaire.
+      const itemId = path.basename(url.pathname, '.png');
+      recupererUnPremiumPossede(itemId, (err, donnees) => {
+        if (err) { res.writeHead(403, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ erreur: err.message })); return; }
+        // Cache court côté navigateur seulement (jamais sur disque) -- évite de re-solliciter
+        // le service à chaque rafraîchissement du dashboard (~toutes les 2-5s) tout en
+        // restant cohérent avec la revalidation de possession toutes les 10 min.
+        res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'private, max-age=300' });
+        res.end(donnees);
       });
       return;
     }
-    if (url.pathname === '/api/premium-locaux') {
-      // Liste des pièces Premium PHYSIQUEMENT présentes dans assets/premium/ sur cette
-      // machine -- sert à peupler le sélecteur de skin dans ⚙ Paramètres (on ne propose
-      // jamais une pièce que l'utilisateur n'a pas réellement téléchargée).
-      let items = [];
-      try {
-        const dossierPremium = path.join(__dirname, 'assets', 'premium');
-        items = fs.readdirSync(dossierPremium)
-          .filter((f) => /\.png$/i.test(f))
-          .map((f) => path.basename(f, '.png'))
-          .sort((a, b) => a.localeCompare(b));
-      } catch { /* dossier absent -- aucune pièce Premium locale, liste vide */ }
-      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-      res.end(JSON.stringify({ items }));
+    if (url.pathname === '/api/premium-disponibles') {
+      // Pièces RÉELLEMENT possédées par cette machine (voir listerPossessionsPremium) --
+      // proposées à l'activation directe. Ne liste plus "tout ce qui est gratuit en ce
+      // moment" : seule une acquisition réelle (téléchargement depuis boutique.html)
+      // rend une pièce éligible ici.
+      listerPossessionsPremium((_err, possedees) => {
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        res.end(JSON.stringify({ items: possedees }));
+      });
+      return;
+    }
+    if (url.pathname === '/api/activer-skin-premium') {
+      const id = (url.searchParams.get('id') || '').trim();
+      if (!id) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ erreur: 'id manquant' })); return; }
+      activerSkinPremiumDirect(id, (err, resultat) => {
+        if (err) {
+          res.writeHead(err.message.includes('gratuit') ? 403 : 502, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ erreur: err.message }));
+          return;
+        }
+        log('info', `🎨 Skin Premium ${resultat.deja ? 'activé' : 'téléchargé et activé'} : ${id}.`);
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        res.end(JSON.stringify({ ok: true, skinPremiumActif: state.skinPremiumActif }));
+      });
       return;
     }
     if (url.pathname === '/api/skin-premium') {
