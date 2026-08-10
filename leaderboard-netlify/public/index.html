@@ -99,6 +99,13 @@
   .rang.bronze{background:rgba(201,138,74,.15);color:var(--bronze);box-shadow:inset 0 0 0 1px rgba(201,138,74,.4)}
   .mineur{display:flex;align-items:center;gap:13px}
   .avatar{width:60px;height:60px;flex:0 0 auto}
+  .avatarWrap{position:relative;flex:0 0 auto;display:inline-block}
+  /* Badge "skin Premium actif" : petit aperçu superposé au coin de l'avatar habituel.
+     Cliquable -- amène vers la boutique, pour transformer l'envie en achat. Ne remplace
+     JAMAIS le cube du vrai palier (avatar), il vient juste s'ajouter à côté. */
+  .skinBadge{position:absolute;right:-6px;bottom:-6px;width:26px;height:26px;border-radius:7px;
+    border:2px solid var(--bg,#0c0f14);box-shadow:0 0 0 1px rgba(140,255,46,.55),0 0 8px 1px rgba(140,255,46,.35);
+    object-fit:cover;background:#000;display:block}
   .mineur .nom{font-weight:700;font-size:14px}
   .mineur .sous{font-size:10px;color:var(--mut);margin-top:1px}
   .machine .cpu{font-size:13px}
@@ -422,9 +429,13 @@ function rendre(){
         :rang;
       const neuf=(rang===1 && e.dernierRecordAt && (Date.now()-e.dernierRecordAt)<24*3600e3)
         ? '<div class="neuf">🔥 nouveau record</div>' : '';
+      const skinBadge=e.skinApercuUrl
+        ? '<a href="boutique.html" title="Skin Premium actif -- clique pour voir la boutique">'
+          +'<img class="skinBadge" src="'+e.skinApercuUrl+'" alt="skin premium actif"></a>'
+        : '';
       return '<tr>'+
         '<td><div class="rang '+classeRang+'">'+medaille+'</div></td>'+
-        '<td class="mineurCol"><div class="mineur">'+avatar(e.bestDiff)+
+        '<td class="mineurCol"><div class="mineur"><div class="avatarWrap">'+avatar(e.bestDiff)+skinBadge+'</div>'+
           '<div><div class="nom">'+(e.worker||'anon')+'</div>'+
           '<div class="sous">'+(e.hashrate?Math.round(e.hashrate/1e6*100)/100+' MH/s':'—')+'</div></div></div></td>'+
         '<td class="machine"><div class="cpu"><img src="icones/icone-machine.png" width="30" height="30" '+

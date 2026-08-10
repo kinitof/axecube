@@ -75,6 +75,11 @@ exports.handler = async (event) => {
                 : cle === 'mois' ? valeurPeriode(e.periodes && e.periodes.mois, labelMois)
                 : e.bestDiff,
         vu: e.vu || null, dernierRecordAt: e.dernierRecordAt || null, spark: decimer(e.historique, 12),
+        // Skin Premium actif de ce mineur (id + lien direct vers son aperçu public basse
+        // résolution, déjà généré à l'upload pour TOUTE la collection -- jamais l'image
+        // complète). null si aucun skin actif -- purement cosmétique, voir submit.js.
+        skinPremiumActif: e.skinPremiumActif || null,
+        skinApercuUrl: e.skinPremiumActif ? ('/.netlify/functions/apercu-premium?itemId=' + encodeURIComponent(e.skinPremiumActif)) : null,
       }))
       .filter(e => e.bestDiff > 0)
       .sort((a, b) => b.bestDiff - a.bestDiff)

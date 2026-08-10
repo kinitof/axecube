@@ -95,6 +95,11 @@ exports.handler = async (event) => {
   const headerHexPeriode = typeof j.headerHexPeriode === 'string' ? j.headerHexPeriode : null;
   const acceptedAnnonce = Math.max(0, Math.floor(Number(j.accepted) || 0));
   const totalHashesAnnonce = Math.max(0, Number(j.totalHashes) || 0);
+  // Skin Premium actif choisi localement par l'utilisateur -- purement cosmétique, affiché
+  // publiquement (classement) pour donner envie à la communauté d'acheter la même pièce.
+  // Ne participe JAMAIS au calcul du record, du classement, ni d'aucune valeur compétitive
+  // -- même règle strictement respectée que côté axecube.js (voir carteComplete()).
+  const skinPremiumAnnonce = /^[a-z0-9-]{1,60}$/i.test(j.skinPremiumActif || '') ? j.skinPremiumActif : null;
   if (bestDiffAnnonce <= 0) return { statusCode: 400, headers: cors, body: '{}' };
 
   // Vérification cryptographique : sans preuve valide correspondant à la difficulté
@@ -206,6 +211,8 @@ exports.handler = async (event) => {
     dernierRecordAt: nouveauMeilleur ? maintenant : (precedent ? precedent.dernierRecordAt || null : null),
     codeAcces,
     walletProprietaire: (precedent && precedent.walletProprietaire) || null,
+    // Cosmétique uniquement -- voir commentaire plus haut sur skinPremiumAnnonce.
+    skinPremiumActif: skinPremiumAnnonce,
   };
   await store.setJSON(cle, entree);
 

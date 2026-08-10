@@ -1223,6 +1223,11 @@ function main() {
     // calendaire lui-même à chaque soumission reçue.
     bestDiffRecent: 0,
     bestProofHeaderRecent: null,
+    // Skin Premium actif choisi localement par l'utilisateur (identifiant de fichier dans
+    // assets/premium/, ou null = aucun -- retour à l'affichage automatique du palier
+    // Genèse). Purement visuel : ne modifie JAMAIS bestDiff, paliersAtteints, ni aucune
+    // donnée envoyée au classement -- voir infosCube()/carteComplete() côté client.
+    skinPremiumActif: null,
   };
 
   function log(kind, msg) {
@@ -1648,6 +1653,7 @@ function main() {
         cpu: cpuModel, headerHex: state.bestProofHeader || null,
         diffPeriode: state.bestDiffRecent || 0, headerHexPeriode: state.bestProofHeaderRecent || null,
         accepted: state.accepted || 0, totalHashes: state.totalHashes || 0,
+        skinPremiumActif: state.skinPremiumActif || null,
       });
       const urlObj = new URL(base + '/submit');
       const req = https.request(urlObj, {
@@ -1711,10 +1717,14 @@ function main() {
   let banques = {};
   let dernierArretISO = null;
   let dernierStartedAt = null;
+  // Skin Premium : préférence indépendante du réseau miné (btc/fractal), donc stockée
+  // au niveau racine du fichier d'état, pas dans banques[reseauCle].
+  let skinPremiumSauvegarde = null;
   try {
     const saved = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
     dernierArretISO = saved.savedAt || null;
     dernierStartedAt = typeof saved.startedAt === 'number' ? saved.startedAt : null;
+    skinPremiumSauvegarde = typeof saved.skinPremiumActif === 'string' ? saved.skinPremiumActif : null;
     if (saved.reseaux && typeof saved.reseaux === 'object') {
       banques = saved.reseaux;
     } else if (typeof saved.bestDiff === 'number') {
@@ -1829,6 +1839,16 @@ function main() {
     }
   }
   chargerBanque(reseauCle);
+  // Recharge le skin Premium choisi la dernière fois -- vérifie qu'il existe encore
+  // physiquement dans assets/premium/ avant de le réactiver (l'utilisateur a pu supprimer
+  // le fichier entre-temps ; dans ce cas on retombe silencieusement sur le palier Genèse).
+  if (skinPremiumSauvegarde && /^[a-z0-9-]{1,60}$/i.test(skinPremiumSauvegarde)) {
+    try {
+      if (fs.existsSync(path.join(__dirname, 'assets', 'premium', skinPremiumSauvegarde + '.png'))) {
+        state.skinPremiumActif = skinPremiumSauvegarde;
+      }
+    } catch { /* pas grave, reste sans skin */ }
+  }
   log('info', t.recordCharge(state.bestDiff > 0 ? formatDiff(state.bestDiff) : '—', state.accepted, formatHashrate(state.totalHashes).replace('/s', '')));
 
   // Reprise du chrono UPTIME : si l'arrêt précédent (crash, redémarrage, mise à jour) date
@@ -1861,6 +1881,7 @@ function main() {
         reseaux: banques,
         startedAt: state.startedAt,
         savedAt: new Date().toISOString(),
+        skinPremiumActif: state.skinPremiumActif || null,
       }, null, 2));
       stateDirty = false;
     } catch (e) { log('warn', t.sauvegardeKo(e.message)); }
@@ -3039,6 +3060,25 @@ function main() {
       <button class="donPopupFermer" onclick="enregistrerOffreAdmin()" style="color:var(--amber);border-color:var(--amber-faint)">💾 Enregistrer cette offre</button>
     </div>
     <div class="donPopupTexte" style="margin-top:16px;border-top:1px solid var(--line);padding-top:14px">
+      <b style="color:var(--amber)">🎨 Skin Premium (ma machine)</b> — remplace uniquement
+      l'apparence de <b style="color:var(--white-dim)">ta</b> carte affichée ici. Ton vrai
+      palier Genèse (cube gagné, couleur, effet arc-en-ciel) n'est <b style="color:var(--amber)">jamais
+      modifié</b> par ce choix, et ta machine des récompenses continue de figurer normalement
+      sur "Mes récompenses gagnées". Seules les pièces Premium <b style="color:var(--white-dim)">déjà
+      téléchargées</b> sur cette machine (depuis la boutique) apparaissent ci-dessous.
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">
+        <select id="skinPremiumSelect"
+          style="flex:1;min-width:160px;background:var(--panel2);border:1px solid var(--line);color:var(--white);padding:7px 9px;border-radius:6px;font-family:inherit;font-size:11px">
+          <option value="">Aucun (palier Genèse)</option>
+        </select>
+      </div>
+      <div id="skinPremiumEtat" style="font-size:11px;margin-top:8px;min-height:16px;color:var(--white-dim)"></div>
+    </div>
+    <div class="donPopupActions">
+      <button class="donPopupFermer" onclick="appliquerSkinPremium()" style="color:var(--amber);border-color:var(--amber-faint)">✨ Utiliser ce skin</button>
+      <button class="donPopupFermer" onclick="retirerSkinPremium()">↩️ Revenir au palier Genèse</button>
+    </div>
+    <div class="donPopupTexte" style="margin-top:16px;border-top:1px solid var(--line);padding-top:14px">
       <b style="color:var(--amber)">⚖ Solo Split</b> — uniquement sur SoloPool.com. Dose le
       ratio entre minage solo (jackpot complet) et minage pool (petits paiements réguliers),
       part par part. <span id="soloSplitEtat" style="color:var(--white-dim)"></span>
@@ -3064,6 +3104,60 @@ function fermerPopupDon(){document.getElementById('donPopup').style.display='non
 function ouvrirPopupParametres(){
   document.getElementById('paramPopup').style.display='flex';
   majAffichageThermique();
+  chargerSkinPremiumLocal();
+}
+/** Peuple le sélecteur avec les pièces Premium RÉELLEMENT présentes dans assets/premium/
+ *  sur cette machine (jamais une pièce non téléchargée), et présélectionne le skin
+ *  actuellement actif s'il y en a un. */
+async function chargerSkinPremiumLocal(){
+  const sel=document.getElementById('skinPremiumSelect');
+  const etat=document.getElementById('skinPremiumEtat');
+  if(!sel) return;
+  try{
+    const [rItems,rDetails]=await Promise.all([
+      fetch('/api/premium-locaux'+Q).then(r=>r.json()).catch(()=>({items:[]})),
+      fetch('/api/details'+Q).then(r=>r.ok?r.json():null).catch(()=>null)
+    ]);
+    const actif=(rDetails&&rDetails.skinPremiumActif)||'';
+    sel.innerHTML='<option value="">Aucun (palier Genèse)</option>'
+      +(rItems.items||[]).map(id=>'<option value="'+id+'"'+(id===actif?' selected':'')+'>'+id+'</option>').join('');
+    etat.textContent=actif?('Skin actif actuellement : '+actif):'Aucun skin Premium actif -- affichage du palier Genèse normal.';
+    etat.style.color=actif?'var(--amber)':'var(--white-dim)';
+    if(!rItems.items||!rItems.items.length){
+      etat.textContent='Aucune pièce Premium téléchargée sur cette machine pour l\\'instant -- va sur la boutique pour en récupérer une.';
+    }
+  }catch(e){
+    etat.textContent='⚠️ Impossible de charger la liste des pièces Premium locales.';
+    etat.style.color='#e05a5a';
+  }
+}
+async function appliquerSkinPremium(){
+  const sel=document.getElementById('skinPremiumSelect');
+  const etat=document.getElementById('skinPremiumEtat');
+  const id=sel?sel.value:'';
+  if(!id){ etat.textContent='Choisis d\\'abord une pièce dans la liste (ou utilise "Revenir au palier Genèse" pour retirer un skin déjà actif).'; etat.style.color='#e0a05a'; return; }
+  etat.textContent='⏳ Application en cours...'; etat.style.color='var(--white-dim)';
+  try{
+    const r=await fetch('/api/skin-premium?id='+encodeURIComponent(id)+(Q?'&'+Q.slice(1):''));
+    const j=await r.json();
+    if(!r.ok||!j.ok){ etat.textContent='⚠️ '+(j.erreur||'échec inconnu'); etat.style.color='#e05a5a'; return; }
+    etat.textContent='✅ Skin "'+id+'" appliqué -- ton vrai palier Genèse n\\'a pas changé.';
+    etat.style.color='var(--amber)';
+    tick();
+  }catch(e){ etat.textContent='⚠️ Erreur réseau.'; etat.style.color='#e05a5a'; }
+}
+async function retirerSkinPremium(){
+  const etat=document.getElementById('skinPremiumEtat');
+  etat.textContent='⏳ Retrait en cours...'; etat.style.color='var(--white-dim)';
+  try{
+    const r=await fetch('/api/skin-premium?id='+(Q?'&'+Q.slice(1):''));
+    const j=await r.json();
+    if(!r.ok||!j.ok){ etat.textContent='⚠️ '+(j.erreur||'échec inconnu'); etat.style.color='#e05a5a'; return; }
+    etat.textContent='↩️ Retour à l\\'affichage automatique du palier Genèse.';
+    etat.style.color='var(--white-dim)';
+    const sel=document.getElementById('skinPremiumSelect'); if(sel) sel.value='';
+    tick();
+  }catch(e){ etat.textContent='⚠️ Erreur réseau.'; etat.style.color='#e05a5a'; }
 }
 async function recupererRecompenses(){
   const btn=[...document.querySelectorAll('.mini-btn')].find(b=>b.title==='Récupérer les images des paliers gagnés');
@@ -4575,6 +4669,10 @@ charger();setInterval(charger,5000);
     border:1px solid rgba(150,240,31,.5);font-size:min(4.4cqw,13cqh,13px);font-weight:700;letter-spacing:.06em;
     padding:2px 7px;border-radius:8px;animation:respirerGlow 1.4s ease-in-out infinite;flex-shrink:0;white-space:nowrap}
   .badgeBloc.actif{display:inline-flex}
+  /* Badge "skin Premium actif" -- petit rappel discret que la plaque affichée n'est pas
+     celle du palier Genèse réel (visible uniquement quand un skin est appliqué). */
+  .badgeSkinPremium{display:inline-flex;align-items:center;font-size:min(4.4cqw,13cqh,13px);
+    flex-shrink:0;filter:drop-shadow(0 0 3px rgba(255,255,255,.5))}
   .ecran{position:absolute;left:${cv.ecran.left}%;top:${cv.ecran.top}%;width:${cv.ecran.width}%;height:${cv.ecran.height}%;
     container-type:size;container-name:ecran;
     border-radius:2%/1.6%;overflow:hidden;background:#05070a;
@@ -4857,7 +4955,14 @@ function carteComplete(m, estMoi, idx, ventiloClasse){
   const page=pageActuelle.get(cleStable)||0;
   const cube=infosCube(m.bestDiff||0);
   const nomCubeHtml=cube.nom?'<span class="nomCube">'+cube.nom+'</span>':'';
-  const imgStyle=(cube.imageCarte?('--carte-image:url(\\''+cube.imageCarte+'\\');'):'')+(cube.imageLogo?('--logo-cube:url(\\''+cube.imageLogo+'\\');'):'');
+  // Skin Premium actif (choix local de l'utilisateur, uniquement sur SA propre carte) :
+  // remplace UNIQUEMENT l'image de la plaque affichée. La couleur du cube, le logo au
+  // centre du ventilo et l'effet rainbow-tier restent STRICTEMENT pilotés par le vrai
+  // palier Genèse réellement atteint (cube, dérivé de m.bestDiff) -- changer de skin ne
+  // modifie et ne simule jamais une progression de palier.
+  const imageCartePlaque=(estMoi && m.skinPremiumActif) ? ('/assets/premium/'+m.skinPremiumActif+'.png') : cube.imageCarte;
+  const badgeSkinHtml=(estMoi && m.skinPremiumActif) ? '<span class="badgeSkinPremium" title="Skin Premium actif -- le palier Gen\u00e8se r\u00e9el reste '+(cube.nom||('palier '+cube.niveau))+'">\u2728</span>' : '';
+  const imgStyle=(imageCartePlaque?('--carte-image:url(\\''+imageCartePlaque+'\\');'):'')+(cube.imageLogo?('--logo-cube:url(\\''+cube.imageLogo+'\\');'):'');
   return '<div class="carteMachine'+(enLigne?'':' hors-ligne')+(cube.rainbow?' rainbow-tier':'')+'"'+(idx!=null?' data-idx="'+idx+'"':'')+' data-cle="'+cleStable+'" style="--couleur-cube:'+cube.couleur+';'+imgStyle+'">'
     +'<div class="fondNoir"></div>'
     +'<div class="ventilo'+(ventiloClasse?' '+ventiloClasse:'')+'"><div class="logoVentilo"></div></div>'+'<button type="button" class="boutonVentilo" onclick="toggleVentilo(event)" title="Arr\u00eater/relancer le ventilateur (visuel)" aria-label="Basculer le ventilateur"></button>'
@@ -4865,7 +4970,7 @@ function carteComplete(m, estMoi, idx, ventiloClasse){
     +'<div class="barreGlow"></div>'
     +'<div class="ecran">'
       +'<div class="eLigne"><div class="ecranLogo">'+LOGO_SVG+'AXECUBE</div>'
-        +blocBadge
+        +blocBadge+badgeSkinHtml
         +'<div class="statut'+(enLigne?'':' off')+'"><span class="pt"></span><span>'+(enLigne?'MINING':'HORS LIGNE')+'</span></div></div>'
       +'<div class="blocHash"><div class="ecranLabel">HASHRATE</div>'
         +'<div class="ecranHash">'+fmtHR(m.hashrate||0).replace(/ .*/,'')+'<span>'+ (fmtHR(m.hashrate||0).split(' ')[1]||'') +'</span></div>'
@@ -5010,7 +5115,8 @@ async function charger(){
         rejected: repDetails.loterie && repDetails.loterie.rejected,
         blocsTrouves: repDetails.loterie && repDetails.loterie.blocsTrouves,
         blocHauteur,
-        btcPrice, btcSymbol
+        btcPrice, btcSymbol,
+        skinPremiumActif: repDetails.skinPremiumActif || null
       };
       donneesActuelles.push({m:moi, estMoi:true, complete:true});
       const idxMoi=donneesActuelles.length-1;
@@ -5499,6 +5605,68 @@ function fmtD(d){if(!d)return'—';if(d>=1e12)return(d/1e12).toFixed(2)+' T';if(
       });
       return;
     }
+    if (/^\/assets\/premium\/([a-z0-9-]{1,60})\.png$/i.test(url.pathname)) {
+      // Image complète d'une pièce Premium déjà téléchargée localement par l'utilisateur
+      // (via boutique.html / telecharger-premium-gratuit.js). Pas de repli par défaut ici
+      // -- si le fichier n'existe pas localement, 404 tout simplement (l'utilisateur ne
+      // possède pas/plus cette pièce sur cette machine).
+      const cheminPremium = path.join(__dirname, 'assets', 'premium', path.basename(url.pathname));
+      fs.readFile(cheminPremium, (err, data) => {
+        if (err) { res.writeHead(404); res.end(); return; }
+        res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=86400' });
+        res.end(data);
+      });
+      return;
+    }
+    if (url.pathname === '/api/premium-locaux') {
+      // Liste des pièces Premium PHYSIQUEMENT présentes dans assets/premium/ sur cette
+      // machine -- sert à peupler le sélecteur de skin dans ⚙ Paramètres (on ne propose
+      // jamais une pièce que l'utilisateur n'a pas réellement téléchargée).
+      let items = [];
+      try {
+        const dossierPremium = path.join(__dirname, 'assets', 'premium');
+        items = fs.readdirSync(dossierPremium)
+          .filter((f) => /\.png$/i.test(f))
+          .map((f) => path.basename(f, '.png'))
+          .sort((a, b) => a.localeCompare(b));
+      } catch { /* dossier absent -- aucune pièce Premium locale, liste vide */ }
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+      res.end(JSON.stringify({ items }));
+      return;
+    }
+    if (url.pathname === '/api/skin-premium') {
+      // Change (ou retire, si id vide) le skin Premium actif sur LA CARTE VISUELLE
+      // uniquement. Ne touche jamais bestDiff/paliersAtteints -- voir le commentaire sur
+      // state.skinPremiumActif et sur imageCartePlaque dans carteComplete().
+      const id = (url.searchParams.get('id') || '').trim();
+      if (id) {
+        if (!/^[a-z0-9-]{1,60}$/i.test(id)) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ erreur: 'identifiant invalide' }));
+          return;
+        }
+        const cheminImg = path.join(__dirname, 'assets', 'premium', id + '.png');
+        if (!fs.existsSync(cheminImg)) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ erreur: 'cette pièce n\'est pas (ou plus) présente localement -- télécharge-la depuis la boutique d\'abord' }));
+          return;
+        }
+        state.skinPremiumActif = id;
+        log('info', `🎨 Skin Premium activé sur cette machine : ${id} (le palier Genèse réellement atteint, lui, ne change pas).`);
+      } else {
+        state.skinPremiumActif = null;
+        log('info', '🎨 Skin Premium retiré -- retour à l\'affichage automatique du palier Genèse.');
+      }
+      stateDirty = true;
+      saveState();
+      // Propage immédiatement au classement public (au lieu d'attendre le prochain ping
+      // automatique à 90s) -- soumettreRecordLeaderboard envoie tout l'état courant, y
+      // compris skinPremiumActif, sans jamais pouvoir dégrader le vrai bestDiff enregistré.
+      soumettreRecordLeaderboard(false);
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+      res.end(JSON.stringify({ ok: true, skinPremiumActif: state.skinPremiumActif }));
+      return;
+    }
     if (url.pathname === '/visite') {
       const cheminVisite = path.join(__dirname, 'pages', 'visite.html');
       fs.readFile(cheminVisite, 'utf8', (err, data) => {
@@ -5631,6 +5799,7 @@ function fmtD(d){if(!d)return'—';if(d>=1e12)return(d/1e12).toFixed(2)+' T';if(
         },
         bloc: { hauteur: state.blockHeight, depuis: state.lastBlockAt },
         paiement: state.paiement,
+        skinPremiumActif: state.skinPremiumActif || null,
         reseau: { cle: reseauCle, symbole: reseau.symbole, recompense: reseau.recompense, label: reseau.label },
         marche: { btcPrice: state.btcPrice, btcSymbol: state.btcSymbol, devise: state.btcDevise },
         calibration: state.calibration,
