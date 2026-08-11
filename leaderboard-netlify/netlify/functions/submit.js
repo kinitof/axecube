@@ -142,6 +142,31 @@ exports.handler = async (event) => {
   const bestDiffPrecedent = precedent ? (precedent.bestDiff || 0) : 0;
   const nouveauMeilleur = verifie && bestDiffVerifie > bestDiffPrecedent;
 
+  // --- Garde-fou de plausibilité (anti-vol d'identité) ---------------------------------
+  // La vérification cryptographique ci-dessus garantit qu'une preuve est AUTHENTIQUE (le
+  // calcul a réellement été fait par quelqu'un), mais rien ne lie machineId à qui a fait
+  // CE calcul précis -- un vrai résultat calculé ailleurs (matériel plus puissant) pourrait
+  // être rejoué en collant le machineId d'un autre mineur. Défense : un saut de difficulté
+  // doit rester statistiquement cohérent avec le temps écoulé et le hashrate rapporté par
+  // CETTE identité depuis son dernier contact -- trouver une preuve de difficulté D
+  // nécessite en moyenne D*2^32 tentatives ; un saut qui dépasserait de très loin ce que le
+  // hashrate déclaré permet dans le temps écoulé est statistiquement improbable pour un
+  // vrai CPU continu. On ne bloque PAS le nouveau record pour autant (la chance existe,
+  // et on ne veut jamais priver un mineur légitime d'un coup de chance réel) -- on le
+  // marque juste "suspect", pour qu'un futur système de Mint/NFT puisse exiger l'absence
+  // de ce marqueur avant d'accepter de frapper un NFT sur ce record.
+  let sautSuspect = false;
+  if (nouveauMeilleur && precedent && precedent.vu) {
+    const ecouleSec = Math.max(1, (maintenant - precedent.vu) / 1000);
+    const hashrateRef = Math.max(hashrate, precedent.hashrate || 0, 1);
+    const MARGE_SECURITE = 25; // très généreux : couvre rafales, turbo, variance statistique
+    const hashesPlausibles = ecouleSec * hashrateRef * MARGE_SECURITE;
+    const hashesAttendus = bestDiffVerifie * 4294967296; // 2^32, espérance moyenne pour cette difficulté
+    if (hashesAttendus > hashesPlausibles) {
+      sautSuspect = true;
+    }
+  }
+
   // Le mineur revérifie/republie sa meilleure preuve toutes les ~90s (voire ~5s si un
   // dashboard est ouvert) juste pour garder le pool/hashrate/statut à jour -- ce heartbeat
   // renvoie systématiquement le MÊME headerHex, qui se revérifie donc systématiquement à la
@@ -213,11 +238,20 @@ exports.handler = async (event) => {
     walletProprietaire: (precedent && precedent.walletProprietaire) || null,
     // Cosmétique uniquement -- voir commentaire plus haut sur skinPremiumAnnonce.
     skinPremiumActif: skinPremiumAnnonce,
+    // Marqueurs "saut suspect" (voir plus haut) -- historique conservé (pas juste le
+    // dernier), pour qu'un futur système de Mint/NFT puisse exiger un historique
+    // entièrement propre, pas seulement "le dernier saut n'était pas suspect".
+    sautsSuspects: (() => {
+      const anciens = (precedent && Array.isArray(precedent.sautsSuspects)) ? precedent.sautsSuspects : [];
+      if (!sautSuspect) return anciens;
+      return [...anciens, { t: maintenant, bestDiff: bestDiffVerifie }].slice(-50);
+    })(),
   };
   await store.setJSON(cle, entree);
 
   return { statusCode: 200, headers: cors, body: JSON.stringify({
     ok: true, verifie, bestDiff: entree.bestDiff, categorie, codeAcces,
+    sautSuspect,
     raison: verifie ? undefined : 'preuve manquante ou invalide — pool/statut mis à jour, record inchangé',
   }) };
 };
