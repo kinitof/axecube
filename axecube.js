@@ -4868,18 +4868,24 @@ charger();setInterval(charger,5000);
      retire leur boîte (marges/paddings d'origine) pour laisser .carteMachine se
      dimensionner librement par rapport au corps de la page, pas par rapport à eux.*/
   html.solo,html.solo body{height:100%;margin:0}
+  html.solo,html.solo body{height:100vh;height:100dvh} /* dvh = hauteur RÉELLEMENT
+    visible sur mobile (barre d'adresse comprise/exclue selon son état) -- 100vh seul
+    est peu fiable sur Safari iOS, qui le calcule contre la fenêtre repliée même quand la
+    barre est affichée, laissant un vide en bas de la vraie zone visible. La ligne
+    height:100vh sert de repli pour les navigateurs (rares) qui ne connaissent pas dvh. */
   html.solo body{padding:0;background:#05070a;display:flex;align-items:center;justify-content:center;overflow:hidden}
   html.solo header,html.solo .sub{display:none}
   html.solo .wrap,html.solo .grille{all:unset;display:contents}
   /* Technique "contain" standard : width/height à 100%, bornés chacun par une valeur
-     dérivée de l'AUTRE dimension de la fenêtre (via vw/vh) selon le vrai ratio de la
+     dérivée de l'AUTRE dimension de la fenêtre (via vw/dvh) selon le vrai ratio de la
      carte -- contrairement à un simple width:auto+height:100%, ça ne se contredit
      jamais, quelle que soit la forme de la fenêtre (même très haute et étroite, ou très
-     large et basse). aspect-ratio verrouille le résultat. min-width/min-height : seuil
-     vérifié manuellement (mode test ?configPip=1) -- 218x330 encore propre, en dessous
-     le texte de l'écran commence à se chevaucher. */
+     large et basse, y compris sur mobile). aspect-ratio verrouille le résultat.
+     min-width/min-height : seuil vérifié manuellement (mode test ?configPip=1) --
+     218x330 encore propre, en dessous le texte de l'écran commence à se chevaucher. */
   html.solo .carteMachine{width:100%;height:100%;
     max-width:calc(100vh*1023/1537);max-height:calc(100vw*1537/1023);
+    max-width:calc(100dvh*1023/1537);
     min-width:218px;min-height:330px;aspect-ratio:1023/1537;margin:auto}
   .carteMachine{position:relative;width:100%;max-width:215px;aspect-ratio:1023/1537;container-type:size;container-name:carte;
     background-image:var(--carte-image, url('/assets/bitaxe-board.png?v=${CACHE_CARTE}'));background-size:contain;background-repeat:no-repeat;
