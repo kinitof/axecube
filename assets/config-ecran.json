@@ -1,0 +1,126 @@
+{
+  "page0": {
+    "hashLabel": {
+      "left": 0,
+      "top": 0,
+      "width": 62,
+      "size": 1
+    },
+    "blocs": {
+      "left": 74.09,
+      "top": 0,
+      "width": 38,
+      "size": 1
+    },
+    "hashValeur": {
+      "left": 0,
+      "top": 10.81,
+      "width": 100,
+      "size": 1
+    },
+    "uptime": {
+      "left": 0,
+      "top": 33,
+      "width": 44,
+      "size": 1
+    },
+    "threads": {
+      "left": 64.62,
+      "top": 32.13,
+      "width": 50,
+      "size": 1
+    },
+    "pool": {
+      "left": 0,
+      "top": 50,
+      "width": 44,
+      "size": 1
+    },
+    "difficulte": {
+      "left": 64.62,
+      "top": 49.39,
+      "width": 50,
+      "size": 1
+    },
+    "meilleure": {
+      "left": 0,
+      "top": 67,
+      "width": 44,
+      "size": 1
+    },
+    "shares": {
+      "left": 64.62,
+      "top": 66.65,
+      "width": 50,
+      "size": 1
+    },
+    "acceptation": {
+      "left": 0,
+      "top": 92.03,
+      "width": 44,
+      "size": 1
+    },
+    "cours": {
+      "left": 64.62,
+      "top": 83.91,
+      "width": 50,
+      "size": 1
+    }
+  },
+  "page1": {
+    "blocAMiner": {
+      "left": 0,
+      "top": 0,
+      "width": 44,
+      "size": 1
+    },
+    "blocsTrouves": {
+      "left": 59.89,
+      "top": 0,
+      "width": 50,
+      "size": 1
+    },
+    "thermique": {
+      "left": 0,
+      "top": 16.9,
+      "width": 44,
+      "size": 1
+    },
+    "paiement": {
+      "left": 59.89,
+      "top": 16.9,
+      "width": 50,
+      "size": 1
+    },
+    "difficulteReseau": {
+      "left": 0,
+      "top": 34.16,
+      "width": 100,
+      "size": 1
+    },
+    "recordJour": {
+      "left": 0,
+      "top": 51.42,
+      "width": 44,
+      "size": 1
+    },
+    "skinActif": {
+      "left": 59.89,
+      "top": 51.42,
+      "width": 50,
+      "size": 1
+    },
+    "progression": {
+      "left": 0,
+      "top": 68.68,
+      "width": 44,
+      "size": 1
+    },
+    "travailTotal": {
+      "left": 59.89,
+      "top": 68.68,
+      "width": 50,
+      "size": 1
+    }
+  }
+}

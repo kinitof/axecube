@@ -87,6 +87,59 @@ const CONFIG_VISUEL_DEFAUT = {
   barreGlow:    { left: 21.02, top: 95.32, width: 60.12, height: 1.95 },
   boutonVentilo:{ left: 17.71, top: 50.98, width: 5.18 },
 };
+const CHEMIN_CONFIG_ECRAN = path.join(__dirname, 'assets', 'config-ecran.json');
+// Position/taille de chaque champ texte affiché à l'intérieur de l'écran, par page
+// (0 = page 1, 1 = page 2) -- éditable en direct via le bouton "🛠 Écran" sur /machines.
+// Valeurs par défaut calées approximativement sur la disposition en grille d'origine ;
+// l'outil de calibrage sert justement à les affiner sans avoir à toucher au code.
+const CONFIG_ECRAN_DEFAUT = {
+  page0: {
+    hashLabel:   { left: 0,  top: 0,  width: 62, size: 1.0 },
+    blocs:       { left: 62, top: 1,  width: 38, size: 1.0 },
+    hashValeur:  { left: 0,  top: 10, width: 100, size: 1.0 },
+    uptime:      { left: 0,  top: 33, width: 44, size: 1.0 },
+    threads:     { left: 50, top: 33, width: 50, size: 1.0 },
+    pool:        { left: 0,  top: 50, width: 44, size: 1.0 },
+    difficulte:  { left: 50, top: 50, width: 50, size: 1.0 },
+    meilleure:   { left: 0,  top: 67, width: 44, size: 1.0 },
+    shares:      { left: 50, top: 67, width: 50, size: 1.0 },
+    acceptation: { left: 0,  top: 84, width: 44, size: 1.0 },
+    cours:       { left: 50, top: 84, width: 50, size: 1.0 },
+  },
+  page1: {
+    blocAMiner:      { left: 0,  top: 0,  width: 44, size: 1.0 },
+    blocsTrouves:    { left: 50, top: 0,  width: 50, size: 1.0 },
+    thermique:       { left: 0,  top: 20, width: 44, size: 1.0 },
+    paiement:        { left: 50, top: 20, width: 50, size: 1.0 },
+    difficulteReseau:{ left: 0,  top: 40, width: 100, size: 1.0 },
+    recordJour:      { left: 0,  top: 58, width: 44, size: 1.0 },
+    skinActif:       { left: 50, top: 58, width: 50, size: 1.0 },
+    progression:     { left: 0,  top: 76, width: 44, size: 1.0 },
+    travailTotal:    { left: 50, top: 76, width: 50, size: 1.0 },
+    badges:          { left: 0,  top: 92, width: 60, size: 0.85 },
+    niveauGenese:    { left: 62, top: 92, width: 38, size: 0.85 },
+  },
+};
+function chargerConfigEcran() {
+  try {
+    const brut = fs.readFileSync(CHEMIN_CONFIG_ECRAN, 'utf8');
+    const lu = JSON.parse(brut);
+    const fusion = { page0: {}, page1: {} };
+    for (const page of ['page0', 'page1']) {
+      for (const cle of Object.keys(CONFIG_ECRAN_DEFAUT[page])) {
+        fusion[page][cle] = Object.assign({}, CONFIG_ECRAN_DEFAUT[page][cle], (lu[page] && lu[page][cle]) || {});
+      }
+    }
+    return fusion;
+  } catch {
+    return JSON.parse(JSON.stringify(CONFIG_ECRAN_DEFAUT));
+  }
+}
+function sauvegarderConfigEcran(config) {
+  fs.mkdirSync(path.dirname(CHEMIN_CONFIG_ECRAN), { recursive: true });
+  fs.writeFileSync(CHEMIN_CONFIG_ECRAN, JSON.stringify(config, null, 2), 'utf8');
+}
+let configEcran = chargerConfigEcran();
 function chargerConfigVisuel() {
   try {
     const brut = fs.readFileSync(CHEMIN_CONFIG_VISUEL, 'utf8');
@@ -1489,20 +1542,26 @@ function main() {
    *  éditant miner-state.json à la main. C'est CETTE valeur, pas state.bestDiff, qui doit
    *  décider quels badges bronze/argent/or/... sont affichés comme réellement débloqués. */
   function recupererBestDiffVerifie(cb) {
-    if (!leaderboardUrl) return cb(null, 0);
+    if (!leaderboardUrl) return cb(new Error('leaderboardUrl non configuré'), 0);
     const url = `${leaderboardUrl}/.netlify/functions/mon-record?machineId=${encodeURIComponent(machineId)}`;
     const req = https.get(url, { timeout: 10000, headers: { 'User-Agent': 'axecube/1.0' } }, (res) => {
       const morceaux = [];
       res.on('data', (c) => morceaux.push(c));
       res.on('end', () => {
+        const corps = Buffer.concat(morceaux).toString('utf8');
         try {
-          const j = JSON.parse(Buffer.concat(morceaux).toString('utf8'));
+          const j = JSON.parse(corps);
+          if (res.statusCode !== 200) {
+            return cb(new Error(`HTTP ${res.statusCode} -- ${j.erreur || corps.slice(0, 100)}`), 0);
+          }
           cb(null, typeof j.bestDiff === 'number' ? j.bestDiff : 0);
-        } catch (e) { cb(e, 0); }
+        } catch (e) {
+          cb(new Error(`réponse illisible (HTTP ${res.statusCode}) : ${corps.slice(0, 100)}`), 0);
+        }
       });
     });
-    req.on('timeout', () => req.destroy(new Error('timeout')));
-    req.on('error', () => cb(null, 0));
+    req.on('timeout', () => { req.destroy(); cb(new Error('délai dépassé (timeout)'), 0); });
+    req.on('error', (e) => cb(e, 0));
   }
 
   function listerPossessionsPremium(cb) {
@@ -1596,10 +1655,21 @@ function main() {
    *  régulièrement. C'est cette valeur (jamais state.bestDiff seul) qui doit décider
    *  quels badges bronze/argent/or/... sont affichés comme réellement débloqués. */
   function rafraichirBestDiffVerifie() {
-    recupererBestDiffVerifie((_err, valeur) => {
+    recupererBestDiffVerifie((err, valeur) => {
+      if (err) {
+        // Pas la peine d'alerter si le classement est simplement désactivé (--no-leaderboard)
+        // -- c'est un choix assumé, pas une panne.
+        if (leaderboardUrl) {
+          log('warn', `⚠️ Vérification du badge impossible pour l'instant (${err.message || err}). ` +
+            `Vérifie que mon-record.js est bien déployé sur ton classement.`);
+        }
+        return;
+      }
       if (valeur !== state.bestDiffVerifie) {
+        const avant = state.bestDiffVerifie;
         state.bestDiffVerifie = valeur;
         stateDirty = true; saveState();
+        log('info', `🔒 Record vérifié mis à jour : ${formatDiff(valeur)} (était ${formatDiff(avant)}).`);
       }
     });
   }
@@ -2911,6 +2981,7 @@ function main() {
                    font-family:var(--mono);font-size:10px;letter-spacing:.05em;
                    padding:9px 16px;border-radius:8px;cursor:pointer}
   .donPopupFermer:hover{border-color:var(--white-dim)}
+  .donPopupFermer.actif{border-color:var(--amber);color:var(--amber);background:rgba(150,240,31,.08)}
   .leadPreview{padding:8px 0 6px;border-bottom:1px dashed rgba(150,240,31,.3)}
   .leadPreview .lbl{text-align:center}
   .lp-list{display:flex;flex-direction:column;gap:4px;margin-top:6px;font-size:11px}
@@ -3149,7 +3220,11 @@ function main() {
 <div id="qrPopup" class="donPopup" onclick="if(event.target===this)fermerPopupQR()">
   <div class="donPopupCard">
     <div class="donPopupTitre">📱 Voir AXECUBE sur votre téléphone</div>
-    <div class="donPopupTexte">
+    <div id="qrOnglets" style="display:none;gap:6px;margin-top:8px">
+      <button id="qrOngletLocal" class="donPopupFermer actif" style="flex:1;font-size:11px" onclick="afficherQR(lanCourant.ip,'local')">🏠 Réseau local</button>
+      <button id="qrOngletTailscale" class="donPopupFermer" style="flex:1;font-size:11px" onclick="afficherQR(lanCourant.ipTailscale,'tailscale')">🌐 Tailscale (partout)</button>
+    </div>
+    <div class="donPopupTexte" id="qrTexteExplication" style="margin-top:10px">
       Scannez ce code avec l'appareil photo de votre téléphone (même réseau Wi-Fi que
       cet ordinateur). Le lien reste strictement local à votre réseau -- rien n'est
       envoyé sur internet pour générer ce code, tout est calculé ici, dans le navigateur.
@@ -3483,10 +3558,17 @@ async function copierAdresse(){
 var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],f={},c=function(t,r){o=function(t){for(var r=new Array(t),e=0;e<t;e+=1){r[e]=new Array(t);for(var n=0;n<t;n+=1)r[e][n]=null}return r}(i=4*e+17),l(0,0),l(i-7,0),l(0,i-7),s(),h(),d(t,r),e>=7&&v(t),null==a&&(a=p(e,n,u)),w(a,r)},l=function(t,r){for(var e=-1;e<=7;e+=1)if(!(t+e<=-1||i<=t+e))for(var n=-1;n<=7;n+=1)r+n<=-1||i<=r+n||(o[t+e][r+n]=0<=e&&e<=6&&(0==n||6==n)||0<=n&&n<=6&&(0==e||6==e)||2<=e&&e<=4&&2<=n&&n<=4)},h=function(){for(var t=8;t<i-8;t+=1)null==o[t][6]&&(o[t][6]=t%2==0);for(var r=8;r<i-8;r+=1)null==o[6][r]&&(o[6][r]=r%2==0)},s=function(){for(var t=B.getPatternPosition(e),r=0;r<t.length;r+=1)for(var n=0;n<t.length;n+=1){var i=t[r],a=t[n];if(null==o[i][a])for(var u=-2;u<=2;u+=1)for(var f=-2;f<=2;f+=1)o[i+u][a+f]=-2==u||2==u||-2==f||2==f||0==u&&0==f}},v=function(t){for(var r=B.getBCHTypeNumber(e),n=0;n<18;n+=1){var a=!t&&1==(r>>n&1);o[Math.floor(n/3)][n%3+i-8-3]=a}for(n=0;n<18;n+=1){a=!t&&1==(r>>n&1);o[n%3+i-8-3][Math.floor(n/3)]=a}},d=function(t,r){for(var e=n<<3|r,a=B.getBCHTypeInfo(e),u=0;u<15;u+=1){var f=!t&&1==(a>>u&1);u<6?o[u][8]=f:u<8?o[u+1][8]=f:o[i-15+u][8]=f}for(u=0;u<15;u+=1){f=!t&&1==(a>>u&1);u<8?o[8][i-u-1]=f:u<9?o[8][15-u-1+1]=f:o[8][15-u-1]=f}o[i-8][8]=!t},w=function(t,r){for(var e=-1,n=i-1,a=7,u=0,f=B.getMaskFunction(r),c=i-1;c>0;c-=2)for(6==c&&(c-=1);;){for(var g=0;g<2;g+=1)if(null==o[n][c-g]){var l=!1;u<t.length&&(l=1==(t[u]>>>a&1)),f(n,c-g)&&(l=!l),o[n][c-g]=l,-1==(a-=1)&&(u+=1,a=7)}if((n+=e)<0||i<=n){n-=e,e=-e;break}}},p=function(t,r,e){for(var n=A.getRSBlocks(t,r),o=b(),i=0;i<e.length;i+=1){var a=e[i];o.put(a.getMode(),4),o.put(a.getLength(),B.getLengthInBits(a.getMode(),t)),a.write(o)}var u=0;for(i=0;i<n.length;i+=1)u+=n[i].dataCount;if(o.getLengthInBits()>8*u)throw"code length overflow. ("+o.getLengthInBits()+">"+8*u+")";for(o.getLengthInBits()+4<=8*u&&o.put(0,4);o.getLengthInBits()%8!=0;)o.putBit(!1);for(;!(o.getLengthInBits()>=8*u||(o.put(236,8),o.getLengthInBits()>=8*u));)o.put(17,8);return function(t,r){for(var e=0,n=0,o=0,i=new Array(r.length),a=new Array(r.length),u=0;u<r.length;u+=1){var f=r[u].dataCount,c=r[u].totalCount-f;n=Math.max(n,f),o=Math.max(o,c),i[u]=new Array(f);for(var g=0;g<i[u].length;g+=1)i[u][g]=255&t.getBuffer()[g+e];e+=f;var l=B.getErrorCorrectPolynomial(c),h=k(i[u],l.getLength()-1).mod(l);for(a[u]=new Array(l.getLength()-1),g=0;g<a[u].length;g+=1){var s=g+h.getLength()-a[u].length;a[u][g]=s>=0?h.getAt(s):0}}var v=0;for(g=0;g<r.length;g+=1)v+=r[g].totalCount;var d=new Array(v),w=0;for(g=0;g<n;g+=1)for(u=0;u<r.length;u+=1)g<i[u].length&&(d[w]=i[u][g],w+=1);for(g=0;g<o;g+=1)for(u=0;u<r.length;u+=1)g<a[u].length&&(d[w]=a[u][g],w+=1);return d}(o,n)};f.addData=function(t,r){var e=null;switch(r=r||"Byte"){case"Numeric":e=M(t);break;case"Alphanumeric":e=x(t);break;case"Byte":e=m(t);break;case"Kanji":e=L(t);break;default:throw"mode:"+r}u.push(e),a=null},f.isDark=function(t,r){if(t<0||i<=t||r<0||i<=r)throw t+","+r;return o[t][r]},f.getModuleCount=function(){return i},f.make=function(){if(e<1){for(var t=1;t<40;t++){for(var r=A.getRSBlocks(t,n),o=b(),i=0;i<u.length;i++){var a=u[i];o.put(a.getMode(),4),o.put(a.getLength(),B.getLengthInBits(a.getMode(),t)),a.write(o)}var g=0;for(i=0;i<r.length;i++)g+=r[i].dataCount;if(o.getLengthInBits()<=8*g)break}e=t}c(!1,function(){for(var t=0,r=0,e=0;e<8;e+=1){c(!0,e);var n=B.getLostPoint(f);(0==e||t>n)&&(t=n,r=e)}return r}())},f.createTableTag=function(t,r){t=t||2;var e="";e+='<table style="',e+=" border-width: 0px; border-style: none;",e+=" border-collapse: collapse;",e+=" padding: 0px; margin: "+(r=void 0===r?4*t:r)+"px;",e+='">',e+="<tbody>";for(var n=0;n<f.getModuleCount();n+=1){e+="<tr>";for(var o=0;o<f.getModuleCount();o+=1)e+='<td style="',e+=" border-width: 0px; border-style: none;",e+=" border-collapse: collapse;",e+=" padding: 0px; margin: 0px;",e+=" width: "+t+"px;",e+=" height: "+t+"px;",e+=" background-color: ",e+=f.isDark(n,o)?"#000000":"#ffffff",e+=";",e+='"/>';e+="</tr>"}return e+="</tbody>",e+="</table>"},f.createSvgTag=function(t,r,e,n){var o={};"object"==typeof arguments[0]&&(t=(o=arguments[0]).cellSize,r=o.margin,e=o.alt,n=o.title),t=t||2,r=void 0===r?4*t:r,(e="string"==typeof e?{text:e}:e||{}).text=e.text||null,e.id=e.text?e.id||"qrcode-description":null,(n="string"==typeof n?{text:n}:n||{}).text=n.text||null,n.id=n.text?n.id||"qrcode-title":null;var i,a,u,c,g=f.getModuleCount()*t+2*r,l="";for(c="l"+t+",0 0,"+t+" -"+t+",0 0,-"+t+"z ",l+='<svg version="1.1" xmlns="http://www.w3.org/2000/svg"',l+=o.scalable?"":' width="'+g+'px" height="'+g+'px"',l+=' viewBox="0 0 '+g+" "+g+'" ',l+=' preserveAspectRatio="xMinYMin meet"',l+=n.text||e.text?' role="img" aria-labelledby="'+y([n.id,e.id].join(" ").trim())+'"':"",l+=">",l+=n.text?'<title id="'+y(n.id)+'">'+y(n.text)+"</title>":"",l+=e.text?'<description id="'+y(e.id)+'">'+y(e.text)+"</description>":"",l+='<rect width="100%" height="100%" fill="white" cx="0" cy="0"/>',l+='<path d="',a=0;a<f.getModuleCount();a+=1)for(u=a*t+r,i=0;i<f.getModuleCount();i+=1)f.isDark(a,i)&&(l+="M"+(i*t+r)+","+u+c);return l+='" stroke="transparent" fill="black"/>',l+="</svg>"},f.createDataURL=function(t,r){t=t||2,r=void 0===r?4*t:r;var e=f.getModuleCount()*t+2*r,n=r,o=e-r;return I(e,e,function(r,e){if(n<=r&&r<o&&n<=e&&e<o){var i=Math.floor((r-n)/t),a=Math.floor((e-n)/t);return f.isDark(a,i)?0:1}return 1})},f.createImgTag=function(t,r,e){t=t||2,r=void 0===r?4*t:r;var n=f.getModuleCount()*t+2*r,o="";return o+="<img",o+=' src="',o+=f.createDataURL(t,r),o+='"',o+=' width="',o+=n,o+='"',o+=' height="',o+=n,o+='"',e&&(o+=' alt="',o+=y(e),o+='"'),o+="/>"};var y=function(t){for(var r="",e=0;e<t.length;e+=1){var n=t.charAt(e);switch(n){case"<":r+="&lt;";break;case">":r+="&gt;";break;case"&":r+="&amp;";break;case'"':r+="&quot;";break;default:r+=n}}return r};return f.createASCII=function(t,r){if((t=t||1)<2)return function(t){t=void 0===t?2:t;var r,e,n,o,i,a=1*f.getModuleCount()+2*t,u=t,c=a-t,g={"██":"█","█ ":"▀"," █":"▄","  ":" "},l={"██":"▀","█ ":"▀"," █":" ","  ":" "},h="";for(r=0;r<a;r+=2){for(n=Math.floor((r-u)/1),o=Math.floor((r+1-u)/1),e=0;e<a;e+=1)i="█",u<=e&&e<c&&u<=r&&r<c&&f.isDark(n,Math.floor((e-u)/1))&&(i=" "),u<=e&&e<c&&u<=r+1&&r+1<c&&f.isDark(o,Math.floor((e-u)/1))?i+=" ":i+="█",h+=t<1&&r+1>=c?l[i]:g[i];h+="\\n"}return a%2&&t>0?h.substring(0,h.length-a-1)+Array(a+1).join("▀"):h.substring(0,h.length-1)}(r);t-=1,r=void 0===r?2*t:r;var e,n,o,i,a=f.getModuleCount()*t+2*r,u=r,c=a-r,g=Array(t+1).join("██"),l=Array(t+1).join("  "),h="",s="";for(e=0;e<a;e+=1){for(o=Math.floor((e-u)/t),s="",n=0;n<a;n+=1)i=1,u<=n&&n<c&&u<=e&&e<c&&f.isDark(o,Math.floor((n-u)/t))&&(i=0),s+=i?g:l;for(o=0;o<t;o+=1)h+=s+"\\n"}return h.substring(0,h.length-1)},f.renderTo2dContext=function(t,r){r=r||2;for(var e=f.getModuleCount(),n=0;n<e;n++)for(var o=0;o<e;o++)t.fillStyle=f.isDark(n,o)?"black":"white",t.fillRect(o*r,n*r,r,r)},f};t.stringToBytes=(t.stringToBytesFuncs={default:function(t){for(var r=[],e=0;e<t.length;e+=1){var n=t.charCodeAt(e);r.push(255&n)}return r}}).default,t.createStringToBytes=function(t,r){var e=function(){for(var e=S(t),n=function(){var t=e.read();if(-1==t)throw"eof";return t},o=0,i={};;){var a=e.read();if(-1==a)break;var u=n(),f=n()<<8|n();i[String.fromCharCode(a<<8|u)]=f,o+=1}if(o!=r)throw o+" != "+r;return i}(),n="?".charCodeAt(0);return function(t){for(var r=[],o=0;o<t.length;o+=1){var i=t.charCodeAt(o);if(i<128)r.push(i);else{var a=e[t.charAt(o)];"number"==typeof a?(255&a)==a?r.push(a):(r.push(a>>>8),r.push(255&a)):r.push(n)}}return r}};var r,e,n,o,i,a=1,u=2,f=4,c=8,g={L:1,M:0,Q:3,H:2},l=0,h=1,s=2,v=3,d=4,w=5,p=6,y=7,B=(r=[[],[6,18],[6,22],[6,26],[6,30],[6,34],[6,22,38],[6,24,42],[6,26,46],[6,28,50],[6,30,54],[6,32,58],[6,34,62],[6,26,46,66],[6,26,48,70],[6,26,50,74],[6,30,54,78],[6,30,56,82],[6,30,58,86],[6,34,62,90],[6,28,50,72,94],[6,26,50,74,98],[6,30,54,78,102],[6,28,54,80,106],[6,32,58,84,110],[6,30,58,86,114],[6,34,62,90,118],[6,26,50,74,98,122],[6,30,54,78,102,126],[6,26,52,78,104,130],[6,30,56,82,108,134],[6,34,60,86,112,138],[6,30,58,86,114,142],[6,34,62,90,118,146],[6,30,54,78,102,126,150],[6,24,50,76,102,128,154],[6,28,54,80,106,132,158],[6,32,58,84,110,136,162],[6,26,54,82,110,138,166],[6,30,58,86,114,142,170]],e=1335,n=7973,i=function(t){for(var r=0;0!=t;)r+=1,t>>>=1;return r},(o={}).getBCHTypeInfo=function(t){for(var r=t<<10;i(r)-i(e)>=0;)r^=e<<i(r)-i(e);return 21522^(t<<10|r)},o.getBCHTypeNumber=function(t){for(var r=t<<12;i(r)-i(n)>=0;)r^=n<<i(r)-i(n);return t<<12|r},o.getPatternPosition=function(t){return r[t-1]},o.getMaskFunction=function(t){switch(t){case l:return function(t,r){return(t+r)%2==0};case h:return function(t,r){return t%2==0};case s:return function(t,r){return r%3==0};case v:return function(t,r){return(t+r)%3==0};case d:return function(t,r){return(Math.floor(t/2)+Math.floor(r/3))%2==0};case w:return function(t,r){return t*r%2+t*r%3==0};case p:return function(t,r){return(t*r%2+t*r%3)%2==0};case y:return function(t,r){return(t*r%3+(t+r)%2)%2==0};default:throw"bad maskPattern:"+t}},o.getErrorCorrectPolynomial=function(t){for(var r=k([1],0),e=0;e<t;e+=1)r=r.multiply(k([1,C.gexp(e)],0));return r},o.getLengthInBits=function(t,r){if(1<=r&&r<10)switch(t){case a:return 10;case u:return 9;case f:case c:return 8;default:throw"mode:"+t}else if(r<27)switch(t){case a:return 12;case u:return 11;case f:return 16;case c:return 10;default:throw"mode:"+t}else{if(!(r<41))throw"type:"+r;switch(t){case a:return 14;case u:return 13;case f:return 16;case c:return 12;default:throw"mode:"+t}}},o.getLostPoint=function(t){for(var r=t.getModuleCount(),e=0,n=0;n<r;n+=1)for(var o=0;o<r;o+=1){for(var i=0,a=t.isDark(n,o),u=-1;u<=1;u+=1)if(!(n+u<0||r<=n+u))for(var f=-1;f<=1;f+=1)o+f<0||r<=o+f||0==u&&0==f||a==t.isDark(n+u,o+f)&&(i+=1);i>5&&(e+=3+i-5)}for(n=0;n<r-1;n+=1)for(o=0;o<r-1;o+=1){var c=0;t.isDark(n,o)&&(c+=1),t.isDark(n+1,o)&&(c+=1),t.isDark(n,o+1)&&(c+=1),t.isDark(n+1,o+1)&&(c+=1),0!=c&&4!=c||(e+=3)}for(n=0;n<r;n+=1)for(o=0;o<r-6;o+=1)t.isDark(n,o)&&!t.isDark(n,o+1)&&t.isDark(n,o+2)&&t.isDark(n,o+3)&&t.isDark(n,o+4)&&!t.isDark(n,o+5)&&t.isDark(n,o+6)&&(e+=40);for(o=0;o<r;o+=1)for(n=0;n<r-6;n+=1)t.isDark(n,o)&&!t.isDark(n+1,o)&&t.isDark(n+2,o)&&t.isDark(n+3,o)&&t.isDark(n+4,o)&&!t.isDark(n+5,o)&&t.isDark(n+6,o)&&(e+=40);var g=0;for(o=0;o<r;o+=1)for(n=0;n<r;n+=1)t.isDark(n,o)&&(g+=1);return e+=Math.abs(100*g/r/r-50)/5*10},o),C=function(){for(var t=new Array(256),r=new Array(256),e=0;e<8;e+=1)t[e]=1<<e;for(e=8;e<256;e+=1)t[e]=t[e-4]^t[e-5]^t[e-6]^t[e-8];for(e=0;e<255;e+=1)r[t[e]]=e;var n={glog:function(t){if(t<1)throw"glog("+t+")";return r[t]},gexp:function(r){for(;r<0;)r+=255;for(;r>=256;)r-=255;return t[r]}};return n}();function k(t,r){if(void 0===t.length)throw t.length+"/"+r;var e=function(){for(var e=0;e<t.length&&0==t[e];)e+=1;for(var n=new Array(t.length-e+r),o=0;o<t.length-e;o+=1)n[o]=t[o+e];return n}(),n={getAt:function(t){return e[t]},getLength:function(){return e.length},multiply:function(t){for(var r=new Array(n.getLength()+t.getLength()-1),e=0;e<n.getLength();e+=1)for(var o=0;o<t.getLength();o+=1)r[e+o]^=C.gexp(C.glog(n.getAt(e))+C.glog(t.getAt(o)));return k(r,0)},mod:function(t){if(n.getLength()-t.getLength()<0)return n;for(var r=C.glog(n.getAt(0))-C.glog(t.getAt(0)),e=new Array(n.getLength()),o=0;o<n.getLength();o+=1)e[o]=n.getAt(o);for(o=0;o<t.getLength();o+=1)e[o]^=C.gexp(C.glog(t.getAt(o))+r);return k(e,0).mod(t)}};return n}var A=function(){var t=[[1,26,19],[1,26,16],[1,26,13],[1,26,9],[1,44,34],[1,44,28],[1,44,22],[1,44,16],[1,70,55],[1,70,44],[2,35,17],[2,35,13],[1,100,80],[2,50,32],[2,50,24],[4,25,9],[1,134,108],[2,67,43],[2,33,15,2,34,16],[2,33,11,2,34,12],[2,86,68],[4,43,27],[4,43,19],[4,43,15],[2,98,78],[4,49,31],[2,32,14,4,33,15],[4,39,13,1,40,14],[2,121,97],[2,60,38,2,61,39],[4,40,18,2,41,19],[4,40,14,2,41,15],[2,146,116],[3,58,36,2,59,37],[4,36,16,4,37,17],[4,36,12,4,37,13],[2,86,68,2,87,69],[4,69,43,1,70,44],[6,43,19,2,44,20],[6,43,15,2,44,16],[4,101,81],[1,80,50,4,81,51],[4,50,22,4,51,23],[3,36,12,8,37,13],[2,116,92,2,117,93],[6,58,36,2,59,37],[4,46,20,6,47,21],[7,42,14,4,43,15],[4,133,107],[8,59,37,1,60,38],[8,44,20,4,45,21],[12,33,11,4,34,12],[3,145,115,1,146,116],[4,64,40,5,65,41],[11,36,16,5,37,17],[11,36,12,5,37,13],[5,109,87,1,110,88],[5,65,41,5,66,42],[5,54,24,7,55,25],[11,36,12,7,37,13],[5,122,98,1,123,99],[7,73,45,3,74,46],[15,43,19,2,44,20],[3,45,15,13,46,16],[1,135,107,5,136,108],[10,74,46,1,75,47],[1,50,22,15,51,23],[2,42,14,17,43,15],[5,150,120,1,151,121],[9,69,43,4,70,44],[17,50,22,1,51,23],[2,42,14,19,43,15],[3,141,113,4,142,114],[3,70,44,11,71,45],[17,47,21,4,48,22],[9,39,13,16,40,14],[3,135,107,5,136,108],[3,67,41,13,68,42],[15,54,24,5,55,25],[15,43,15,10,44,16],[4,144,116,4,145,117],[17,68,42],[17,50,22,6,51,23],[19,46,16,6,47,17],[2,139,111,7,140,112],[17,74,46],[7,54,24,16,55,25],[34,37,13],[4,151,121,5,152,122],[4,75,47,14,76,48],[11,54,24,14,55,25],[16,45,15,14,46,16],[6,147,117,4,148,118],[6,73,45,14,74,46],[11,54,24,16,55,25],[30,46,16,2,47,17],[8,132,106,4,133,107],[8,75,47,13,76,48],[7,54,24,22,55,25],[22,45,15,13,46,16],[10,142,114,2,143,115],[19,74,46,4,75,47],[28,50,22,6,51,23],[33,46,16,4,47,17],[8,152,122,4,153,123],[22,73,45,3,74,46],[8,53,23,26,54,24],[12,45,15,28,46,16],[3,147,117,10,148,118],[3,73,45,23,74,46],[4,54,24,31,55,25],[11,45,15,31,46,16],[7,146,116,7,147,117],[21,73,45,7,74,46],[1,53,23,37,54,24],[19,45,15,26,46,16],[5,145,115,10,146,116],[19,75,47,10,76,48],[15,54,24,25,55,25],[23,45,15,25,46,16],[13,145,115,3,146,116],[2,74,46,29,75,47],[42,54,24,1,55,25],[23,45,15,28,46,16],[17,145,115],[10,74,46,23,75,47],[10,54,24,35,55,25],[19,45,15,35,46,16],[17,145,115,1,146,116],[14,74,46,21,75,47],[29,54,24,19,55,25],[11,45,15,46,46,16],[13,145,115,6,146,116],[14,74,46,23,75,47],[44,54,24,7,55,25],[59,46,16,1,47,17],[12,151,121,7,152,122],[12,75,47,26,76,48],[39,54,24,14,55,25],[22,45,15,41,46,16],[6,151,121,14,152,122],[6,75,47,34,76,48],[46,54,24,10,55,25],[2,45,15,64,46,16],[17,152,122,4,153,123],[29,74,46,14,75,47],[49,54,24,10,55,25],[24,45,15,46,46,16],[4,152,122,18,153,123],[13,74,46,32,75,47],[48,54,24,14,55,25],[42,45,15,32,46,16],[20,147,117,4,148,118],[40,75,47,7,76,48],[43,54,24,22,55,25],[10,45,15,67,46,16],[19,148,118,6,149,119],[18,75,47,31,76,48],[34,54,24,34,55,25],[20,45,15,61,46,16]],r=function(t,r){var e={};return e.totalCount=t,e.dataCount=r,e},e={};return e.getRSBlocks=function(e,n){var o=function(r,e){switch(e){case g.L:return t[4*(r-1)+0];case g.M:return t[4*(r-1)+1];case g.Q:return t[4*(r-1)+2];case g.H:return t[4*(r-1)+3];default:return}}(e,n);if(void 0===o)throw"bad rs block @ typeNumber:"+e+"/errorCorrectionLevel:"+n;for(var i=o.length/3,a=[],u=0;u<i;u+=1)for(var f=o[3*u+0],c=o[3*u+1],l=o[3*u+2],h=0;h<f;h+=1)a.push(r(c,l));return a},e}(),b=function(){var t=[],r=0,e={getBuffer:function(){return t},getAt:function(r){var e=Math.floor(r/8);return 1==(t[e]>>>7-r%8&1)},put:function(t,r){for(var n=0;n<r;n+=1)e.putBit(1==(t>>>r-n-1&1))},getLengthInBits:function(){return r},putBit:function(e){var n=Math.floor(r/8);t.length<=n&&t.push(0),e&&(t[n]|=128>>>r%8),r+=1}};return e},M=function(t){var r=a,e=t,n={getMode:function(){return r},getLength:function(t){return e.length},write:function(t){for(var r=e,n=0;n+2<r.length;)t.put(o(r.substring(n,n+3)),10),n+=3;n<r.length&&(r.length-n==1?t.put(o(r.substring(n,n+1)),4):r.length-n==2&&t.put(o(r.substring(n,n+2)),7))}},o=function(t){for(var r=0,e=0;e<t.length;e+=1)r=10*r+i(t.charAt(e));return r},i=function(t){if("0"<=t&&t<="9")return t.charCodeAt(0)-"0".charCodeAt(0);throw"illegal char :"+t};return n},x=function(t){var r=u,e=t,n={getMode:function(){return r},getLength:function(t){return e.length},write:function(t){for(var r=e,n=0;n+1<r.length;)t.put(45*o(r.charAt(n))+o(r.charAt(n+1)),11),n+=2;n<r.length&&t.put(o(r.charAt(n)),6)}},o=function(t){if("0"<=t&&t<="9")return t.charCodeAt(0)-"0".charCodeAt(0);if("A"<=t&&t<="Z")return t.charCodeAt(0)-"A".charCodeAt(0)+10;switch(t){case" ":return 36;case"$":return 37;case"%":return 38;case"*":return 39;case"+":return 40;case"-":return 41;case".":return 42;case"/":return 43;case":":return 44;default:throw"illegal char :"+t}};return n},m=function(r){var e=f,n=t.stringToBytes(r),o={getMode:function(){return e},getLength:function(t){return n.length},write:function(t){for(var r=0;r<n.length;r+=1)t.put(n[r],8)}};return o},L=function(r){var e=c,n=t.stringToBytesFuncs.SJIS;if(!n)throw"sjis not supported.";!function(){var t=n("友");if(2!=t.length||38726!=(t[0]<<8|t[1]))throw"sjis not supported."}();var o=n(r),i={getMode:function(){return e},getLength:function(t){return~~(o.length/2)},write:function(t){for(var r=o,e=0;e+1<r.length;){var n=(255&r[e])<<8|255&r[e+1];if(33088<=n&&n<=40956)n-=33088;else{if(!(57408<=n&&n<=60351))throw"illegal char at "+(e+1)+"/"+n;n-=49472}n=192*(n>>>8&255)+(255&n),t.put(n,13),e+=2}if(e<r.length)throw"illegal char at "+(e+1)}};return i},D=function(){var t=[],r={writeByte:function(r){t.push(255&r)},writeShort:function(t){r.writeByte(t),r.writeByte(t>>>8)},writeBytes:function(t,e,n){e=e||0,n=n||t.length;for(var o=0;o<n;o+=1)r.writeByte(t[o+e])},writeString:function(t){for(var e=0;e<t.length;e+=1)r.writeByte(t.charCodeAt(e))},toByteArray:function(){return t},toString:function(){var r="";r+="[";for(var e=0;e<t.length;e+=1)e>0&&(r+=","),r+=t[e];return r+="]"}};return r},S=function(t){var r=t,e=0,n=0,o=0,i={read:function(){for(;o<8;){if(e>=r.length){if(0==o)return-1;throw"unexpected end of file./"+o}var t=r.charAt(e);if(e+=1,"="==t)return o=0,-1;t.match(/^\\s$/)||(n=n<<6|a(t.charCodeAt(0)),o+=6)}var i=n>>>o-8&255;return o-=8,i}},a=function(t){if(65<=t&&t<=90)return t-65;if(97<=t&&t<=122)return t-97+26;if(48<=t&&t<=57)return t-48+52;if(43==t)return 62;if(47==t)return 63;throw"c:"+t};return i},I=function(t,r,e){for(var n=function(t,r){var e=t,n=r,o=new Array(t*r),i={setPixel:function(t,r,n){o[r*e+t]=n},write:function(t){t.writeString("GIF87a"),t.writeShort(e),t.writeShort(n),t.writeByte(128),t.writeByte(0),t.writeByte(0),t.writeByte(0),t.writeByte(0),t.writeByte(0),t.writeByte(255),t.writeByte(255),t.writeByte(255),t.writeString(","),t.writeShort(0),t.writeShort(0),t.writeShort(e),t.writeShort(n),t.writeByte(0);var r=a(2);t.writeByte(2);for(var o=0;r.length-o>255;)t.writeByte(255),t.writeBytes(r,o,255),o+=255;t.writeByte(r.length-o),t.writeBytes(r,o,r.length-o),t.writeByte(0),t.writeString(";")}},a=function(t){for(var r=1<<t,e=1+(1<<t),n=t+1,i=u(),a=0;a<r;a+=1)i.add(String.fromCharCode(a));i.add(String.fromCharCode(r)),i.add(String.fromCharCode(e));var f,c,g,l=D(),h=(f=l,c=0,g=0,{write:function(t,r){if(t>>>r!=0)throw"length over";for(;c+r>=8;)f.writeByte(255&(t<<c|g)),r-=8-c,t>>>=8-c,g=0,c=0;g|=t<<c,c+=r},flush:function(){c>0&&f.writeByte(g)}});h.write(r,n);var s=0,v=String.fromCharCode(o[s]);for(s+=1;s<o.length;){var d=String.fromCharCode(o[s]);s+=1,i.contains(v+d)?v+=d:(h.write(i.indexOf(v),n),i.size()<4095&&(i.size()==1<<n&&(n+=1),i.add(v+d)),v=d)}return h.write(i.indexOf(v),n),h.write(e,n),h.flush(),l.toByteArray()},u=function(){var t={},r=0,e={add:function(n){if(e.contains(n))throw"dup key:"+n;t[n]=r,r+=1},size:function(){return r},indexOf:function(r){return t[r]},contains:function(r){return void 0!==t[r]}};return e};return i}(t,r),o=0;o<r;o+=1)for(var i=0;i<t;i+=1)n.setPixel(i,o,e(i,o));var a=D();n.write(a);for(var u=function(){var t=0,r=0,e=0,n="",o={},i=function(t){n+=String.fromCharCode(a(63&t))},a=function(t){if(t<0);else{if(t<26)return 65+t;if(t<52)return t-26+97;if(t<62)return t-52+48;if(62==t)return 43;if(63==t)return 47}throw"n:"+t};return o.writeByte=function(n){for(t=t<<8|255&n,r+=8,e+=1;r>=6;)i(t>>>r-6),r-=6},o.flush=function(){if(r>0&&(i(t<<6-r),t=0,r=0),e%3!=0)for(var o=3-e%3,a=0;a<o;a+=1)n+="="},o.toString=function(){return n},o}(),f=a.toByteArray(),c=0;c<f.length;c+=1)u.writeByte(f[c]);return u.flush(),"data:image/gif;base64,"+u};return t}();qrcode.stringToBytesFuncs["UTF-8"]=function(t){return function(t){for(var r=[],e=0;e<t.length;e++){var n=t.charCodeAt(e);n<128?r.push(n):n<2048?r.push(192|n>>6,128|63&n):n<55296||n>=57344?r.push(224|n>>12,128|n>>6&63,128|63&n):(e++,n=65536+((1023&n)<<10|1023&t.charCodeAt(e)),r.push(240|n>>18,128|n>>12&63,128|n>>6&63,128|63&n))}return r}(t)},function(t){"function"==typeof define&&define.amd?define([],t):"object"==typeof exports&&(module.exports=t())}(function(){return qrcode});
 async function lienTelephone(){
   if(!lanCourant||!lanCourant.ip)return;
-  // Pointe vers la vraie carte visuelle (skin actif, ventilo animé, glow) -- pas la page
-  // texte basique -- même page que le panneau flottant (/machines?solo=1), en mode solo
-  // pour n'afficher QUE ta machine, sans la grille ni l'en-tête du réseau local.
-  const lien='http://'+lanCourant.ip+':'+lanCourant.port+'/machines?solo=1'+(TOK?'&token='+TOK:'');
+  const onglets=document.getElementById('qrOnglets');
+  if(onglets) onglets.style.display=lanCourant.ipTailscale?'flex':'none';
+  afficherQR(lanCourant.ip, 'local');
+}
+/** Construit et affiche le QR pour une adresse donnée -- 'local' (Wi-Fi, ne marche que
+ *  chez soi) ou 'tailscale' (accessible depuis n'importe où, si Tailscale est actif des
+ *  deux côtés). Même page cible dans les deux cas : /machines?solo=1 (la vraie carte
+ *  visuelle), jamais la page texte basique. */
+function afficherQR(ip, type){
+  if(!ip) return;
+  const lien='http://'+ip+':'+lanCourant.port+'/machines?solo=1'+(TOK?'&token='+TOK:'');
   document.getElementById('qrLienTexte').textContent=lien;
   const conteneur=document.getElementById('qrConteneur');
   conteneur.innerHTML='';
@@ -3497,6 +3579,17 @@ async function lienTelephone(){
     conteneur.innerHTML=qr.createSvgTag({cellSize:5,margin:2});
   }catch(e){
     conteneur.innerHTML='<span style="color:#900;font-size:12px">QR code indisponible -- utilisez le lien ci-dessous.</span>';
+  }
+  const btnLocal=document.getElementById('qrOngletLocal'), btnTs=document.getElementById('qrOngletTailscale');
+  if(btnLocal&&btnTs){
+    btnLocal.classList.toggle('actif', type==='local');
+    btnTs.classList.toggle('actif', type==='tailscale');
+  }
+  const texte=document.getElementById('qrTexteExplication');
+  if(texte){
+    texte.textContent = type==='tailscale'
+      ? 'Ce lien passe par Tailscale : accessible depuis n\\'importe où (bureau, 4G...), tant que votre téléphone est connecté au même compte Tailscale que cet ordinateur.'
+      : 'Scannez avec l\\'appareil photo de votre téléphone (même réseau Wi-Fi que cet ordinateur). Rien n\\'est envoyé sur internet pour générer ce code -- tout est calculé ici, dans le navigateur.';
   }
   document.getElementById('qrPopup').style.display='flex';
 }
@@ -4888,7 +4981,7 @@ charger();setInterval(charger,5000);
     max-width:calc(100dvh*1023/1537);
     min-width:218px;min-height:330px;aspect-ratio:1023/1537;margin:auto}
   .carteMachine{position:relative;width:100%;max-width:215px;aspect-ratio:1023/1537;container-type:size;container-name:carte;
-    background-image:var(--carte-image, url('/assets/bitaxe-board.png?v=${CACHE_CARTE}'));background-size:contain;background-repeat:no-repeat;
+    background-image:var(--carte-image, url('/assets/bitaxe-board.png?v=${CACHE_CARTE}${jeton ? '&token='+jeton : ''}'));background-size:contain;background-repeat:no-repeat;
     filter:drop-shadow(0 10px 24px rgba(0,0,0,.55))}
   .carteMachine.hors-ligne{filter:grayscale(1) opacity(.45)}
   .carteMachine.hors-ligne .contourGlow,.carteMachine.hors-ligne .barreGlow{animation-play-state:paused;opacity:.15}
@@ -4900,7 +4993,7 @@ charger();setInterval(charger,5000);
      Trois états : tourne à pleine vitesse (par défaut), ralentit progressivement au moment
      précis où la machine tombe hors ligne (joué une seule fois), puis reste immobile. */
   .ventilo{position:absolute;left:${cv.ventilo.left}%;top:${cv.ventilo.top}%;width:${cv.ventilo.width}%;aspect-ratio:1/1;
-    background-image:url('/assets/fan-blade.png?v=${CACHE_VENTILO}');background-size:contain;background-repeat:no-repeat;
+    background-image:url('/assets/fan-blade.png?v=${CACHE_VENTILO}${jeton ? '&token='+jeton : ''}');background-size:contain;background-repeat:no-repeat;
     animation:tournerVentilo .1s linear infinite;transform-origin:${cv.ventilo.pivotX}% ${cv.ventilo.pivotY}%;
     filter:blur(1.8px);will-change:transform}
   .ventilo.ralentit{animation:ralentirVentilo 1.8s cubic-bezier(.25,.1,.25,1) 1 forwards;filter:blur(1.2px)}
@@ -4908,7 +5001,7 @@ charger();setInterval(charger,5000);
   /* Logo : enfant du ventilateur, donc tourne automatiquement avec lui (solidaire des pales).
      mix-blend-mode:screen fait disparaître son fond noir sans avoir besoin de détourage. */
   .logoVentilo{position:absolute;left:${cv.logoVentilo.left}%;top:${cv.logoVentilo.top}%;width:${cv.logoVentilo.width}%;aspect-ratio:1/1;
-    background-image:var(--logo-cube, url('/assets/logo-ventilo.png?v=${CACHE_LOGO_VENTILO}'));background-size:contain;background-repeat:no-repeat;
+    background-image:var(--logo-cube, url('/assets/logo-ventilo.png?v=${CACHE_LOGO_VENTILO}${jeton ? '&token='+jeton : ''}'));background-size:contain;background-repeat:no-repeat;
     mix-blend-mode:screen}
   @keyframes tournerVentilo{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
   @keyframes ralentirVentilo{from{transform:rotate(0deg)}to{transform:rotate(1080deg)}}
@@ -4943,8 +5036,13 @@ charger();setInterval(charger,5000);
   .ecran{position:absolute;left:${cv.ecran.left}%;top:${cv.ecran.top}%;width:${cv.ecran.width}%;height:${cv.ecran.height}%;
     container-type:size;container-name:ecran;
     border-radius:2%/1.6%;overflow:hidden;background:#05070a;
-    display:grid;grid-template-rows:9% 19% 15% 15% 15% 13%;row-gap:2%;padding:5% 6%;box-sizing:border-box}
-  .eLigne{height:100%;min-height:0;display:flex;align-items:center;justify-content:space-between;min-width:0}
+    padding:5% 6%;box-sizing:border-box}
+  .ecran.vitrine{background:transparent;padding:0}
+  .eLigne{height:9%;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;min-width:0}
+  /* Zone libre : chaque champ (.celluleEcran) s'y positionne en absolu selon CE (config
+     éditable en direct via le bouton "🛠 Écran") -- remplace l'ancienne grille figée. */
+  .zoneChamps{position:relative;width:100%;height:calc(100% - 9% - 3%);margin-top:3%}
+  .celluleEcran{position:absolute;box-sizing:border-box;overflow:hidden;display:flex;flex-direction:column;justify-content:center;gap:2%}
   .ecranLogo{display:flex;align-items:center;gap:5px;font-weight:700;color:var(--couleur-cube,var(--white));font-size:min(9.5cqw,29cqh,29px);
     min-width:0;flex-shrink:1;overflow:hidden;white-space:nowrap}
   .ecranLogo span{overflow:hidden;text-overflow:ellipsis}
@@ -4955,24 +5053,27 @@ charger();setInterval(charger,5000);
   .statut .pt{width:6px;height:6px;border-radius:50%;background:var(--amber);flex-shrink:0}
   .statut.off{color:var(--mut)}
   .statut.off .pt{background:var(--mut)}
-  .blocHash{height:100%;min-height:0;min-width:0;display:flex;flex-direction:column;justify-content:center;overflow:hidden}
-  .ecranLabel{font-size:min(6cqw,18cqh,19px);color:var(--mut);letter-spacing:.1em;line-height:1.2;flex-shrink:0}
-  .ecranHash{font-weight:800;color:var(--white);font-size:min(19cqw,32cqh,76px);line-height:1;display:flex;align-items:baseline;gap:5px;overflow:hidden;min-width:0;flex-shrink:0}
+  .ecranLabel{font-size:calc(min(6cqw,18cqh,19px)*var(--t,1));color:var(--mut);letter-spacing:.1em;line-height:1.2;
+    overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+  .blocsInline{font-size:calc(min(6cqw,18cqh,19px)*var(--t,1)*.75);color:var(--mut);letter-spacing:.05em;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .blocsInline b{font-weight:700;color:var(--amber)}
+  .ecranHash{font-weight:800;color:var(--white);font-size:calc(min(19cqw,32cqh,76px)*var(--t,1));line-height:1;display:flex;align-items:baseline;gap:5px;overflow:hidden;min-width:0;flex-shrink:0}
   .ecranHash span{font-size:min(8cqw,15cqh,29px);font-weight:700;color:var(--amber);white-space:nowrap;flex-shrink:0}
   .spark{display:none;width:100%;flex:1 1 0;min-height:0;margin-top:2%}
   .spark svg{width:100%;height:100%;display:block}
   @container carte (min-height: 520px){
-    .ecran{grid-template-rows:7% 36% 11% 13% 13% 11% !important}
     .spark{display:block}
   }
-  .eGrid{height:100%;min-height:0;min-width:0;display:grid;grid-auto-flow:column;grid-auto-columns:1fr;
-    align-items:center;gap:0 4%}
-  .eGrid>div{overflow:hidden;min-width:0;display:flex;flex-direction:column;justify-content:center;gap:2%}
-  .eGrid span{font-size:min(5.4cqw,16cqh,17px);color:var(--mut);letter-spacing:.08em;
+  .celluleEcran span{font-size:calc(min(5.4cqw,16cqh,17px)*var(--t,1));color:var(--mut);letter-spacing:.08em;
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .eGrid b{font-size:min(6.8cqw,19cqh,23px);color:var(--white);font-weight:700;
+  .celluleEcran b{font-size:calc(min(6.8cqw,19cqh,23px)*var(--t,1));color:var(--white);font-weight:700;
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .eGrid .accent b{color:var(--amber)}
+  .celluleEcran.accent b{color:var(--amber)}
+  .badgesRangee{display:flex;gap:5%;align-items:center;margin-top:2%}
+  .badgeMini{font-size:calc(1.15em*var(--t,1));filter:grayscale(1) brightness(.5);opacity:.45;transition:filter .2s,opacity .2s}
+  .badgeMini.atteint{filter:none;opacity:1}
+  .miniCube{width:1.1em;height:1.1em;vertical-align:middle;object-fit:contain;margin-right:2px}
   .nomCube{display:block;font-size:0.72em;font-weight:400;color:var(--couleur-cube,var(--amber));
     letter-spacing:.04em;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .eGrid .rej{color:var(--mut);font-weight:400;font-size:0.8em}
@@ -4985,7 +5086,7 @@ charger();setInterval(charger,5000);
   .flechePage:hover{background:rgba(150,240,31,.18);border-color:var(--amber)}
   .pool-nom{overflow:hidden}
   .pool-nom b{display:inline-block;white-space:nowrap;overflow:visible;text-overflow:clip}
-  .pool-nom.defile b{animation:defilerPool 7s linear infinite}
+  .pool-nom.defile b{animation:defilerPool 3s linear infinite}
   @keyframes defilerPool{
     0%,8%{transform:translateX(0)}
     82%{transform:translateX(var(--defilement,0px))}
@@ -5014,6 +5115,22 @@ charger();setInterval(charger,5000);
 
   /* --- Mode édition intégré --- */
   .panneauEdition{display:none;position:fixed;inset:0;z-index:60;align-items:center;justify-content:center;padding:20px}
+  .panneauEditionEcran{display:none;position:fixed;top:0;left:0;right:0;z-index:70;background:rgba(10,12,16,.96);
+    border-bottom:1px solid var(--edge);padding:10px 16px;backdrop-filter:blur(6px);align-items:center;gap:14px;flex-wrap:wrap}
+  .panneauEditionEcran.ouvert{display:flex}
+  .panneauEditionEcran>span:first-child{color:var(--amber);font-weight:700;font-size:12px}
+  .editEcranPages{display:flex;gap:6px}
+  .editEcranPages button{background:none;border:1px solid var(--edge);color:var(--white-dim);padding:5px 10px;
+    border-radius:6px;font-family:var(--mono);font-size:11px;cursor:pointer}
+  .editEcranPages button.actif{border-color:var(--amber);color:var(--amber)}
+  .editEcranAide{color:var(--white-dim);font-size:11px}
+  #editEcranStatut{color:var(--amber);font-size:11px;margin-left:auto}
+  html.editEcranMode .celluleEcran{outline:1px dashed rgba(150,240,31,.55);cursor:move}
+  html.editEcranMode .celluleEcran.selectionnee{outline:2px solid #96f01f;z-index:5}
+  .poigneeEcran{position:absolute;right:-7px;bottom:-7px;width:14px;height:14px;background:#96f01f;
+    border-radius:3px;cursor:nwse-resize;display:none;border:2px solid #05070a}
+  html.editEcranMode .celluleEcran.selectionnee .poigneeEcran{display:block}
+  html.editEcranMode .carteMachine{margin-top:44px}
   .panneauEdition.ouvert{display:flex}
   .editFond{position:absolute;inset:0;background:rgba(3,5,4,.92)}
   .editContenu{position:relative;display:flex;gap:24px;max-width:1000px;width:100%;max-height:94vh}
@@ -5064,11 +5181,23 @@ charger();setInterval(charger,5000);
   <h1>Machines connectées</h1>
   <div style="margin-left:auto;display:flex;gap:8px">
     <button type="button" class="lien" id="btnEdition">🛠 Mode édition</button>
+    <button type="button" class="lien" id="btnEditionEcran">🛠 Écran</button>
     <a class="lien" id="retour" href="/details">← Retour au tableau de bord</a>
   </div>
   <div class="sub">Essai d'affichage façon carte ASIC — une machine AXECUBE connectée = une carte. Données réelles, rafraîchies toutes les 5 secondes.</div>
 </header>
 <div id="grille" class="grille"><div class="vide">Recherche des machines sur le réseau local…</div></div>
+<div id="panneauEditionEcran" class="panneauEditionEcran">
+  <span>🛠 Édition de l'écran</span>
+  <div class="editEcranPages">
+    <button type="button" id="btnPageEdit0" class="actif">Page 1</button>
+    <button type="button" id="btnPageEdit1">Page 2</button>
+  </div>
+  <span class="editEcranAide">Glisse un champ pour le déplacer · tire le coin ↘ pour l'agrandir (largeur + texte)</span>
+  <button type="button" id="btnEditEcranEnregistrer" class="lien principal">💾 Enregistrer</button>
+  <button type="button" id="btnEditEcranFermer" class="lien">Fermer</button>
+  <span id="editEcranStatut"></span>
+</div>
 <div id="modalCarte" class="modalCarte">
   <div class="modalFond"></div>
   <div class="modalContenu">
@@ -5081,7 +5210,7 @@ charger();setInterval(charger,5000);
   <div class="editContenu">
     <div class="editZone">
       <div class="editZoneInterne">
-        <img class="editBoard" src="/assets/bitaxe-board.png?v=${CACHE_CARTE}">
+        <img class="editBoard" src="/assets/bitaxe-board.png?v=${CACHE_CARTE}${jeton ? '&token='+jeton : ''}">
         <div class="editForme" data-cle="ecran" style="outline-color:#e0e0e0"><div class="editPoignee" style="background:#e0e0e0"></div></div>
         <div class="editForme editRonde" data-cle="fondNoir" style="outline-color:#0096ff"><div class="editPoignee" style="background:#0096ff"></div></div>
         <div class="editForme editRonde" data-cle="ventilo" style="outline-color:#ff0096">
@@ -5112,6 +5241,11 @@ charger();setInterval(charger,5000);
 </div>
 <script>
 const TOK=${JSON.stringify(jeton || '')};const Q=TOK?('?token='+TOK):'';
+// Position/taille de chaque champ texte de l'écran, par page (0/1) -- éditable en direct
+// via le bouton "🛠 Écran" (voir plus bas). Rechargé côté serveur à l'ouverture ; les
+// modifications faites dans l'éditeur mettent aussi à jour cette même variable en direct,
+// pour un aperçu immédiat sans recharger la page.
+let CE=${JSON.stringify(configEcran)};
 // Mode "solo" : URL avec ?solo=1 -- masque l'en-tête et la grille réseau, n'affiche QUE
 // ma propre carte, en grand, centrée. Sert de contenu au panneau flottant (voir modeMini()
 // sur le dashboard principal, qui charge cette page dans un <iframe> à l'intérieur d'une
@@ -5123,6 +5257,61 @@ function fmtHR(h){if(!h)return'0 H/s';if(h>=1e12)return(h/1e12).toFixed(2)+' TH/
 function fmtD(d){if(!d)return'—';if(d>=1e12)return(d/1e12).toFixed(2)+' T';if(d>=1e9)return(d/1e9).toFixed(2)+' G';
   if(d>=1e6)return(d/1e6).toFixed(2)+' M';if(d>=1e3)return(d/1e3).toFixed(2)+' k';return d>=100?d.toFixed(0):d.toPrecision(3)}
 function fmtN(n){n=n||0;if(n>=1e6)return(n/1e6).toFixed(2)+'M';if(n>=1e3)return(n/1e3).toFixed(1)+'k';return String(Math.round(n))}
+/** Génère une cellule positionnée librement dans l'écran, selon CE (config éditable en
+ *  direct via le bouton "🛠 Écran") -- remplace l'ancienne grille figée. page: 0 ou 1.
+ *  champ: clé dans CE.page0/CE.page1. html: contenu (span+b, ou bloc spécial). accent:
+ *  colore la valeur en ambre (mêmes cas qu'avant : MEILLEURE, COURS ₿, BLOCS TROUVÉS). */
+function celda(page,champ,html,opts){
+  const cfg=(CE&&CE['page'+page]&&CE['page'+page][champ])||{left:0,top:0,width:50,size:1};
+  const accent=opts===true||(opts&&opts.accent);
+  const defile=opts&&opts.defile;
+  return '<div class="celluleEcran'+(accent?' accent':'')+(defile?' pool-nom':'')+'" data-champ="'+champ+'" data-page="'+page+'" '
+    +'style="left:'+cfg.left+'%;top:'+cfg.top+'%;width:'+cfg.width+'%;--t:'+(cfg.size||1)+'">'+html+'</div>';
+}
+// Seuils des 6 badges de palier (bronze -> légende) -- doivent rester identiques à
+// PALIERS_CLIENT (page principale) et PALIERS (serveur, submit.js). Copie locale car
+// cette page a son propre <script>, indépendant de celui du dashboard principal.
+const PALIERS_ECRAN=[
+  {nom:'BRONZE',icone:'🥉',seuil:100},
+  {nom:'ARGENT',icone:'🥈',seuil:1000},
+  {nom:'OR',icone:'🥇',seuil:10000},
+  {nom:'PLATINE',icone:'💠',seuil:100000},
+  {nom:'DIAMANT',icone:'💎',seuil:1000000},
+  {nom:'LÉGENDE',icone:'🔥',seuil:10000000},
+];
+/** Rangée des 6 badges de palier -- allumé seulement si bestDiffVerifie (contrôlé côté
+ *  serveur, jamais la seule valeur locale) atteint le seuil. Voir la discussion sur la
+ *  sécurité des badges : même principe que le badge chip du dashboard principal. */
+function celdaBadges(m){
+  const verifie=m.bestDiffVerifie||0;
+  const items=PALIERS_ECRAN.map(p=>{
+    const atteint=verifie>=p.seuil;
+    return '<span class="badgeMini'+(atteint?' atteint':'')+'" title="'+p.nom+(atteint?' \u2014 d\u00e9bloqu\u00e9':' \u2014 pas encore d\u00e9bloqu\u00e9')+'">'+p.icone+'</span>';
+  }).join('');
+  return '<span>PALIERS</span><span class="badgesRangee">'+items+'</span>';
+}
+/** Libellé court pour l'état thermique : statut de limitation (déduit du hashrate réel
+ *  vs le pic mesuré) + température/pression réelle si le démon de mesure tourne. */
+function libelleThermique(m){
+  const t=m.throttle||0;
+  const statut=t<=0.05?'OK':(t<=0.3?'Léger':'Fort');
+  if(m.thermalReel){
+    const v=m.thermalReel.type==='temperature'?Math.round(m.thermalReel.valeur)+'°C':m.thermalReel.valeur;
+    return statut+' · '+v;
+  }
+  return statut;
+}
+/** Libellé court pour la vérification du paiement : la récompense d'un bloc irait-elle
+ *  bien intégralement à ton adresse avec la configuration actuelle de la pool ? Jamais
+ *  affiché sur la carte avant -- pourtant l'info la plus concrètement rassurante. */
+function libellePaiement(m){
+  if(!m||!m.paiement) return '—';
+  const pct=Math.round((m.paiement.part||0)*100);
+  if(m.paiement.etat==='complet') return '✓ Complet';
+  if(m.paiement.etat==='partiel') return 'Partiel '+pct+'%';
+  if(m.paiement.etat==='absent') return '⚠ Absent';
+  return '—';
+}
 function fmtPrix(p,sym){if(!p)return'—';return Math.round(p).toLocaleString('fr-FR')+(sym||'')}
 function fmtUp(s){if(!s)return'—';s=Math.round(s);const j=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.floor(s%3600/60);
   return (j?j+'j ':'')+h+'h'+String(m).padStart(2,'0')}
@@ -5176,13 +5365,16 @@ function infosCube(bestDiff){
   if(n<1) return {couleur:'#96f01f', nom:null, niveau:0, rainbow:false, imageCarte:null, imageLogo:null};
   const c=COULEURS_CUBE[n-1];
   const numero=String(n).padStart(2,'0');
+  // Le token (Q) doit être ajouté ici aussi : en mode LAN, TOUTE requête d'image exige
+  // le jeton (sauf manifest/icon) -- sans lui, ces images sont rejetées (401) dès qu'on
+  // accède au dashboard depuis un autre appareil (téléphone via QR code, etc.).
   return {
     couleur: c==='rainbow' ? '#96f01f' : c,
     nom:NOMS_CUBE[n-1],
     niveau:n,
     rainbow: c==='rainbow',
-    imageCarte:'/assets/machines/niveau-'+numero+'.png?v='+CACHE_MACHINES,
-    imageLogo:'/assets/cubes/cube-p'+numero+'.png?v='+CACHE_CUBES
+    imageCarte:'/assets/machines/niveau-'+numero+'.png?v='+CACHE_MACHINES+(TOK?'&token='+TOK:''),
+    imageLogo:'/assets/cubes/cube-p'+numero+'.png?v='+CACHE_CUBES+(TOK?'&token='+TOK:'')
   };
 }
 document.getElementById('retour').href='/details'+Q;
@@ -5233,7 +5425,7 @@ function carteComplete(m, estMoi, idx, ventiloClasse){
   // centre du ventilo et l'effet rainbow-tier restent STRICTEMENT pilotés par le vrai
   // palier Genèse réellement atteint (cube, dérivé de m.bestDiff) -- changer de skin ne
   // modifie et ne simule jamais une progression de palier.
-  const imageCartePlaque=(estMoi && m.skinPremiumActif) ? ('/assets/premium/'+m.skinPremiumActif+'.png') : cube.imageCarte;
+  const imageCartePlaque=(estMoi && m.skinPremiumActif) ? ('/assets/premium/'+m.skinPremiumActif+'.png'+(TOK?'?token='+TOK:'')) : cube.imageCarte;
   const badgeSkinHtml=(estMoi && m.skinPremiumActif) ? '<span class="badgeSkinPremium" title="Skin Premium actif -- le palier Gen\u00e8se r\u00e9el reste '+(cube.nom||('palier '+cube.niveau))+'">\u2728</span>' : '';
   const imgStyle=(imageCartePlaque?('--carte-image:url(\\''+imageCartePlaque+'\\');'):'')+(cube.imageLogo?('--logo-cube:url(\\''+cube.imageLogo+'\\');'):'');
   return '<div class="carteMachine'+(enLigne?'':' hors-ligne')+(cube.rainbow?' rainbow-tier':'')+'"'+(idx!=null?' data-idx="'+idx+'"':'')+' data-cle="'+cleStable+'" style="--couleur-cube:'+cube.couleur+';'+imgStyle+'">'
@@ -5241,30 +5433,38 @@ function carteComplete(m, estMoi, idx, ventiloClasse){
     +'<div class="ventilo'+(ventiloClasse?' '+ventiloClasse:'')+'"><div class="logoVentilo"></div></div>'+'<button type="button" class="boutonVentilo" onclick="toggleVentilo(event)" title="Arr\u00eater/relancer le ventilateur (visuel)" aria-label="Basculer le ventilateur"></button>'
     +'<div class="contourGlow"></div>'
     +'<div class="barreGlow"></div>'
-    +'<div class="ecran">'
-      +'<div class="eLigne"><div class="ecranLogo">'+LOGO_SVG+'AXECUBE</div>'
-        +blocBadge+badgeSkinHtml
-        +'<div class="statut'+(enLigne?'':' off')+'"><span class="pt"></span><span>'+(enLigne?'MINING':'HORS LIGNE')+'</span></div></div>'
-      +'<div class="blocHash"><div class="ecranLabel">HASHRATE</div>'
-        +'<div class="ecranHash">'+fmtHR(m.hashrate||0).replace(/ .*/,'')+'<span>'+ (fmtHR(m.hashrate||0).split(' ')[1]||'') +'</span></div>'
-        +'<div class="spark">'+sparkSVG(m.hist)+'</div></div>'
-      +(page===0?(
-        '<div class="eGrid"><div><span>UPTIME</span><b>'+fmtUp(m.uptime)+'</b></div>'
-          +'<div><span>THREADS</span><b>'+(m.threads||'—')+'</b></div></div>'
-        +'<div class="eGrid"><div class="pool-nom"><span>POOL</span><b>'+(m.pool||'—')+'</b></div>'
-          +'<div><span>DIFFICULTÉ</span><b>'+fmtD(m.poolDiff||0)+'</b></div></div>'
-        +'<div class="eGrid"><div class="accent"><span>\ud83c\udfc6 MEILLEURE</span><b>'+fmtD(m.bestDiff||0)+nomCubeHtml+'</b></div>'
-          +'<div><span>SHARES</span><b>'+fmtN(m.accepted||0)+' <span class="rej">· '+fmtN(m.rejected||0)+'</span></b></div></div>'
-        +'<div class="eGrid"><div><span>ACCEPTATION</span><b>'+acceptance+'</b></div>'
-          +'<div class="accent"><span>COURS ₿</span><b>'+fmtPrix(m.btcPrice, m.btcSymbol)+'</b></div></div>'
-      ):(
-        '<div class="eGrid"><div><span>BLOC À MINER</span><b>'+(m.blocHauteur?m.blocHauteur.toLocaleString('fr-FR'):'—')+'</b></div>'
-          +'<div><span>BLOCS TROUV\u00c9S</span><b class="accent">'+(m.blocsTrouves||0)+'</b></div></div>'
-        +'<div class="eGrid"><div class="pool-nom" style="grid-column:1/-1"><span>POOL (COMPLET)</span><b>'+(m.pool||'—')+'</b></div></div>'
-        +'<div class="eGrid"><div><span>DIFFICULTÉ POOL</span><b>'+fmtD(m.poolDiff||0)+'</b></div>'
-          +'<div><span>MEILLEURE</span><b class="accent">'+fmtD(m.bestDiff||0)+'</b></div></div>'
-        +'<div class="eGrid"><div><span>SHARES ACC.</span><b>'+fmtN(m.accepted||0)+'</b></div>'
-          +'<div><span>SHARES REJ.</span><b>'+fmtN(m.rejected||0)+'</b></div></div>'
+    +'<div class="ecran'+(page===2?' vitrine':'')+'">'
+      +(page===2 ? '' : (
+        '<div class="eLigne"><div class="ecranLogo">'+LOGO_SVG+'AXECUBE</div>'
+          +blocBadge+badgeSkinHtml
+          +'<div class="statut'+(enLigne?'':' off')+'"><span class="pt"></span><span>'+(enLigne?'MINING':'HORS LIGNE')+'</span></div></div>'
+        +'<div class="zoneChamps">'
+        +(page===0?(
+            celda(0,'hashLabel','<div class="ecranLabel">HASHRATE</div>')
+          + celda(0,'blocs','<span class="blocsInline" title="Blocs trouv\u00e9s">BLOCS <b>'+(m.blocsTrouves||0)+'</b></span>')
+          + celda(0,'hashValeur','<div class="ecranHash">'+fmtHR(m.hashrate||0).replace(/ .*/,'')+'<span>'+ (fmtHR(m.hashrate||0).split(' ')[1]||'') +'</span></div><div class="spark">'+sparkSVG(m.hist)+'</div>')
+          + celda(0,'uptime','<span>UPTIME</span><b>'+fmtUp(m.uptime)+'</b>')
+          + celda(0,'threads','<span>THREADS</span><b>'+(m.threads||'—')+'</b>')
+          + celda(0,'pool','<span>POOL</span><b>'+(m.pool||'—')+'</b>',{defile:true})
+          + celda(0,'difficulte','<span>DIFFICULTÉ</span><b>'+fmtD(m.poolDiff||0)+'</b>')
+          + celda(0,'meilleure','<span>\ud83c\udfc6 MEILLEURE</span><b>'+fmtD(m.bestDiff||0)+nomCubeHtml+'</b>',true)
+          + celda(0,'shares','<span>SHARES</span><b>'+fmtN(m.accepted||0)+' <span class="rej">· '+fmtN(m.rejected||0)+'</span></b>')
+          + celda(0,'acceptation','<span>ACCEPTATION</span><b>'+acceptance+'</b>')
+          + celda(0,'cours','<span>COURS ₿</span><b>'+fmtPrix(m.btcPrice, m.btcSymbol)+'</b>',true)
+        ):(
+            celda(1,'blocAMiner','<span>BLOC À MINER</span><b>'+(m.blocHauteur?m.blocHauteur.toLocaleString('fr-FR'):'—')+'</b>')
+          + celda(1,'blocsTrouves','<span>BLOCS TROUV\u00c9S</span><b>'+(m.blocsTrouves||0)+'</b>',true)
+          + celda(1,'thermique','<span>\ud83c\udf21\ufe0f THERMIQUE</span><b>'+libelleThermique(m)+'</b>',{defile:true})
+          + celda(1,'paiement','<span>\ud83d\udcb0 PAIEMENT</span><b>'+libellePaiement(m)+'</b>')
+          + celda(1,'difficulteReseau','<span>DIFFICULT\u00c9 R\u00c9SEAU</span><b>'+fmtD(m.netDiff||0)+'</b>')
+          + celda(1,'recordJour','<span>RECORD DU JOUR</span><b>'+fmtD(m.bestDiffJour||0)+'</b>')
+          + celda(1,'skinActif','<span>SKIN ACTIF</span><b>'+(m.skinPremiumActif||'Palier Gen\u00e8se')+'</b>',{defile:true})
+          + celda(1,'progression','<span>VERS UN BLOC</span><b>'+((m.netDiff>0)?((m.bestDiff||0)/m.netDiff*100).toFixed(6)+'%':'—')+'</b>')
+          + celda(1,'travailTotal','<span>TRAVAIL TOTAL</span><b>'+fmtD(m.totalHashes||0)+'H</b>')
+          + celda(1,'badges',celdaBadges(m))
+          + celda(1,'niveauGenese','<span>PALIER GEN\u00c8SE</span><b>'+(cube.imageLogo?'<img src="'+cube.imageLogo+'" class="miniCube" alt="">':'')+' '+(cube.niveau||0)+'/22</b>')
+        ))
+        +'</div>'
       ))
     +'</div>'
     +'<button type="button" class="flechePage" onclick="pageSuivante(event,'+idx+')" title="Voir plus d\u2019infos" aria-label="Page suivante">\u203a</button>'
@@ -5323,7 +5523,10 @@ function pageSuivante(e, idx){
   if(!d) return;
   const cleStable=cleStableDe(d.m, d.estMoi, idx);
   const actuelle=pageActuelle.get(cleStable)||0;
-  pageActuelle.set(cleStable, actuelle===0?1:0);
+  // 3 pages (stats / stats détaillées / vitrine) pour les cartes complètes -- seulement
+  // 2 pour les cartes légères des autres machines du réseau (pas les mêmes données).
+  const maxPage=d.complete?2:1;
+  pageActuelle.set(cleStable, actuelle>=maxPage?0:actuelle+1);
   // Ré-affiche immédiatement cette carte avec la nouvelle page, sans attendre le
   // prochain rafraîchissement automatique.
   const carte=e.currentTarget.closest('.carteMachine');
@@ -5334,6 +5537,8 @@ function pageSuivante(e, idx){
 // Active un défilement doux (va-et-vient) sur les noms de pool trop longs pour tenir
 // dans leur case, plutôt que de les couper brutalement.
 function activerDefilementPool(){
+  // Durée de l'animation CSS -- DOIT rester synchronisée avec @keyframes defilerPool.
+  const DUREE_MS=3000;
   document.querySelectorAll('.pool-nom').forEach(el=>{
     const b=el.querySelector('b');
     if(!b) return;
@@ -5342,6 +5547,13 @@ function activerDefilementPool(){
     if(b.scrollWidth > el.clientWidth + 2){
       b.style.setProperty('--defilement', (-(b.scrollWidth-el.clientWidth+6))+'px');
       el.classList.add('defile');
+      // charger() remplace la carte entière toutes les 5s (nouveau DOM = animation qui
+      // repart de zéro par défaut) -- sans ça, un texte un peu long ne finit JAMAIS son
+      // cycle complet. On calcule où l'animation DEVRAIT en être selon l'horloge réelle,
+      // et on la fait reprendre pile à ce point avec un délai négatif -- elle paraît donc
+      // continue d'un rafraîchissement à l'autre, comme si la carte n'avait jamais changé.
+      const decalageSec=(Date.now()%DUREE_MS)/1000;
+      b.style.animationDelay='-'+decalageSec+'s';
     }
   });
 }
@@ -5358,6 +5570,9 @@ function calculerClasseVentilo(cle, enLigne){
   return etaitEnLigne ? 'ralentit' : 'arrete';
 }
 async function charger(){
+  // Pendant l'édition de l'écran (glisser/redimensionner un champ), on suspend le
+  // rafraîchissement automatique -- sinon il écraserait la carte en plein milieu du geste.
+  if(typeof editEcranActif!=='undefined' && editEcranActif) return;
   const grille=document.getElementById('grille');
   try{
     const [repDetails, repSwarm]=await Promise.all([
@@ -5389,7 +5604,15 @@ async function charger(){
         blocsTrouves: repDetails.loterie && repDetails.loterie.blocsTrouves,
         blocHauteur,
         btcPrice, btcSymbol,
-        skinPremiumActif: repDetails.skinPremiumActif || null
+        skinPremiumActif: repDetails.skinPremiumActif || null,
+        // Nouveau, jamais affiché sur la carte jusqu'ici -- voir panneau 2.
+        throttle: repDetails.perf && repDetails.perf.throttle,
+        thermalReel: repDetails.perf && repDetails.perf.thermalReel,
+        paiement: repDetails.paiement || null,
+        netDiff: repDetails.loterie && repDetails.loterie.netDiff,
+        bestDiffJour: repDetails.loterie && repDetails.loterie.bestDiffJour,
+        totalHashes: repDetails.loterie && repDetails.loterie.totalHashes,
+        bestDiffVerifie: repDetails.bestDiffVerifie || 0
       };
       donneesActuelles.push({m:moi, estMoi:true, complete:true});
       const idxMoi=donneesActuelles.length-1;
@@ -5687,6 +5910,102 @@ document.getElementById('btnEditEnregistrer').addEventListener('click', async ()
     editStatut.className='editStatut erreur';
   }
 });
+
+// --- Édition de l'écran (page 1 / page 2) -----------------------------------------------
+// Repositionne/redimensionne en direct les champs de MA carte (celda(), voir plus haut) et
+// enregistre le résultat dans CE, persisté côté serveur. Le rafraîchissement automatique
+// (charger(), toutes les 5s) est suspendu tant que ce mode est actif (voir tout début de
+// charger()), pour ne jamais écraser un glisser-déposer en cours.
+let editEcranActif=false, pageEdition=0, champGlisse=null, champRedim=null;
+function ajouterPoigneesEdition(){
+  document.querySelectorAll('.celluleEcran').forEach(el=>{
+    if(!el.querySelector('.poigneeEcran')){
+      const p=document.createElement('div');
+      p.className='poigneeEcran';
+      el.appendChild(p);
+    }
+  });
+}
+function forcerPageEdition(page){
+  pageEdition=page;
+  document.getElementById('btnPageEdit0').classList.toggle('actif', page===0);
+  document.getElementById('btnPageEdit1').classList.toggle('actif', page===1);
+  const idxMoi=donneesActuelles.findIndex(d=>d.estMoi);
+  if(idxMoi<0) return;
+  const cleStable=cleStableDe(donneesActuelles[idxMoi].m, true, idxMoi);
+  pageActuelle.set(cleStable, page);
+  const carte=document.querySelector('.carteMachine[data-idx="'+idxMoi+'"]');
+  if(carte){
+    const vClasse=(donneesActuelles[idxMoi].m.hashrate||0)>0?'':'arrete';
+    carte.outerHTML=carteComplete(donneesActuelles[idxMoi].m, true, idxMoi, vClasse);
+    ajouterPoigneesEdition();
+  }
+}
+document.getElementById('btnEditionEcran').addEventListener('click', ()=>{
+  editEcranActif=true;
+  document.documentElement.classList.add('editEcranMode');
+  document.getElementById('panneauEditionEcran').classList.add('ouvert');
+  forcerPageEdition(pageEdition);
+});
+document.getElementById('btnPageEdit0').addEventListener('click', ()=>forcerPageEdition(0));
+document.getElementById('btnPageEdit1').addEventListener('click', ()=>forcerPageEdition(1));
+document.getElementById('btnEditEcranFermer').addEventListener('click', ()=>{
+  editEcranActif=false;
+  document.documentElement.classList.remove('editEcranMode');
+  document.getElementById('panneauEditionEcran').classList.remove('ouvert');
+  charger();
+});
+document.getElementById('btnEditEcranEnregistrer').addEventListener('click', async ()=>{
+  const statut=document.getElementById('editEcranStatut');
+  statut.textContent='⏳ Enregistrement...';
+  try{
+    const r=await fetch('/api/config-ecran?set='+encodeURIComponent(JSON.stringify(CE))+(Q?'&'+Q.slice(1):''));
+    const j=await r.json();
+    statut.textContent=(j&&j.ok)?'✅ Enregistré.':'⚠️ Échec : '+(j&&j.erreur||'inconnu');
+  }catch(e){ statut.textContent='⚠️ Erreur réseau.'; }
+});
+document.addEventListener('mousedown', e=>{
+  if(!editEcranActif) return;
+  const poignee=e.target.closest('.poigneeEcran');
+  const cellule=e.target.closest('.celluleEcran');
+  if(poignee){
+    champRedim=poignee.closest('.celluleEcran');
+    e.preventDefault(); e.stopPropagation();
+    return;
+  }
+  if(cellule){
+    document.querySelectorAll('.celluleEcran').forEach(el=>el.classList.remove('selectionnee'));
+    cellule.classList.add('selectionnee');
+    champGlisse=cellule;
+    e.preventDefault();
+  }
+});
+document.addEventListener('mousemove', e=>{
+  if(!editEcranActif || (!champGlisse && !champRedim)) return;
+  const zone=document.querySelector('.zoneChamps');
+  if(!zone) return;
+  const br=zone.getBoundingClientRect();
+  if(champGlisse){
+    const champ=champGlisse.dataset.champ, page=champGlisse.dataset.page;
+    let left=Math.max(0,Math.min(100,(e.clientX-br.left)/br.width*100));
+    let top=Math.max(0,Math.min(100,(e.clientY-br.top)/br.height*100));
+    left=parseFloat(left.toFixed(2)); top=parseFloat(top.toFixed(2));
+    CE['page'+page][champ].left=left; CE['page'+page][champ].top=top;
+    champGlisse.style.left=left+'%'; champGlisse.style.top=top+'%';
+  }
+  if(champRedim){
+    const champ=champRedim.dataset.champ, page=champRedim.dataset.page;
+    const curLeft=parseFloat(champRedim.style.left)||0, curTop=parseFloat(champRedim.style.top)||0;
+    const w=Math.max(5,Math.min(100-curLeft,((e.clientX-br.left)/br.width*100)-curLeft));
+    const hPx=(e.clientY-br.top)-(br.height*curTop/100);
+    const taille=Math.max(.4,Math.min(3, hPx/26));
+    CE['page'+page][champ].width=parseFloat(w.toFixed(2));
+    CE['page'+page][champ].size=parseFloat(taille.toFixed(2));
+    champRedim.style.width=w+'%';
+    champRedim.style.setProperty('--t', taille);
+  }
+});
+document.addEventListener('mouseup', ()=>{ champGlisse=null; champRedim=null; });
 
 charger();setInterval(charger,5000);
 </script></body></html>`;
@@ -6057,6 +6376,41 @@ function fmtD(d){if(!d)return'—';if(d>=1e12)return(d/1e12).toFixed(2)+' T';if(
           res.end(JSON.stringify({ ok: false, erreur: 'JSON invalide' }));
         }
       });
+    } else if (url.pathname === '/api/config-ecran') {
+      // Position/taille de chaque champ texte de l'écran (page 1/2), éditée en direct via
+      // le bouton "🛠 Écran" sur /machines. GET seul renvoie la config actuelle ; avec
+      // ?set=<json>, la remplace -- validée champ par champ (uniquement des nombres, sur
+      // les clés connues), jamais de structure/code arbitraire accepté.
+      const brutSet = url.searchParams.get('set');
+      if (brutSet) {
+        try {
+          const recu = JSON.parse(brutSet);
+          const nouvelle = { page0: {}, page1: {} };
+          for (const page of ['page0', 'page1']) {
+            const section = (recu && recu[page]) || {};
+            for (const champ of Object.keys(CONFIG_ECRAN_DEFAUT[page])) {
+              const src = section[champ] || {};
+              const def = CONFIG_ECRAN_DEFAUT[page][champ];
+              nouvelle[page][champ] = {
+                left: Number.isFinite(Number(src.left)) ? Number(src.left) : def.left,
+                top: Number.isFinite(Number(src.top)) ? Number(src.top) : def.top,
+                width: Number.isFinite(Number(src.width)) ? Number(src.width) : def.width,
+                size: Number.isFinite(Number(src.size)) ? Number(src.size) : def.size,
+              };
+            }
+          }
+          configEcran = nouvelle;
+          sauvegarderConfigEcran(configEcran);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: true }));
+        } catch (e) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: false, erreur: 'JSON invalide : ' + e.message }));
+        }
+        return;
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+      res.end(JSON.stringify(configEcran));
     } else if (url.pathname === '/api/details') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
@@ -6085,10 +6439,12 @@ function fmtD(d){if(!d)return'—';if(d>=1e12)return(d/1e12).toFixed(2)+' T';if(
           codeAccesClassement: state.codeAccesClassement || null,
           journalJour: (state.journalJour || []).slice(-30).map(j => ({ date: j.date, bestDiff: j.bestDiff, diffTotal: j.diffTotal })),
           diffJour: state.diffJour || 0, bestDiffJour: state.bestDiffJour || 0,
+          totalHashes: state.totalHashes || 0,
         },
         bloc: { hauteur: state.blockHeight, depuis: state.lastBlockAt },
         paiement: state.paiement,
         skinPremiumActif: state.skinPremiumActif || null,
+        bestDiffVerifie: state.bestDiffVerifie || 0,
         reseau: { cle: reseauCle, symbole: reseau.symbole, recompense: reseau.recompense, label: reseau.label },
         marche: { btcPrice: state.btcPrice, btcSymbol: state.btcSymbol, devise: state.btcDevise },
         calibration: state.calibration,
@@ -6219,7 +6575,17 @@ function fmtD(d){if(!d)return'—';if(d>=1e12)return(d/1e12).toFixed(2)+' T';if(
     console.log(`   Pour désactiver : ajoutez --no-leaderboard\n`);
   }
 
-  let lanInfo = { ouvert: ouvertLan, port: dashPort, ip: null };
+  let lanInfo = { ouvert: ouvertLan, port: dashPort, ip: null, ipTailscale: null };
+
+  /** Tailscale attribue toujours ses adresses dans la plage CGNAT réservée 100.64.0.0/10
+   *  (RFC 6598) -- indépendant du nom de l'interface (utun3, utun4... variable), donc
+   *  fiable même si Tailscale change sa numérotation d'une version à l'autre. */
+  function estAdresseTailscale(ip) {
+    const m = /^100\.(\d{1,3})\./.exec(ip);
+    if (!m) return false;
+    const deuxieme = Number(m[1]);
+    return deuxieme >= 64 && deuxieme <= 127;
+  }
 
   server.listen(dashPort, ouvertLan ? '0.0.0.0' : '127.0.0.1', () => {
     if (!ouvertLan) { log('info', t.dashboardLocal(dashPort)); return; }
@@ -6230,6 +6596,11 @@ function fmtD(d){if(!d)return'—';if(d>=1e12)return(d/1e12).toFixed(2)+' T';if(
       lanInfo.ip = ips[0].ip;
       log('info', t.dashboardLan(ips[0].ip + q));
       for (const autre of ips.slice(1, 4)) log('info', t.dashboardLanAutre(autre.nom, autre.ip + q));
+    }
+    const tailscale = ips.find((i) => estAdresseTailscale(i.ip));
+    if (tailscale) {
+      lanInfo.ipTailscale = tailscale.ip;
+      log('info', `🌐 Tailscale détecté : ${tailscale.ip}${q} -- accessible aussi en dehors de votre réseau local, depuis un appareil connecté au même compte Tailscale.`);
     }
   });
 
