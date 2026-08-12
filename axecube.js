@@ -93,6 +93,10 @@ const CHEMIN_CONFIG_ECRAN = path.join(__dirname, 'assets', 'config-ecran.json');
 // Valeurs par défaut calées approximativement sur la disposition en grille d'origine ;
 // l'outil de calibrage sert justement à les affiner sans avoir à toucher au code.
 const CONFIG_ECRAN_DEFAUT = {
+  // Marge autour du contenu, à l'intérieur du cadre noir de l'écran -- réglable en direct
+  // via le bandeau "🛠 Écran" (champs "Marge H/V"), pour utiliser plus (ou moins) de la
+  // surface réellement disponible plutôt qu'un padding figé choisi une fois pour toutes.
+  margeH: 2.5, margeV: 2,
   page0: {
     hashLabel:   { left: 0,  top: 0,  width: 62, size: 1.0 },
     blocs:       { left: 62, top: 1,  width: 38, size: 1.0 },
@@ -116,15 +120,19 @@ const CONFIG_ECRAN_DEFAUT = {
     skinActif:       { left: 50, top: 58, width: 50, size: 1.0 },
     progression:     { left: 0,  top: 76, width: 44, size: 1.0 },
     travailTotal:    { left: 50, top: 76, width: 50, size: 1.0 },
-    badges:          { left: 0,  top: 92, width: 60, size: 0.85 },
-    niveauGenese:    { left: 62, top: 92, width: 38, size: 0.85 },
+    badges:          { left: 0,  top: 90, width: 60, size: 1.0, sizeIcone: 1.0 },
+    niveauGenese:    { left: 62, top: 90, width: 38, size: 1.0, sizeIcone: 1.0 },
   },
 };
 function chargerConfigEcran() {
   try {
     const brut = fs.readFileSync(CHEMIN_CONFIG_ECRAN, 'utf8');
     const lu = JSON.parse(brut);
-    const fusion = { page0: {}, page1: {} };
+    const fusion = {
+      margeH: Number.isFinite(Number(lu.margeH)) ? Number(lu.margeH) : CONFIG_ECRAN_DEFAUT.margeH,
+      margeV: Number.isFinite(Number(lu.margeV)) ? Number(lu.margeV) : CONFIG_ECRAN_DEFAUT.margeV,
+      page0: {}, page1: {},
+    };
     for (const page of ['page0', 'page1']) {
       for (const cle of Object.keys(CONFIG_ECRAN_DEFAUT[page])) {
         fusion[page][cle] = Object.assign({}, CONFIG_ECRAN_DEFAUT[page][cle], (lu[page] && lu[page][cle]) || {});
@@ -1761,6 +1769,7 @@ function main() {
     if (/public-pool\.io/i.test(host)) return { type: 'publicpool', url: `https://public-pool.io:40557/api/client/${address}` };
     if (/ckpool\.org/i.test(host)) return { type: 'ckpool', url: `https://solo.ckpool.org/users/${address}` };
     if (/mineshop\.eu/i.test(host)) return { type: 'ckpool', url: `https://solo.mineshop.eu/api/miner.php?wallet=${encodeURIComponent(address)}` };
+    if (/axeminer\.com/i.test(host)) return { type: 'axeminer', url: `https://axeminer.com/api/client/${address}` };
     return null;
   }
   let statsExternesPool = null;
@@ -1790,6 +1799,26 @@ function main() {
               bestshare: meilleur || null, workers: Array.isArray(j.workers) ? j.workers.length : null,
               recu: Date.now(),
             };
+          } else if (cible.type === 'axeminer') {
+            // AxeMiner garde un historique PAR SESSION (chaque redémarrage crée un nouveau
+            // sessionId avec sa propre bestDifficulty repartie de 0) -- il faut donc prendre
+            // le MAXIMUM parmi toutes tes sessions passées, pas juste la plus récente, sans
+            // quoi un simple redémarrage ferait apparemment "perdre" tout ton record.
+            if (Array.isArray(j.workers)) {
+              let hrSomme = 0;
+              for (const w of j.workers) {
+                if (workerName && w.name && w.name !== workerName) continue; // autre worker du même wallet
+                const d = parseFloat(w.bestDifficulty);
+                if (isFinite(d) && d > meilleur) meilleur = d;
+                const hr = parseFloat(w.hashRate);
+                if (isFinite(hr)) hrSomme += hr;
+              }
+              statsExternesPool = {
+                hashrate1hr: hrSomme ? formatHashrate(hrSomme) : null, shares: null,
+                bestshare: meilleur || null, workers: j.workersCount || j.workers.length,
+                recu: Date.now(),
+              };
+            }
           } else { // ckpool (couvre aussi Mineshop.eu, qui tourne le même logiciel)
             // bestshare = valeur précise (ex. 362.9995...) ; bestever = version arrondie
             // affichée dans leur UI (362). On garde la précise pour la comparaison locale.
@@ -5036,13 +5065,13 @@ charger();setInterval(charger,5000);
   .ecran{position:absolute;left:${cv.ecran.left}%;top:${cv.ecran.top}%;width:${cv.ecran.width}%;height:${cv.ecran.height}%;
     container-type:size;container-name:ecran;
     border-radius:2%/1.6%;overflow:hidden;background:#05070a;
-    padding:5% 6%;box-sizing:border-box}
+    padding:var(--marge-v,2%) var(--marge-h,2.5%);box-sizing:border-box}
   .ecran.vitrine{background:transparent;padding:0}
   .eLigne{height:9%;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;min-width:0}
   /* Zone libre : chaque champ (.celluleEcran) s'y positionne en absolu selon CE (config
      éditable en direct via le bouton "🛠 Écran") -- remplace l'ancienne grille figée. */
   .zoneChamps{position:relative;width:100%;height:calc(100% - 9% - 3%);margin-top:3%}
-  .celluleEcran{position:absolute;box-sizing:border-box;overflow:hidden;display:flex;flex-direction:column;justify-content:center;gap:2%}
+  .celluleEcran{position:absolute;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;gap:2%}
   .ecranLogo{display:flex;align-items:center;gap:5px;font-weight:700;color:var(--couleur-cube,var(--white));font-size:min(9.5cqw,29cqh,29px);
     min-width:0;flex-shrink:1;overflow:hidden;white-space:nowrap}
   .ecranLogo span{overflow:hidden;text-overflow:ellipsis}
@@ -5070,10 +5099,10 @@ charger();setInterval(charger,5000);
   .celluleEcran b{font-size:calc(min(6.8cqw,19cqh,23px)*var(--t,1));color:var(--white);font-weight:700;
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .celluleEcran.accent b{color:var(--amber)}
-  .badgesRangee{display:flex;gap:5%;align-items:center;margin-top:2%}
-  .badgeMini{font-size:calc(1.15em*var(--t,1));filter:grayscale(1) brightness(.5);opacity:.45;transition:filter .2s,opacity .2s}
+  .badgesRangee{display:flex;gap:2px;align-items:center;margin-top:2%}
+  .celluleEcran .badgeMini{font-size:calc(15px*var(--ti,1));filter:grayscale(1) brightness(.5);opacity:.45;transition:filter .2s,opacity .2s}
   .badgeMini.atteint{filter:none;opacity:1}
-  .miniCube{width:1.1em;height:1.1em;vertical-align:middle;object-fit:contain;margin-right:2px}
+  .miniCube{width:calc(15px*var(--ti,1));height:calc(15px*var(--ti,1));vertical-align:middle;object-fit:contain;margin-right:3px}
   .nomCube{display:block;font-size:0.72em;font-weight:400;color:var(--couleur-cube,var(--amber));
     letter-spacing:.04em;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .eGrid .rej{color:var(--mut);font-weight:400;font-size:0.8em}
@@ -5086,13 +5115,15 @@ charger();setInterval(charger,5000);
   .flechePage:hover{background:rgba(150,240,31,.18);border-color:var(--amber)}
   .pool-nom{overflow:hidden}
   .pool-nom b{display:inline-block;white-space:nowrap;overflow:visible;text-overflow:clip}
-  .pool-nom.defile b{animation:defilerPool 3s linear infinite}
+  /* Boucle continue, toujours de gauche à droite : le texte du <b> est dupliqué en JS
+     (voir activerDefilementPool) avec un séparateur, puis on fait glisser exactement de
+     la largeur d'une seule copie -- au moment où la 1re copie sort à gauche, la 2e est
+     déjà pile à sa place, donnant l'illusion d'un flux ininterrompu, sans jamais revenir
+     brutalement au début. */
+  .pool-nom.defile b{animation:defilerPool linear infinite}
   @keyframes defilerPool{
-    0%,8%{transform:translateX(0)}
-    82%{transform:translateX(var(--defilement,0px))}
-    90%{transform:translateX(var(--defilement,0px))}
-    90.5%{transform:translateX(0)}
-    100%{transform:translateX(0)}
+    0%{transform:translateX(0)}
+    100%{transform:translateX(var(--defilement,0px))}
   }
   .badgeMoi{display:inline-block;background:rgba(150,240,31,.14);color:var(--amber);border:1px solid rgba(150,240,31,.4);
     font-size:9px;font-weight:700;letter-spacing:.06em;padding:1px 6px;border-radius:8px;margin-right:5px;vertical-align:middle}
@@ -5124,12 +5155,15 @@ charger();setInterval(charger,5000);
     border-radius:6px;font-family:var(--mono);font-size:11px;cursor:pointer}
   .editEcranPages button.actif{border-color:var(--amber);color:var(--amber)}
   .editEcranAide{color:var(--white-dim);font-size:11px}
+  .editEcranChamps{display:flex;gap:12px;align-items:center;background:rgba(150,240,31,.06);
+    border:1px solid var(--amber-faint);border-radius:8px;padding:6px 12px}
+  .editEcranChamps label{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--white-dim)}
+  .editEcranChamps input{width:56px;background:var(--panel2,#0d1015);border:1px solid var(--edge);
+    color:var(--white);padding:3px 5px;border-radius:5px;font-family:var(--mono);font-size:11px}
+  .editEcranChamps b{color:var(--amber)}
   #editEcranStatut{color:var(--amber);font-size:11px;margin-left:auto}
-  html.editEcranMode .celluleEcran{outline:1px dashed rgba(150,240,31,.55);cursor:move}
-  html.editEcranMode .celluleEcran.selectionnee{outline:2px solid #96f01f;z-index:5}
-  .poigneeEcran{position:absolute;right:-7px;bottom:-7px;width:14px;height:14px;background:#96f01f;
-    border-radius:3px;cursor:nwse-resize;display:none;border:2px solid #05070a}
-  html.editEcranMode .celluleEcran.selectionnee .poigneeEcran{display:block}
+  html.editEcranMode #modalCarteHote .celluleEcran{outline:1px dashed rgba(150,240,31,.55);cursor:move}
+  html.editEcranMode #modalCarteHote .celluleEcran.selectionnee{outline:2px solid #96f01f;z-index:6}
   html.editEcranMode .carteMachine{margin-top:44px}
   .panneauEdition.ouvert{display:flex}
   .editFond{position:absolute;inset:0;background:rgba(3,5,4,.92)}
@@ -5193,7 +5227,17 @@ charger();setInterval(charger,5000);
     <button type="button" id="btnPageEdit0" class="actif">Page 1</button>
     <button type="button" id="btnPageEdit1">Page 2</button>
   </div>
-  <span class="editEcranAide">Glisse un champ pour le déplacer · tire le coin ↘ pour l'agrandir (largeur + texte)</span>
+  <span class="editEcranAide">Glisse un champ pour le déplacer · règle largeur/taille avec les champs ci-contre</span>
+  <div class="editEcranChamps">
+    <label>Marge H % <input type="number" id="inMargeH" min="0" max="20" step="0.5"></label>
+    <label>Marge V % <input type="number" id="inMargeV" min="0" max="20" step="0.5"></label>
+  </div>
+  <div id="editEcranChamps" class="editEcranChamps" style="display:none">
+    <label>Sélection : <b id="editEcranNomChamp">—</b></label>
+    <label>Largeur % <input type="number" id="inLargeur" min="5" max="100" step="1"></label>
+    <label>Taille texte <input type="number" id="inTaille" min="0.4" max="3" step="0.05"></label>
+    <label id="labelTailleIcone">Taille icônes <input type="number" id="inTailleIcone" min="0.4" max="4" step="0.05"></label>
+  </div>
   <button type="button" id="btnEditEcranEnregistrer" class="lien principal">💾 Enregistrer</button>
   <button type="button" id="btnEditEcranFermer" class="lien">Fermer</button>
   <span id="editEcranStatut"></span>
@@ -5262,11 +5306,11 @@ function fmtN(n){n=n||0;if(n>=1e6)return(n/1e6).toFixed(2)+'M';if(n>=1e3)return(
  *  champ: clé dans CE.page0/CE.page1. html: contenu (span+b, ou bloc spécial). accent:
  *  colore la valeur en ambre (mêmes cas qu'avant : MEILLEURE, COURS ₿, BLOCS TROUVÉS). */
 function celda(page,champ,html,opts){
-  const cfg=(CE&&CE['page'+page]&&CE['page'+page][champ])||{left:0,top:0,width:50,size:1};
+  const cfg=(CE&&CE['page'+page]&&CE['page'+page][champ])||{left:0,top:0,width:50,size:1,sizeIcone:1};
   const accent=opts===true||(opts&&opts.accent);
   const defile=opts&&opts.defile;
   return '<div class="celluleEcran'+(accent?' accent':'')+(defile?' pool-nom':'')+'" data-champ="'+champ+'" data-page="'+page+'" '
-    +'style="left:'+cfg.left+'%;top:'+cfg.top+'%;width:'+cfg.width+'%;--t:'+(cfg.size||1)+'">'+html+'</div>';
+    +'style="left:'+cfg.left+'%;top:'+cfg.top+'%;width:'+cfg.width+'%;--t:'+(cfg.size||1)+';--ti:'+(cfg.sizeIcone||1)+'">'+html+'</div>';
 }
 // Seuils des 6 badges de palier (bronze -> légende) -- doivent rester identiques à
 // PALIERS_CLIENT (page principale) et PALIERS (serveur, submit.js). Copie locale car
@@ -5433,7 +5477,7 @@ function carteComplete(m, estMoi, idx, ventiloClasse){
     +'<div class="ventilo'+(ventiloClasse?' '+ventiloClasse:'')+'"><div class="logoVentilo"></div></div>'+'<button type="button" class="boutonVentilo" onclick="toggleVentilo(event)" title="Arr\u00eater/relancer le ventilateur (visuel)" aria-label="Basculer le ventilateur"></button>'
     +'<div class="contourGlow"></div>'
     +'<div class="barreGlow"></div>'
-    +'<div class="ecran'+(page===2?' vitrine':'')+'">'
+    +'<div class="ecran'+(page===2?' vitrine':'')+'" style="--marge-h:'+(CE.margeH!=null?CE.margeH:2.5)+'%;--marge-v:'+(CE.margeV!=null?CE.margeV:2)+'%">'
       +(page===2 ? '' : (
         '<div class="eLigne"><div class="ecranLogo">'+LOGO_SVG+'AXECUBE</div>'
           +blocBadge+badgeSkinHtml
@@ -5458,7 +5502,7 @@ function carteComplete(m, estMoi, idx, ventiloClasse){
           + celda(1,'paiement','<span>\ud83d\udcb0 PAIEMENT</span><b>'+libellePaiement(m)+'</b>')
           + celda(1,'difficulteReseau','<span>DIFFICULT\u00c9 R\u00c9SEAU</span><b>'+fmtD(m.netDiff||0)+'</b>')
           + celda(1,'recordJour','<span>RECORD DU JOUR</span><b>'+fmtD(m.bestDiffJour||0)+'</b>')
-          + celda(1,'skinActif','<span>SKIN ACTIF</span><b>'+(m.skinPremiumActif||'Palier Gen\u00e8se')+'</b>',{defile:true})
+          + celda(1,'skinActif','<span>SKIN ACTIF</span><b>'+(m.skinPremiumActif||('Palier Gen\u00e8se atteint : '+(cube.nom||'—')))+'</b>',{defile:true})
           + celda(1,'progression','<span>VERS UN BLOC</span><b>'+((m.netDiff>0)?((m.bestDiff||0)/m.netDiff*100).toFixed(6)+'%':'—')+'</b>')
           + celda(1,'travailTotal','<span>TRAVAIL TOTAL</span><b>'+fmtD(m.totalHashes||0)+'H</b>')
           + celda(1,'badges',celdaBadges(m))
@@ -5534,25 +5578,38 @@ function pageSuivante(e, idx){
   carte.outerHTML = d.complete?carteComplete(d.m,d.estMoi,idx,vClasse):carteLegere(d.m,idx,vClasse);
   activerDefilementPool();
 }
-// Active un défilement doux (va-et-vient) sur les noms de pool trop longs pour tenir
-// dans leur case, plutôt que de les couper brutalement.
+// Active un défilement en boucle continue (toujours de gauche à droite, jamais de retour
+// brutal) sur les noms trop longs pour tenir dans leur case.
 function activerDefilementPool(){
-  // Durée de l'animation CSS -- DOIT rester synchronisée avec @keyframes defilerPool.
-  const DUREE_MS=3000;
+  const VITESSE_PX_PAR_SEC=40; // vitesse constante, quelle que soit la longueur du texte
   document.querySelectorAll('.pool-nom').forEach(el=>{
     const b=el.querySelector('b');
     if(!b) return;
     el.classList.remove('defile');
     b.style.removeProperty('--defilement');
+    b.style.removeProperty('animation-duration');
+    // Retire une éventuelle duplication posée lors d'un précédent appel, pour repartir
+    // d'un texte propre avant de mesurer (sinon la mesure inclurait déjà la copie).
+    if(b.dataset.texteOriginal!=null) b.textContent=b.dataset.texteOriginal;
     if(b.scrollWidth > el.clientWidth + 2){
-      b.style.setProperty('--defilement', (-(b.scrollWidth-el.clientWidth+6))+'px');
+      const texte=b.textContent;
+      b.dataset.texteOriginal=texte;
+      // Duplique le texte avec un séparateur bien visible -- au moment où la 1re copie
+      // sort complètement à gauche, la 2e est pile à sa place d'origine : la boucle est
+      // invisible, on dirait un flux ininterrompu.
+      const separateur='    •    ';
+      b.textContent=texte+separateur+texte;
+      const largeurUneCopie=b.scrollWidth/2; // approx. -- les deux copies ont la même largeur
+      b.style.setProperty('--defilement', (-largeurUneCopie)+'px');
+      const dureeSec=Math.max(2, largeurUneCopie/VITESSE_PX_PAR_SEC);
+      b.style.animationDuration=dureeSec+'s';
       el.classList.add('defile');
       // charger() remplace la carte entière toutes les 5s (nouveau DOM = animation qui
-      // repart de zéro par défaut) -- sans ça, un texte un peu long ne finit JAMAIS son
-      // cycle complet. On calcule où l'animation DEVRAIT en être selon l'horloge réelle,
-      // et on la fait reprendre pile à ce point avec un délai négatif -- elle paraît donc
-      // continue d'un rafraîchissement à l'autre, comme si la carte n'avait jamais changé.
-      const decalageSec=(Date.now()%DUREE_MS)/1000;
+      // repart de zéro par défaut) -- sans ça, l'oeil perçoit une micro-saccade à chaque
+      // rafraîchissement. On calcule où l'animation DEVRAIT en être selon l'horloge
+      // réelle, et on la fait reprendre pile à ce point avec un délai négatif -- elle
+      // paraît donc continue d'un rafraîchissement à l'autre.
+      const decalageSec=(Date.now()/1000)%dureeSec;
       b.style.animationDelay='-'+decalageSec+'s';
     }
   });
@@ -5667,6 +5724,10 @@ function afficherModale(idx, animer){
 function fermerModale(){
   indexOuvert=null;
   modal.classList.remove('ouverte');
+  // Si on ferme la modale pendant l'édition de l'écran (croix, clic en dehors...), on
+  // quitte aussi proprement le mode édition -- sinon le bandeau resterait affiché alors
+  // que la carte qu'il édite n'est plus visible.
+  if(typeof editEcranActif!=='undefined' && editEcranActif) quitterEditionEcran();
 }
 // Bouton blanc de la carte : arrête/relance le ventilo de cette carte précise, sans
 // ouvrir la fenêtre agrandie (stopPropagation) -- pratique pour vérifier le calibrage
@@ -5915,17 +5976,15 @@ document.getElementById('btnEditEnregistrer').addEventListener('click', async ()
 // Repositionne/redimensionne en direct les champs de MA carte (celda(), voir plus haut) et
 // enregistre le résultat dans CE, persisté côté serveur. Le rafraîchissement automatique
 // (charger(), toutes les 5s) est suspendu tant que ce mode est actif (voir tout début de
-// charger()), pour ne jamais écraser un glisser-déposer en cours.
-let editEcranActif=false, pageEdition=0, champGlisse=null, champRedim=null;
-function ajouterPoigneesEdition(){
-  document.querySelectorAll('.celluleEcran').forEach(el=>{
-    if(!el.querySelector('.poigneeEcran')){
-      const p=document.createElement('div');
-      p.className='poigneeEcran';
-      el.appendChild(p);
-    }
-  });
-}
+// charger()), pour ne jamais écraser un glisser-déposer en cours. L'édition se fait TOUJOURS
+// dans la vue agrandie (modale) -- jamais sur la petite carte de la grille, trop petite pour
+// être manipulée précisément, et dont le DOM est de toute façon distinct de la modale.
+let editEcranActif=false, pageEdition=0, champGlisse=null;
+// Plus de poignées de glisser pour largeur/taille -- trop peu fiables (angle du geste
+// ambigu, difficile à cibler). Remplacées par des champs numériques directs dans le
+// bandeau (voir #editEcranChamps), bien plus précis. La position, elle, reste réglable
+// en glissant la cellule directement (ça, ça fonctionne bien).
+function ajouterPoigneesEdition(){ /* conservé pour compat d'appel, ne fait plus rien */ }
 function forcerPageEdition(page){
   pageEdition=page;
   document.getElementById('btnPageEdit0').classList.toggle('actif', page===0);
@@ -5934,26 +5993,44 @@ function forcerPageEdition(page){
   if(idxMoi<0) return;
   const cleStable=cleStableDe(donneesActuelles[idxMoi].m, true, idxMoi);
   pageActuelle.set(cleStable, page);
-  const carte=document.querySelector('.carteMachine[data-idx="'+idxMoi+'"]');
-  if(carte){
-    const vClasse=(donneesActuelles[idxMoi].m.hashrate||0)>0?'':'arrete';
-    carte.outerHTML=carteComplete(donneesActuelles[idxMoi].m, true, idxMoi, vClasse);
-    ajouterPoigneesEdition();
-  }
+  const vClasse=(donneesActuelles[idxMoi].m.hashrate||0)>0?'':'arrete';
+  modalHote.innerHTML=carteComplete(donneesActuelles[idxMoi].m, true, null, vClasse);
+  ajouterPoigneesEdition();
+  document.getElementById('inMargeH').value=CE.margeH!=null?CE.margeH:2.5;
+  document.getElementById('inMargeV').value=CE.margeV!=null?CE.margeV:2;
 }
+document.getElementById('inMargeH').addEventListener('input', function(){
+  const v=Math.max(0,Math.min(20,parseFloat(this.value)||0));
+  CE.margeH=v;
+  const ecran=modalHote.querySelector('.ecran');
+  if(ecran) ecran.style.setProperty('--marge-h', v+'%');
+});
+document.getElementById('inMargeV').addEventListener('input', function(){
+  const v=Math.max(0,Math.min(20,parseFloat(this.value)||0));
+  CE.margeV=v;
+  const ecran=modalHote.querySelector('.ecran');
+  if(ecran) ecran.style.setProperty('--marge-v', v+'%');
+});
 document.getElementById('btnEditionEcran').addEventListener('click', ()=>{
+  const idxMoi=donneesActuelles.findIndex(d=>d.estMoi);
+  if(idxMoi<0){ alert('Ta machine n\\'est pas encore charg\\u00e9e -- réessaie dans quelques secondes.'); return; }
   editEcranActif=true;
   document.documentElement.classList.add('editEcranMode');
   document.getElementById('panneauEditionEcran').classList.add('ouvert');
+  afficherModale(idxMoi, true);
   forcerPageEdition(pageEdition);
 });
 document.getElementById('btnPageEdit0').addEventListener('click', ()=>forcerPageEdition(0));
 document.getElementById('btnPageEdit1').addEventListener('click', ()=>forcerPageEdition(1));
-document.getElementById('btnEditEcranFermer').addEventListener('click', ()=>{
+function quitterEditionEcran(){
   editEcranActif=false;
   document.documentElement.classList.remove('editEcranMode');
   document.getElementById('panneauEditionEcran').classList.remove('ouvert');
   charger();
+}
+document.getElementById('btnEditEcranFermer').addEventListener('click', ()=>{
+  quitterEditionEcran();
+  fermerModale();
 });
 document.getElementById('btnEditEcranEnregistrer').addEventListener('click', async ()=>{
   const statut=document.getElementById('editEcranStatut');
@@ -5964,48 +6041,69 @@ document.getElementById('btnEditEcranEnregistrer').addEventListener('click', asy
     statut.textContent=(j&&j.ok)?'✅ Enregistré.':'⚠️ Échec : '+(j&&j.erreur||'inconnu');
   }catch(e){ statut.textContent='⚠️ Erreur réseau.'; }
 });
+// Cellules ayant des icônes (donc concernées par le champ "Taille icônes") -- les autres
+// n'ont que du texte, ce champ n'aurait aucun effet visible dessus.
+const CHAMPS_AVEC_ICONES=new Set(['badges','niveauGenese']);
+function selectionnerCellule(cellule){
+  modalHote.querySelectorAll('.celluleEcran').forEach(el=>el.classList.remove('selectionnee'));
+  cellule.classList.add('selectionnee');
+  const champ=cellule.dataset.champ, page=cellule.dataset.page;
+  const cfg=CE['page'+page][champ];
+  document.getElementById('editEcranNomChamp').textContent=champ;
+  document.getElementById('inLargeur').value=cfg.width;
+  document.getElementById('inTaille').value=cfg.size||1;
+  document.getElementById('inTailleIcone').value=cfg.sizeIcone||1;
+  document.getElementById('labelTailleIcone').style.display=CHAMPS_AVEC_ICONES.has(champ)?'flex':'none';
+  document.getElementById('editEcranChamps').style.display='flex';
+}
+document.getElementById('inLargeur').addEventListener('input', function(){
+  const cellule=modalHote.querySelector('.celluleEcran.selectionnee');
+  if(!cellule) return;
+  const champ=cellule.dataset.champ, page=cellule.dataset.page;
+  const v=Math.max(5,Math.min(100,parseFloat(this.value)||5));
+  CE['page'+page][champ].width=v;
+  cellule.style.width=v+'%';
+});
+document.getElementById('inTaille').addEventListener('input', function(){
+  const cellule=modalHote.querySelector('.celluleEcran.selectionnee');
+  if(!cellule) return;
+  const champ=cellule.dataset.champ, page=cellule.dataset.page;
+  const v=Math.max(.4,Math.min(3,parseFloat(this.value)||1));
+  CE['page'+page][champ].size=v;
+  cellule.style.setProperty('--t', v);
+});
+document.getElementById('inTailleIcone').addEventListener('input', function(){
+  const cellule=modalHote.querySelector('.celluleEcran.selectionnee');
+  if(!cellule) return;
+  const champ=cellule.dataset.champ, page=cellule.dataset.page;
+  const v=Math.max(.4,Math.min(4,parseFloat(this.value)||1));
+  CE['page'+page][champ].sizeIcone=v;
+  cellule.style.setProperty('--ti', v);
+});
 document.addEventListener('mousedown', e=>{
   if(!editEcranActif) return;
-  const poignee=e.target.closest('.poigneeEcran');
+  // Ne pas démarrer un glisser si on clique DANS les champs numériques du bandeau.
+  if(e.target.closest('.editEcranChamps')) return;
   const cellule=e.target.closest('.celluleEcran');
-  if(poignee){
-    champRedim=poignee.closest('.celluleEcran');
-    e.preventDefault(); e.stopPropagation();
-    return;
-  }
   if(cellule){
-    document.querySelectorAll('.celluleEcran').forEach(el=>el.classList.remove('selectionnee'));
-    cellule.classList.add('selectionnee');
+    selectionnerCellule(cellule);
     champGlisse=cellule;
     e.preventDefault();
   }
 });
 document.addEventListener('mousemove', e=>{
-  if(!editEcranActif || (!champGlisse && !champRedim)) return;
-  const zone=document.querySelector('.zoneChamps');
+  if(!editEcranActif || !champGlisse) return;
+  const zone=modalHote.querySelector('.zoneChamps');
   if(!zone) return;
   const br=zone.getBoundingClientRect();
-  if(champGlisse){
-    const champ=champGlisse.dataset.champ, page=champGlisse.dataset.page;
-    let left=Math.max(0,Math.min(100,(e.clientX-br.left)/br.width*100));
-    let top=Math.max(0,Math.min(100,(e.clientY-br.top)/br.height*100));
-    left=parseFloat(left.toFixed(2)); top=parseFloat(top.toFixed(2));
-    CE['page'+page][champ].left=left; CE['page'+page][champ].top=top;
-    champGlisse.style.left=left+'%'; champGlisse.style.top=top+'%';
-  }
-  if(champRedim){
-    const champ=champRedim.dataset.champ, page=champRedim.dataset.page;
-    const curLeft=parseFloat(champRedim.style.left)||0, curTop=parseFloat(champRedim.style.top)||0;
-    const w=Math.max(5,Math.min(100-curLeft,((e.clientX-br.left)/br.width*100)-curLeft));
-    const hPx=(e.clientY-br.top)-(br.height*curTop/100);
-    const taille=Math.max(.4,Math.min(3, hPx/26));
-    CE['page'+page][champ].width=parseFloat(w.toFixed(2));
-    CE['page'+page][champ].size=parseFloat(taille.toFixed(2));
-    champRedim.style.width=w+'%';
-    champRedim.style.setProperty('--t', taille);
-  }
+  const champ=champGlisse.dataset.champ, page=champGlisse.dataset.page;
+  let left=Math.max(0,Math.min(100,(e.clientX-br.left)/br.width*100));
+  let top=Math.max(0,Math.min(100,(e.clientY-br.top)/br.height*100));
+  left=parseFloat(left.toFixed(2)); top=parseFloat(top.toFixed(2));
+  CE['page'+page][champ].left=left; CE['page'+page][champ].top=top;
+  champGlisse.style.left=left+'%'; champGlisse.style.top=top+'%';
 });
-document.addEventListener('mouseup', ()=>{ champGlisse=null; champRedim=null; });
+document.addEventListener('mouseup', ()=>{ champGlisse=null; });
 
 charger();setInterval(charger,5000);
 </script></body></html>`;
@@ -6385,7 +6483,11 @@ function fmtD(d){if(!d)return'—';if(d>=1e12)return(d/1e12).toFixed(2)+' T';if(
       if (brutSet) {
         try {
           const recu = JSON.parse(brutSet);
-          const nouvelle = { page0: {}, page1: {} };
+          const nouvelle = {
+            margeH: Number.isFinite(Number(recu.margeH)) ? Number(recu.margeH) : CONFIG_ECRAN_DEFAUT.margeH,
+            margeV: Number.isFinite(Number(recu.margeV)) ? Number(recu.margeV) : CONFIG_ECRAN_DEFAUT.margeV,
+            page0: {}, page1: {},
+          };
           for (const page of ['page0', 'page1']) {
             const section = (recu && recu[page]) || {};
             for (const champ of Object.keys(CONFIG_ECRAN_DEFAUT[page])) {
@@ -6396,6 +6498,7 @@ function fmtD(d){if(!d)return'—';if(d>=1e12)return(d/1e12).toFixed(2)+' T';if(
                 top: Number.isFinite(Number(src.top)) ? Number(src.top) : def.top,
                 width: Number.isFinite(Number(src.width)) ? Number(src.width) : def.width,
                 size: Number.isFinite(Number(src.size)) ? Number(src.size) : def.size,
+                sizeIcone: Number.isFinite(Number(src.sizeIcone)) ? Number(src.sizeIcone) : (def.sizeIcone || 1),
               };
             }
           }
