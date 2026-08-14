@@ -5226,6 +5226,14 @@ charger();setInterval(charger,5000);
   .miniCube{width:calc(15px*var(--ti,1));height:calc(15px*var(--ti,1));vertical-align:middle;object-fit:contain;margin-right:3px}
   .nomCube{display:block;font-size:0.72em;font-weight:400;color:var(--couleur-cube,var(--amber));
     letter-spacing:.04em;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .blocHash{margin-top:3%}
+  .eGrid{display:grid;grid-template-columns:1fr 1fr;gap:2%;margin-top:3%;min-width:0}
+  .eGrid>div{display:flex;flex-direction:column;gap:2%;min-width:0}
+  .eGrid span{font-size:min(5.4cqw,16cqh,17px);color:var(--mut);letter-spacing:.08em;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .eGrid b{font-size:min(6.8cqw,19cqh,23px);color:var(--white);font-weight:700;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .eGrid .accent b{color:var(--amber)}
   .eGrid .rej{color:var(--mut);font-weight:400;font-size:0.8em}
   .nomMachine{position:absolute;left:4%;right:4%;bottom:-26px;text-align:center;font-size:11px;color:var(--white-dim);
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
