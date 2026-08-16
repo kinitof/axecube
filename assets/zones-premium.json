@@ -1,0 +1,47 @@
+{
+  "neptune-azur": {
+    "ecran": {
+      "left": 24.7,
+      "top": 4.01,
+      "width": 49.29,
+      "height": 46.02
+    },
+    "fondNoir": {
+      "left": 25.21,
+      "top": 58.56,
+      "width": 48.05
+    },
+    "ventilo": {
+      "left": 24.82,
+      "top": 58.16,
+      "width": 48.68,
+      "pivotX": 49.69,
+      "pivotY": 51.16
+    },
+    "logoVentilo": {
+      "left": 37.39,
+      "top": 37.57,
+      "width": 24.98
+    },
+    "contourGlow": {
+      "left": 2.08,
+      "top": 0.64,
+      "width": 95.31,
+      "height": 90.98
+    },
+    "barreGlow": {
+      "left": 18.86,
+      "top": 97.86,
+      "width": 62.15,
+      "height": 2.03
+    },
+    "boutonVentilo": {
+      "left": 18.56,
+      "top": 53.18,
+      "width": 4.96
+    },
+    "couleur": "#2a54e8",
+    "vitesse": 0.09,
+    "flou": 0
+  }
+}

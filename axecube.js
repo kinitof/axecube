@@ -167,6 +167,61 @@ function sauvegarderConfigVisuel(config) {
   fs.writeFileSync(CHEMIN_CONFIG_VISUEL, JSON.stringify(config, null, 2), 'utf8');
 }
 let configVisuel = chargerConfigVisuel();
+
+// Zones par skin Premium (voir bouton "🎯 Zones du skin" sur /machines) : un simple
+// dictionnaire { itemId: {ecran:{...}, ventilo:{...}, ...} } stocké en local, à côté de
+// config-visuel.json -- ne concerne QUE l'affichage sur TA PROPRE carte, jamais envoyé à
+// Netlify (les autres visiteurs ne voient de toute façon jamais tes skins Premium, voir
+// carteLegere()). Chaque skin ne stocke que les zones qui DÉVIENT du gabarit standard --
+// absent = ce skin suit le gabarit par défaut (cv), comme la grande majorité des pièces.
+//
+// DISTRIBUTION : ce fichier est prévu pour être commité dans le repo Git (contrairement à
+// assets/premium/, gitignoré) -- une fois un skin réglé et enregistré ici, penser à
+// `git add assets/zones-premium.json && git commit && git push` pour que les réglages
+// arrivent aux autres utilisateurs au prochain `git pull`, sans configuration de leur part.
+const CHEMIN_ZONES_PREMIUM = path.join(__dirname, 'assets', 'zones-premium.json');
+function chargerZonesPremium() {
+  try { return JSON.parse(fs.readFileSync(CHEMIN_ZONES_PREMIUM, 'utf8')); }
+  catch { return {}; }
+}
+function sauvegarderZonesPremium(zones) {
+  fs.mkdirSync(path.dirname(CHEMIN_ZONES_PREMIUM), { recursive: true });
+  fs.writeFileSync(CHEMIN_ZONES_PREMIUM, JSON.stringify(zones, null, 2), 'utf8');
+}
+let zonesPremium = chargerZonesPremium();
+
+// Hélices propres à un skin Premium (découpées depuis l'artwork du skin lui-même, voir
+// bouton "✂️ Extraire l'hélice" du panneau "🎯 Zones du skin") -- un PNG transparent par
+// itemId dans assets/helices-premium/. Absent = ce skin utilise le calque par défaut
+// (fan-blade.png) ou celui du vrai palier, comme avant. Même logique de distribution que
+// zones-premium.json : ce dossier doit être commité en Git pour arriver aux autres
+// utilisateurs, contrairement à assets/premium/ (gitignoré).
+const DOSSIER_HELICES_PREMIUM = path.join(__dirname, 'assets', 'helices-premium');
+function listerHelicesSkinDisponibles() {
+  try {
+    return new Set(fs.readdirSync(DOSSIER_HELICES_PREMIUM)
+      .filter(f => f.endsWith('.png'))
+      .map(f => f.slice(0, -4)));
+  } catch { return new Set(); }
+}
+let helicesSkinDisponibles = listerHelicesSkinDisponibles();
+
+// Cube (logo central) propre à un skin Premium -- FOURNI directement par Chris (pas
+// découpé depuis l'artwork, contrairement à l'hélice), pour rester indépendant : c'est un
+// enfant du ventilateur (voir .logoVentilo, "enfant du ventilateur, donc tourne
+// automatiquement avec lui"), mais son image et sa position lui sont propres, sans lien
+// avec l'image de l'hélice elle-même. Même règle de distribution que les autres assets
+// de skin : assets/cubes-premium/ doit être commité en Git.
+const DOSSIER_CUBES_PREMIUM = path.join(__dirname, 'assets', 'cubes-premium');
+function listerCubesSkinDisponibles() {
+  try {
+    return new Set(fs.readdirSync(DOSSIER_CUBES_PREMIUM)
+      .filter(f => f.endsWith('.png'))
+      .map(f => f.slice(0, -4)));
+  } catch { return new Set(); }
+}
+let cubesSkinDisponibles = listerCubesSkinDisponibles();
+
 const { spawn } = require('child_process');
 const { Worker, isMainThread, parentPort, workerData } = require('worker_threads');
 
@@ -1497,6 +1552,13 @@ function main() {
     req.on('error', cb);
   }
 
+  /** Zones d'un skin Premium, lues en LOCAL (assets/zones-premium.json, voir plus haut)
+   *  -- réglées via le bouton "🎯 Zones du skin" sur /machines. Plus aucun aller-retour
+   *  Netlify nécessaire : ça ne concerne que l'affichage de TA propre carte. */
+  function zonesSkinActifPour(itemId) {
+    return (itemId && zonesPremium[itemId]) || null;
+  }
+
   /** Liste les pièces premium ACTUELLEMENT marquées gratuites par l'admin (via
    *  admin-offres.js) -- lecture publique, pas de vérification de palier ici : un
    *  cadeau explicite du créateur ne dépend jamais de la performance de minage,
@@ -1610,6 +1672,23 @@ function main() {
     });
     req.on('timeout', () => req.destroy(new Error('timeout')));
     req.on('error', cb);
+  }
+
+  // Cache mémoire côté serveur (jamais sur disque) pour l'image d'un skin Premium possédé
+  // -- évite de resolliciter Netlify à chaque affichage si le cache navigateur (5 min) a
+  // été vidé (redémarrage du process, hard refresh...). Netlify peut parfois répondre
+  // lentement (démarrage à froid de la fonction) ; ce cache absorbe cette latence pour
+  // TOUTES les requêtes suivantes dans la fenêtre, pas juste celles du même navigateur.
+  const cachePremiumMemoire = new Map(); // itemId -> { donnees, expire }
+  const DUREE_CACHE_PREMIUM_MS = 5 * 60 * 1000;
+  function recupererUnPremiumPossedeAvecCache(itemId, cb) {
+    const entree = cachePremiumMemoire.get(itemId);
+    if (entree && entree.expire > Date.now()) return cb(null, entree.donnees);
+    recupererUnPremiumPossede(itemId, (err, donnees) => {
+      if (err) return cb(err);
+      cachePremiumMemoire.set(itemId, { donnees, expire: Date.now() + DUREE_CACHE_PREMIUM_MS });
+      cb(null, donnees);
+    });
   }
 
   /** Active un skin Premium : ne fait JAMAIS de copie locale de l'image -- seule
@@ -5137,41 +5216,55 @@ charger();setInterval(charger,5000);
   .carteMachine.hors-ligne .contourGlow,.carteMachine.hors-ligne .barreGlow{animation-play-state:paused;opacity:.15}
   /* Fond noir rond : cache l'hélice imprimée sur la photo d'origine, pour que seul le
      ventilateur animé (ci-dessous) soit visible en train de tourner par-dessus. */
-  .fondNoir{position:absolute;left:${cv.fondNoir.left}%;top:${cv.fondNoir.top}%;width:${cv.fondNoir.width}%;aspect-ratio:1/1;
+  .fondNoir{position:absolute;left:var(--z-fondnoir-left,${cv.fondNoir.left}%);top:var(--z-fondnoir-top,${cv.fondNoir.top}%);width:var(--z-fondnoir-width,${cv.fondNoir.width}%);aspect-ratio:1/1;
     border-radius:50%;background:#000}
   /* Ventilateur : disque de pales, tourne par-dessus le fond noir et le cadre fixe de la photo.
      Trois états : tourne à pleine vitesse (par défaut), ralentit progressivement au moment
      précis où la machine tombe hors ligne (joué une seule fois), puis reste immobile. */
-  .ventilo{position:absolute;left:${cv.ventilo.left}%;top:${cv.ventilo.top}%;width:${cv.ventilo.width}%;aspect-ratio:1/1;
-    background-image:url('/assets/fan-blade.png?v=${CACHE_VENTILO}${jeton ? '&token='+jeton : ''}');background-size:contain;background-repeat:no-repeat;
-    animation:tournerVentilo .1s linear infinite;transform-origin:${cv.ventilo.pivotX}% ${cv.ventilo.pivotY}%;
-    filter:blur(1.8px);will-change:transform}
+  .ventilo{position:absolute;left:var(--z-ventilo-left,${cv.ventilo.left}%);top:var(--z-ventilo-top,${cv.ventilo.top}%);width:var(--z-ventilo-width,${cv.ventilo.width}%);aspect-ratio:1/1;
+    background-image:var(--fan-blade, url('/assets/fan-blade.png?v=${CACHE_VENTILO}${jeton ? '&token='+jeton : ''}'));background-size:contain;background-repeat:no-repeat;
+    animation-name:tournerVentilo;animation-duration:var(--z-ventilo-vitesse,.1s);animation-timing-function:linear;animation-iteration-count:infinite;
+    transform-origin:var(--z-ventilo-pivotx,${cv.ventilo.pivotX}%) var(--z-ventilo-pivoty,${cv.ventilo.pivotY}%);
+    filter:blur(var(--z-ventilo-flou,1.8px));will-change:transform}
   .ventilo.ralentit{animation:ralentirVentilo 1.8s cubic-bezier(.25,.1,.25,1) 1 forwards;filter:blur(1.2px)}
   .ventilo.arrete{animation:none;transform:rotate(0deg);filter:none}
   /* Logo : enfant du ventilateur, donc tourne automatiquement avec lui (solidaire des pales).
-     mix-blend-mode:screen fait disparaître son fond noir sans avoir besoin de détourage. */
-  .logoVentilo{position:absolute;left:${cv.logoVentilo.left}%;top:${cv.logoVentilo.top}%;width:${cv.logoVentilo.width}%;aspect-ratio:1/1;
+     mix-blend-mode:screen fait disparaître son fond noir sans avoir besoin de détourage.
+     Masqué entièrement sur les skins dont l'hélice contient déjà son propre logo dessiné
+     (voir carteMachine.sans-logo-ventilo, posée quand cube.zonesSkin.logoVentilo est null). */
+  .logoVentilo{position:absolute;left:var(--z-logo-left,${cv.logoVentilo.left}%);top:var(--z-logo-top,${cv.logoVentilo.top}%);width:var(--z-logo-width,${cv.logoVentilo.width}%);aspect-ratio:1/1;
     background-image:var(--logo-cube, url('/assets/logo-ventilo.png?v=${CACHE_LOGO_VENTILO}${jeton ? '&token='+jeton : ''}'));background-size:contain;background-repeat:no-repeat;
     mix-blend-mode:screen}
+  .carteMachine.sans-logo-ventilo .logoVentilo{display:none}
   @keyframes tournerVentilo{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
   @keyframes ralentirVentilo{from{transform:rotate(0deg)}to{transform:rotate(1080deg)}}
   /* Liseré du contour de la carte : couleur = palier de cube atteint (variable CSS
      --couleur-cube posée sur .carteMachine, verte par défaut si aucun cube). Pulse
-     doucement comme si elle était sous tension. */
-  .contourGlow{position:absolute;left:${cv.contourGlow.left}%;top:${cv.contourGlow.top}%;width:${cv.contourGlow.width}%;height:${cv.contourGlow.height}%;border-radius:4.5%/3.8%;
+     franc façon néon sous tension (plusieurs couches de halo pour un vrai flash). */
+  .contourGlow{position:absolute;left:var(--z-contour-left,${cv.contourGlow.left}%);top:var(--z-contour-top,${cv.contourGlow.top}%);width:var(--z-contour-width,${cv.contourGlow.width}%);height:var(--z-contour-height,${cv.contourGlow.height}%);border-radius:4.5%/3.8%;
     pointer-events:none;
-    box-shadow:0 0 0 0.35cqw color-mix(in srgb, var(--couleur-cube,#96f01f) 60%, transparent),
-               0 0 1.3cqw 0.15cqw color-mix(in srgb, var(--couleur-cube,#96f01f) 40%, transparent);
-    animation:respirerGlow 2.6s ease-in-out infinite}
-  /* Barre LED du socle : même couleur/pulsation, léger décalage pour un effet plus vivant */
-  .barreGlow{position:absolute;left:${cv.barreGlow.left}%;top:${cv.barreGlow.top}%;width:${cv.barreGlow.width}%;height:${cv.barreGlow.height}%;border-radius:50%;
+    box-shadow:0 0 0 0.55cqw color-mix(in srgb, var(--couleur-cube,#96f01f) 100%, white 25%),
+               0 0 1.2cqw 0.3cqw color-mix(in srgb, var(--couleur-cube,#96f01f) 95%, white 10%),
+               0 0 3cqw 0.7cqw color-mix(in srgb, var(--couleur-cube,#96f01f) 85%, transparent),
+               0 0 6cqw 1.6cqw color-mix(in srgb, var(--couleur-cube,#96f01f) 50%, transparent);
+    animation:respirerGlow 1.7s ease-in-out infinite}
+  /* Barre LED du socle : bande nette (façon strip LED) + halo qui rayonne autour, même
+     logique que le contour (bord net -> diffusion -> grand halo) plutôt qu'un simple
+     dégradé flou -- rend un vrai éclat au lieu d'une tache diffuse. */
+  .barreGlow{position:absolute;left:var(--z-barre-left,${cv.barreGlow.left}%);top:var(--z-barre-top,${cv.barreGlow.top}%);width:var(--z-barre-width,${cv.barreGlow.width}%);height:var(--z-barre-height,${cv.barreGlow.height}%);border-radius:50%;
     pointer-events:none;
-    background:radial-gradient(ellipse at center, color-mix(in srgb, var(--couleur-cube,#96f01f) 90%, transparent), transparent 75%);
-    filter:blur(0.35cqw);animation:respirerGlow 2.6s ease-in-out infinite;animation-delay:.3s}
-  @keyframes respirerGlow{0%,100%{opacity:.55}50%{opacity:1}}
+    background:linear-gradient(90deg, transparent 0%,
+               color-mix(in srgb, var(--couleur-cube,#96f01f) 90%, white 30%) 12%,
+               color-mix(in srgb, var(--couleur-cube,#96f01f) 100%, white 45%) 50%,
+               color-mix(in srgb, var(--couleur-cube,#96f01f) 90%, white 30%) 88%, transparent 100%);
+    box-shadow:0 0 0.8cqw 0.15cqw color-mix(in srgb, var(--couleur-cube,#96f01f) 100%, white 20%),
+               0 0 2.2cqw 0.5cqw color-mix(in srgb, var(--couleur-cube,#96f01f) 90%, transparent),
+               0 0 4.5cqw 1cqw color-mix(in srgb, var(--couleur-cube,#96f01f) 55%, transparent);
+    filter:brightness(1.5) saturate(1.4);animation:respirerGlow 1.7s ease-in-out infinite;animation-delay:.3s}
+  @keyframes respirerGlow{0%,100%{opacity:.85}50%{opacity:1}}
   /* Paliers "rainbow" (Multicolore I/II, Multi-Gemmes II) : le liseré cycle toutes les
      couleurs au lieu d'une teinte fixe, pour bien les distinguer des paliers unis. */
-  .carteMachine.rainbow-tier .contourGlow,.carteMachine.rainbow-tier .barreGlow{animation-name:respirerGlow,arcEnCiel;animation-duration:2.6s,4s;animation-timing-function:ease-in-out,linear;animation-iteration-count:infinite,infinite}
+  .carteMachine.rainbow-tier .contourGlow,.carteMachine.rainbow-tier .barreGlow{animation-name:respirerGlow,arcEnCiel;animation-duration:1.7s,4s;animation-timing-function:ease-in-out,linear;animation-iteration-count:infinite,infinite}
   .carteMachine.rainbow-tier .ecranLogo{animation:arcEnCiel 4s linear infinite}
   @keyframes arcEnCiel{from{filter:hue-rotate(0deg) saturate(1.4)}to{filter:hue-rotate(360deg) saturate(1.4)}}
   /* Badge "bloc trouvé" : cachée par défaut, apparaît seulement si blocsTrouves>0 */
@@ -5183,7 +5276,7 @@ charger();setInterval(charger,5000);
      celle du palier Genèse réel (visible uniquement quand un skin est appliqué). */
   .badgeSkinPremium{display:inline-flex;align-items:center;font-size:min(4.4cqw,13cqh,13px);
     flex-shrink:0;filter:drop-shadow(0 0 3px rgba(255,255,255,.5))}
-  .ecran{position:absolute;left:${cv.ecran.left}%;top:${cv.ecran.top}%;width:${cv.ecran.width}%;height:${cv.ecran.height}%;
+  .ecran{position:absolute;left:var(--z-ecran-left,${cv.ecran.left}%);top:var(--z-ecran-top,${cv.ecran.top}%);width:var(--z-ecran-width,${cv.ecran.width}%);height:var(--z-ecran-height,${cv.ecran.height}%);
     container-type:size;container-name:ecran;
     border-radius:2%/1.6%;overflow:hidden;background:#05070a;
     padding:var(--marge-v,2%) var(--marge-h,2.5%);box-sizing:border-box}
@@ -5256,7 +5349,7 @@ charger();setInterval(charger,5000);
   }
   .badgeMoi{display:inline-block;background:rgba(150,240,31,.14);color:var(--amber);border:1px solid rgba(150,240,31,.4);
     font-size:9px;font-weight:700;letter-spacing:.06em;padding:1px 6px;border-radius:8px;margin-right:5px;vertical-align:middle}
-  .boutonVentilo{position:absolute;left:${cv.boutonVentilo.left}%;top:${cv.boutonVentilo.top}%;width:${cv.boutonVentilo.width}%;aspect-ratio:1/1;border-radius:50%;
+  .boutonVentilo{position:absolute;left:var(--z-bouton-left,${cv.boutonVentilo.left}%);top:var(--z-bouton-top,${cv.boutonVentilo.top}%);width:var(--z-bouton-width,${cv.boutonVentilo.width}%);aspect-ratio:1/1;border-radius:50%;
     cursor:pointer;background:transparent;border:none;padding:0;z-index:2}
   .boutonVentilo:hover{filter:brightness(1.3)}
   .boutonVentilo:active{filter:brightness(0.8)}
@@ -5297,10 +5390,18 @@ charger();setInterval(charger,5000);
   .panneauEdition.ouvert{display:flex}
   .editFond{position:absolute;inset:0;background:rgba(3,5,4,.92)}
   .editContenu{position:relative;display:flex;gap:24px;max-width:1000px;width:100%;max-height:94vh}
-  .editZone{position:relative;width:420px;flex-shrink:0;overflow:hidden;border:1px solid var(--line);border-radius:8px;height:fit-content}
-  .editZoneInterne{position:relative;width:100%}
+  .editColGauche{display:flex;flex-direction:column;gap:8px;flex-shrink:0}
+  .editZoomBar{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--mut)}
+  .editZoomBar input[type=range]{width:110px;accent-color:#96f01f}
+  .editZoomBar button{font-size:10px;padding:4px 8px}
+  .editZone{position:relative;width:420px;max-height:70vh;overflow:auto;border:1px solid var(--line);border-radius:8px}
+  .editZoneInterne{position:relative;width:100%;transform-origin:top left}
   .editBoard{width:100%;display:block;user-select:none;-webkit-user-drag:none}
   .editForme{position:absolute;outline:2px dashed;box-sizing:border-box;cursor:move}
+  .apercuFondNoir{position:absolute;border-radius:50%;background:#000;pointer-events:none}
+  .apercuVentilo{position:absolute;background-size:contain;background-repeat:no-repeat;background-position:center;pointer-events:none}
+  .apercuVentilo.tourne{animation:tourner .1s linear infinite}
+  .apercuLogoVentilo{position:absolute;background-size:contain;background-repeat:no-repeat;background-position:center;mix-blend-mode:screen;pointer-events:none}
   .editForme.editRonde{border-radius:50%;aspect-ratio:1/1}
   .editForme.selectionnee{outline-width:3px;z-index:4}
   .editForme.editEnfant{z-index:5}
@@ -5344,6 +5445,7 @@ charger();setInterval(charger,5000);
   <h1>Machines connectées</h1>
   <div style="margin-left:auto;display:flex;gap:8px">
     <button type="button" class="lien" id="btnEdition">🛠 Mode édition</button>
+    <button type="button" class="lien" id="btnEditionSkin" style="display:none">🎯 Zones du skin</button>
     <button type="button" class="lien" id="btnEditionEcran">🛠 Écran</button>
     <a class="lien" id="retour" href="/details">← Retour au tableau de bord</a>
   </div>
@@ -5381,26 +5483,66 @@ charger();setInterval(charger,5000);
 <div id="panneauEdition" class="panneauEdition">
   <div class="editFond"></div>
   <div class="editContenu">
-    <div class="editZone">
-      <div class="editZoneInterne">
-        <img class="editBoard" src="/assets/bitaxe-board.png?v=${CACHE_CARTE}${jeton ? '&token='+jeton : ''}">
-        <div class="editForme" data-cle="ecran" style="outline-color:#e0e0e0"><div class="editPoignee" style="background:#e0e0e0"></div></div>
-        <div class="editForme editRonde" data-cle="fondNoir" style="outline-color:#0096ff"><div class="editPoignee" style="background:#0096ff"></div></div>
-        <div class="editForme editRonde" data-cle="ventilo" style="outline-color:#ff0096">
-          <div class="editPoignee" style="background:#ff0096"></div>
-          <div class="editPivot"><div class="editPivotRond"></div></div>
-          <div class="editForme editRonde editEnfant" data-cle="logoVentilo" style="outline-color:#ffdc00">
-            <div class="editPoignee" style="background:#ffdc00"></div>
+    <div class="editColGauche">
+      <div class="editZoomBar">
+        Zoom : <input type="range" id="editZoom" min="100" max="400" value="100" step="10">
+        <span id="editZoomVal">100%</span>
+        <button type="button" id="btnRecentrerZone" style="display:none">🎯 Centrer sur l'hélice</button>
+      </div>
+      <div class="editZone">
+        <div class="editZoneInterne">
+          <img class="editBoard" src="/assets/bitaxe-board.png?v=${CACHE_CARTE}${jeton ? '&token='+jeton : ''}">
+          <div class="apercuFondNoir"></div>
+          <div class="apercuVentilo"><div class="apercuLogoVentilo"></div></div>
+          <div class="editForme" data-cle="ecran" style="outline-color:#e0e0e0"><div class="editPoignee" style="background:#e0e0e0"></div></div>
+          <div class="editForme editRonde" data-cle="fondNoir" style="outline-color:#0096ff"><div class="editPoignee" style="background:#0096ff"></div></div>
+          <div class="editForme editRonde" data-cle="ventilo" style="outline-color:#ff0096">
+            <div class="editPoignee" style="background:#ff0096"></div>
+            <div class="editPivot"><div class="editPivotRond"></div></div>
+            <div class="editForme editRonde editEnfant" data-cle="logoVentilo" style="outline-color:#ffdc00">
+              <div class="editPoignee" style="background:#ffdc00"></div>
+            </div>
           </div>
+          <div class="editForme" data-cle="contourGlow" style="outline-color:#96f01f"><div class="editPoignee" style="background:#96f01f"></div></div>
+          <div class="editForme editRonde" data-cle="barreGlow" style="outline-color:#ff8800"><div class="editPoignee" style="background:#ff8800"></div></div>
+          <div class="editForme editRonde" data-cle="boutonVentilo" style="outline-color:#c800ff"><div class="editPoignee" style="background:#c800ff"></div></div>
         </div>
-        <div class="editForme" data-cle="contourGlow" style="outline-color:#96f01f"><div class="editPoignee" style="background:#96f01f"></div></div>
-        <div class="editForme editRonde" data-cle="barreGlow" style="outline-color:#ff8800"><div class="editPoignee" style="background:#ff8800"></div></div>
-        <div class="editForme editRonde" data-cle="boutonVentilo" style="outline-color:#c800ff"><div class="editPoignee" style="background:#c800ff"></div></div>
       </div>
     </div>
     <div class="editPanneau">
       <h1>Mode édition</h1>
       <div class="sous">Clique une forme pour la sélectionner, glisse-la ou tire sa poignée. La liste ci-dessous distingue chaque élément par sa couleur.</div>
+      <label id="editSansLogoLigne" style="display:none;align-items:center;gap:8px;font-size:12px;margin:4px 0 10px;cursor:pointer">
+        <input type="checkbox" id="chkSansLogoVentilo"> L'hélice de ce skin a déjà son propre logo dessiné (ne pas superposer le cube)
+      </label>
+      <button type="button" id="btnExtraireHelice" style="display:none;margin-bottom:6px">✂️ Extraire l'hélice depuis cette image</button>
+      <div id="editHeliceUploadLigne" style="display:none;margin-bottom:10px">
+        <input type="file" id="fHeliceSkin" accept="image/png" style="display:none">
+        <button type="button" id="btnChoisirHeliceSkin" style="font-size:11px">📁 ...ou fournir un PNG déjà détouré</button>
+        <span id="heliceSkinStatut" style="font-size:10.5px;color:var(--mut);margin-left:6px"></span>
+      </div>
+      <label id="editCouleurLigne" style="display:none;align-items:center;gap:8px;font-size:12px;margin:4px 0 10px">
+        Couleur d'ambiance du skin (liseré, barre LED, logo, marque) :
+        <input type="color" id="inCouleurSkin" value="#96f01f">
+        <button type="button" id="btnCouleurSkinDefaut" style="font-size:10.5px">↺ Suivre le vrai palier</button>
+      </label>
+      <label id="editVitesseLigne" style="display:none;align-items:center;gap:8px;font-size:12px;margin:4px 0 10px">
+        Durée d'un tour de l'hélice (secondes) :
+        <input type="range" id="inVitesseVentilo" min="0.03" max="0.6" step="0.01" value="0.1">
+        <span id="valVitesseVentilo" style="font-size:10.5px;color:var(--mut)">0.10s</span>
+      </label>
+      <label id="editFlouLigne" style="display:none;align-items:center;gap:8px;font-size:12px;margin:4px 0 10px">
+        Flou de rotation (0 = image toujours nette) :
+        <input type="range" id="inFlouVentilo" min="0" max="3" step="0.1" value="0.4">
+        <span id="valFlouVentilo" style="font-size:10.5px;color:var(--mut)">0.4px</span>
+      </label>
+      <div id="editCubeLigne" style="display:none;margin-bottom:10px">
+        <label style="font-size:10.5px;color:var(--mut);letter-spacing:.05em;text-transform:uppercase;display:block;margin-bottom:6px">
+          Cube (logo central), fourni séparément de l'hélice</label>
+        <input type="file" id="fCubeSkin" accept="image/png" style="display:none">
+        <button type="button" id="btnChoisirCubeSkin" style="font-size:11px">📁 Choisir un PNG</button>
+        <span id="cubeSkinStatut" style="font-size:10.5px;color:var(--mut);margin-left:6px"></span>
+      </div>
       <div id="editListe"></div>
       <div class="editBtns">
         <button type="button" id="btnEditTourner">▶ Tester la rotation</button>
@@ -5582,6 +5724,34 @@ function cleStableDe(m, estMoi, idxSecours){
   return (estMoi ? 'MOI' : (m.worker || m.machineId || ('idx'+idxSecours))) + '';
 }
 
+// Zones par skin Premium : la plupart des skins (les 22 paliers de base, et la majorité
+// des Premium) respectent le gabarit standard -- seule une poignée de Premium générés
+// par IA ont légèrement dévié (écran un peu agrandi) et ont besoin d'un réglage propre à
+// EUX. zonesSkin (format exporté par le builder de skins) ne doit donc contenir QUE les
+// zones qui diffèrent du gabarit par défaut -- toute zone absente ou à null retombe sur cv
+// via les var(--z-...,défaut) posées dans le style. logoVentilo:null = l'hélice contient
+// déjà son propre logo dessiné -> on masque l'overlay .logoVentilo (classe sans-logo-ventilo).
+// TODO Chris : brancher la vraie source de zonesSkin une fois le stockage retrouvé/créé
+// (probablement à côté de imageCarte/imageFanBlade dans les métadonnées de chaque skin).
+function stylesZonesSkin(zonesSkin){
+  if(!zonesSkin) return '';
+  let css='';
+  const z=zonesSkin;
+  if(z.ecran) css+='--z-ecran-left:'+z.ecran.left+'%;--z-ecran-top:'+z.ecran.top+'%;--z-ecran-width:'+z.ecran.width+'%;--z-ecran-height:'+z.ecran.height+'%;';
+  if(z.ventilo) css+='--z-ventilo-left:'+z.ventilo.left+'%;--z-ventilo-top:'+z.ventilo.top+'%;--z-ventilo-width:'+z.ventilo.width+'%;--z-ventilo-pivotx:'+(z.ventilo.pivotX!=null?z.ventilo.pivotX:50)+'%;--z-ventilo-pivoty:'+(z.ventilo.pivotY!=null?z.ventilo.pivotY:50)+'%;';
+  if(z.fondNoir) css+='--z-fondnoir-left:'+z.fondNoir.left+'%;--z-fondnoir-top:'+z.fondNoir.top+'%;--z-fondnoir-width:'+z.fondNoir.width+'%;';
+  if(z.contourGlow) css+='--z-contour-left:'+z.contourGlow.left+'%;--z-contour-top:'+z.contourGlow.top+'%;--z-contour-width:'+z.contourGlow.width+'%;--z-contour-height:'+z.contourGlow.height+'%;';
+  if(z.barreGlow) css+='--z-barre-left:'+z.barreGlow.left+'%;--z-barre-top:'+z.barreGlow.top+'%;--z-barre-width:'+z.barreGlow.width+'%;--z-barre-height:'+z.barreGlow.height+'%;';
+  if(z.boutonVentilo) css+='--z-bouton-left:'+z.boutonVentilo.left+'%;--z-bouton-top:'+z.boutonVentilo.top+'%;--z-bouton-width:'+z.boutonVentilo.width+'%;';
+  if(z.logoVentilo) css+='--z-logo-left:'+z.logoVentilo.left+'%;--z-logo-top:'+z.logoVentilo.top+'%;--z-logo-width:'+z.logoVentilo.width+'%;';
+  if(z.vitesse) css+='--z-ventilo-vitesse:'+z.vitesse+'s;';
+  if(z.flou!=null) css+='--z-ventilo-flou:'+z.flou+'px;';
+  return css;
+}
+function classeSansLogoVentilo(zonesSkin){
+  return (zonesSkin && zonesSkin.logoVentilo===null) ? ' sans-logo-ventilo' : '';
+}
+
 // Carte complète : utilisée pour MA machine, dont on connaît tous les détails
 // (uptime, threads, difficulté, acceptation, historique réel...).
 function carteComplete(m, estMoi, idx, ventiloClasse){
@@ -5600,8 +5770,17 @@ function carteComplete(m, estMoi, idx, ventiloClasse){
   // modifie et ne simule jamais une progression de palier.
   const imageCartePlaque=(estMoi && m.skinPremiumActif) ? ('/assets/premium/'+m.skinPremiumActif+'.png'+(TOK?'?token='+TOK:'')) : cube.imageCarte;
   const badgeSkinHtml=(estMoi && m.skinPremiumActif) ? '<span class="badgeSkinPremium" title="Skin Premium actif -- le palier Gen\u00e8se r\u00e9el reste '+(cube.nom||('palier '+cube.niveau))+'">\u2728</span>' : '';
-  const imgStyle=(imageCartePlaque?('--carte-image:url(\\''+imageCartePlaque+'\\');'):'')+(cube.imageLogo?('--logo-cube:url(\\''+cube.imageLogo+'\\');'):'');
-  return '<div class="carteMachine'+(enLigne?'':' hors-ligne')+(cube.rainbow?' rainbow-tier':'')+'"'+(idx!=null?' data-idx="'+idx+'"':'')+' data-cle="'+cleStable+'" style="--couleur-cube:'+cube.couleur+';'+imgStyle+'">'
+  // Zones propres à ce skin Premium, si ce skin dévie du gabarit standard -- réglées en
+  // local via le bouton "🎯 Zones du skin" sur /machines (assets/zones-premium.json),
+  // transmises par /api/details sous m.zonesSkinActif.
+  const zonesSkinActif=(estMoi && m.skinPremiumActif) ? m.zonesSkinActif : null;
+  const heliceSkinUrl=(estMoi && m.skinPremiumActif && m.heliceSkinDisponible)
+    ? ('/assets/helices-premium/'+m.skinPremiumActif+'.png?v='+m.heliceSkinVersion+(TOK?'&token='+TOK:'')) : null;
+  const cubeSkinUrl=(estMoi && m.skinPremiumActif && m.cubeSkinDisponible)
+    ? ('/assets/cubes-premium/'+m.skinPremiumActif+'.png?v='+m.cubeSkinVersion+(TOK?'&token='+TOK:'')) : null;
+  const imgStyle=(imageCartePlaque?('--carte-image:url(\\''+imageCartePlaque+'\\');'):'')+(cubeSkinUrl?('--logo-cube:url(\\''+cubeSkinUrl+'\\');'):(cube.imageLogo?('--logo-cube:url(\\''+cube.imageLogo+'\\');'):''))+(heliceSkinUrl?('--fan-blade:url(\\''+heliceSkinUrl+'\\');'):(cube.imageFanBlade?('--fan-blade:url(\\''+cube.imageFanBlade+'\\');'):''))+stylesZonesSkin(zonesSkinActif);
+  const couleurCarte=(zonesSkinActif && zonesSkinActif.couleur) ? zonesSkinActif.couleur : cube.couleur;
+  return '<div class="carteMachine'+(enLigne?'':' hors-ligne')+(cube.rainbow?' rainbow-tier':'')+classeSansLogoVentilo(zonesSkinActif)+'"'+(idx!=null?' data-idx="'+idx+'"':'')+' data-cle="'+cleStable+'" style="--couleur-cube:'+couleurCarte+';'+imgStyle+'">'
     +'<div class="fondNoir"></div>'
     +'<div class="ventilo'+(ventiloClasse?' '+ventiloClasse:'')+'"><div class="logoVentilo"></div></div>'+'<button type="button" class="boutonVentilo" onclick="toggleVentilo(event)" title="Arr\u00eater/relancer le ventilateur (visuel)" aria-label="Basculer le ventilateur"></button>'
     +'<div class="contourGlow"></div>'
@@ -5655,7 +5834,7 @@ function carteLegere(m, idx, ventiloClasse){
   const page=pageActuelle.get(cleStable)||0;
   const cube=infosCube(m.bestDiff||0);
   const nomCubeHtml=cube.nom?'<span class="nomCube">'+cube.nom+'</span>':'';
-  const imgStyle=(cube.imageCarte?('--carte-image:url(\\''+cube.imageCarte+'\\');'):'')+(cube.imageLogo?('--logo-cube:url(\\''+cube.imageLogo+'\\');'):'');
+  const imgStyle=(cube.imageCarte?('--carte-image:url(\\''+cube.imageCarte+'\\');'):'')+(cube.imageLogo?('--logo-cube:url(\\''+cube.imageLogo+'\\');'):'')+(cube.imageFanBlade?('--fan-blade:url(\\''+cube.imageFanBlade+'\\');'):'');
   return '<div class="carteMachine'+(enLigne?'':' hors-ligne')+(cube.rainbow?' rainbow-tier':'')+'"'+(idx!=null?' data-idx="'+idx+'"':'')+' data-cle="'+cleStable+'" style="--couleur-cube:'+cube.couleur+';'+imgStyle+'">'
     +'<div class="fondNoir"></div>'
     +'<div class="ventilo'+(ventiloClasse?' '+ventiloClasse:'')+'"><div class="logoVentilo"></div></div>'+'<button type="button" class="boutonVentilo" onclick="toggleVentilo(event)" title="Arr\u00eater/relancer le ventilateur (visuel)" aria-label="Basculer le ventilateur"></button>'
@@ -5791,6 +5970,11 @@ async function charger(){
         blocHauteur,
         btcPrice, btcSymbol,
         skinPremiumActif: repDetails.skinPremiumActif || null,
+        zonesSkinActif: repDetails.zonesSkinActif || null,
+        heliceSkinDisponible: repDetails.heliceSkinDisponible || false,
+        heliceSkinVersion: repDetails.heliceSkinVersion || '',
+        cubeSkinDisponible: repDetails.cubeSkinDisponible || false,
+        cubeSkinVersion: repDetails.cubeSkinVersion || '',
         // Nouveau, jamais affiché sur la carte jusqu'ici -- voir panneau 2.
         throttle: repDetails.perf && repDetails.perf.throttle,
         thermalReel: repDetails.perf && repDetails.perf.thermalReel,
@@ -5802,6 +5986,15 @@ async function charger(){
       };
       donneesActuelles.push({m:moi, estMoi:true, complete:true});
       const idxMoi=donneesActuelles.length-1;
+      // Le bouton "🎯 Zones du skin" n'a de sens que si un skin Premium est actif sur
+      // MA carte -- masqué sinon (retenu pour le bouton, pas pour du rendu de carte).
+      window._moiSkinActif = moi.skinPremiumActif || null;
+      window._moiHeliceSkinDisponible = moi.heliceSkinDisponible || false;
+      window._moiHeliceSkinVersion = moi.heliceSkinVersion || '';
+      window._moiCubeSkinDisponible = moi.cubeSkinDisponible || false;
+      window._moiCubeSkinVersion = moi.cubeSkinVersion || '';
+      const btnEditionSkinEl = document.getElementById('btnEditionSkin');
+      if(btnEditionSkinEl) btnEditionSkinEl.style.display = moi.skinPremiumActif ? '' : 'none';
       let vClasse=calculerClasseVentilo('MOI', (moi.hashrate||0)>0);
       if(ventiloPauseManuelle.get(cleStableDe(moi, true, idxMoi))) vClasse='arrete';
       html+=carteComplete(moi, true, idxMoi, vClasse);
@@ -5918,7 +6111,67 @@ let formeSelectionnee = null;
 
 const panneauEdition=document.getElementById('panneauEdition');
 const editBoard=panneauEdition.querySelector('.editBoard');
+const CARTE_DEFAUT_SRC=editBoard.src; // capturé avant toute modification, pour pouvoir y revenir
+
+// Zoom du panneau d'édition : agrandit editZoneInterne en pixels réels (pas de transform)
+// pour que l'overflow:auto du parent .editZone permette de défiler naturellement, et pour
+// que les formes (positionnées en %) grossissent proportionnellement avec l'image --
+// utile en particulier pour bien caler le cercle de l'hélice sur des pales petites/fines.
+const editZoneEl = panneauEdition.querySelector('.editZone');
+const editZoneInterne = panneauEdition.querySelector('.editZoneInterne');
+const editZoom = document.getElementById('editZoom');
+const editZoomVal = document.getElementById('editZoomVal');
+const LARGEUR_EDIT_BASE = 420;
+editZoom.addEventListener('input', ()=>{
+  const pct = Number(editZoom.value);
+  editZoneInterne.style.width = (LARGEUR_EDIT_BASE * pct/100) + 'px';
+  editZoomVal.textContent = pct+'%';
+});
+const btnRecentrerZone = document.getElementById('btnRecentrerZone');
+btnRecentrerZone.addEventListener('click', ()=>{
+  const v = configEnCours.ventilo;
+  const rect = editZoneInterne.getBoundingClientRect();
+  const cx = (v.left + v.width/2)/100 * rect.width;
+  const cy = (v.top/100)*rect.height + (v.width/100)*rect.width/2; // ventilo carré : hauteur en px = largeur en px
+  editZoneEl.scrollLeft = cx - editZoneEl.clientWidth/2;
+  editZoneEl.scrollTop = cy - editZoneEl.clientHeight/2;
+});
+
 const editVentiloEl=panneauEdition.querySelector('.editForme[data-cle="ventilo"]');
+const apercuFondNoirEl=panneauEdition.querySelector('.apercuFondNoir');
+const apercuVentiloEl=panneauEdition.querySelector('.apercuVentilo');
+const apercuLogoVentiloEl=panneauEdition.querySelector('.apercuLogoVentilo');
+// URLs locales (dataURL) dès qu'un fichier est choisi cette session, AVANT même l'envoi
+// au serveur -- pour un aperçu instantané. Repli sur l'asset déjà enregistré côté serveur
+// si présent, puis sur le calque par défaut sinon.
+let heliceApercuLocal = null, cubeApercuLocal = null;
+function heliceApercuUrl(){
+  if(heliceApercuLocal) return heliceApercuLocal;
+  if(editCiblageSkin && window._moiHeliceSkinDisponible) return '/assets/helices-premium/'+encodeURIComponent(editCiblageSkin)+'.png?v='+window._moiHeliceSkinVersion+Q;
+  return '/assets/fan-blade.png'+Q;
+}
+function cubeApercuUrl(){
+  if(cubeApercuLocal) return cubeApercuLocal;
+  if(editCiblageSkin && window._moiCubeSkinDisponible) return '/assets/cubes-premium/'+encodeURIComponent(editCiblageSkin)+'.png?v='+window._moiCubeSkinVersion+Q;
+  return '/assets/logo-ventilo.png'+Q;
+}
+function mettreAJourApercuReel(){
+  const f=configEnCours.fondNoir, v=configEnCours.ventilo, l=configEnCours.logoVentilo;
+  apercuFondNoirEl.style.left=f.left+'%'; apercuFondNoirEl.style.top=f.top+'%';
+  apercuFondNoirEl.style.width=f.width+'%'; apercuFondNoirEl.style.aspectRatio='1/1';
+  apercuVentiloEl.style.left=v.left+'%'; apercuVentiloEl.style.top=v.top+'%';
+  apercuVentiloEl.style.width=v.width+'%'; apercuVentiloEl.style.aspectRatio='1/1';
+  apercuVentiloEl.style.backgroundImage="url('"+heliceApercuUrl()+"')";
+  apercuVentiloEl.style.animationDuration=(inVitesseVentilo?inVitesseVentilo.value:0.1)+'s';
+  apercuVentiloEl.style.filter = 'blur('+(inFlouVentilo?inFlouVentilo.value:0.4)+'px)';
+  const masque = chkSansLogoVentilo.checked;
+  apercuLogoVentiloEl.style.display = masque ? 'none' : '';
+  if(!masque){
+    apercuLogoVentiloEl.style.left=l.left+'%'; apercuLogoVentiloEl.style.top=l.top+'%';
+    apercuLogoVentiloEl.style.width=l.width+'%'; apercuLogoVentiloEl.style.aspectRatio='1/1';
+    apercuLogoVentiloEl.style.backgroundImage="url('"+cubeApercuUrl()+"')";
+  }
+}
 const editListe=document.getElementById('editListe');
 const editStatut=document.getElementById('editStatut');
 
@@ -5959,6 +6212,7 @@ function construireLigne(def){
       const champ=inp.dataset.champ;
       configEnCours[def.cle][champ]=parseFloat(inp.value)||0;
       appliquerFormeDepuisConfig(def.cle);
+      mettreAJourApercuReel();
     });
   });
   return div;
@@ -6024,7 +6278,7 @@ window.addEventListener('mousemove', e=>{
     let x=e.clientX-br.left-dxG, y=e.clientY-br.top-dyG;
     configEnCours[glisse].left=parseFloat((x/br.width*100).toFixed(2));
     configEnCours[glisse].top=parseFloat((y/br.height*100).toFixed(2));
-    appliquerFormeDepuisConfig(glisse); rafraichirChampsListe(glisse);
+    appliquerFormeDepuisConfig(glisse); rafraichirChampsListe(glisse); mettreAJourApercuReel();
   }
   if(redim){
     const def=DEFINITIONS_EDITION.find(d=>d.cle===redim);
@@ -6038,7 +6292,7 @@ window.addEventListener('mousemove', e=>{
       const h=e.clientY-fr.top;
       configEnCours[redim].height=parseFloat(Math.max(0.5,h/br.height*100).toFixed(2));
     }
-    appliquerFormeDepuisConfig(redim); rafraichirChampsListe(redim);
+    appliquerFormeDepuisConfig(redim); rafraichirChampsListe(redim); mettreAJourApercuReel();
   }
   if(glissePivotCle){
     const formeEl=panneauEdition.querySelector('.editForme[data-cle="'+glissePivotCle+'"]');
@@ -6046,17 +6300,188 @@ window.addEventListener('mousemove', e=>{
     let x=e.clientX-vr.left, y=e.clientY-vr.top;
     configEnCours[glissePivotCle].pivotX=parseFloat((x/vr.width*100).toFixed(2));
     configEnCours[glissePivotCle].pivotY=parseFloat((y/vr.height*100).toFixed(2));
-    appliquerFormeDepuisConfig(glissePivotCle); rafraichirChampsListe(glissePivotCle);
+    appliquerFormeDepuisConfig(glissePivotCle); rafraichirChampsListe(glissePivotCle); mettreAJourApercuReel();
   }
 });
 window.addEventListener('mouseup', ()=>{ glisse=null; redim=null; glissePivotCle=null; });
 
 // Ouvrir / fermer le panneau
+// editCiblageSkin : null = édition du gabarit global (comportement d'origine),
+// sinon itemId du skin Premium en cours d'ajustement (voir bouton "🎯 Zones du skin").
+let editCiblageSkin = null;
+const editSansLogoLigne = document.getElementById('editSansLogoLigne');
+const chkSansLogoVentilo = document.getElementById('chkSansLogoVentilo');
+const editLogoFormeEl = panneauEdition.querySelector('.editForme[data-cle="logoVentilo"]');
+chkSansLogoVentilo.addEventListener('change', ()=>{
+  editLogoFormeEl.style.display = chkSansLogoVentilo.checked ? 'none' : '';
+  const ligneListe = editListe.querySelector('.editLigne[data-cle="logoVentilo"]');
+  if(ligneListe) ligneListe.style.display = chkSansLogoVentilo.checked ? 'none' : '';
+  mettreAJourApercuReel();
+});
+const btnExtraireHelice = document.getElementById('btnExtraireHelice');
+const editCouleurLigne = document.getElementById('editCouleurLigne');
+const editVitesseLigne = document.getElementById('editVitesseLigne');
+const editFlouLigne = document.getElementById('editFlouLigne');
+const inCouleurSkin = document.getElementById('inCouleurSkin');
+const btnCouleurSkinDefaut = document.getElementById('btnCouleurSkinDefaut');
+let couleurSkinSuitPalier = true; // true = pas de surcharge, on garde la couleur du vrai palier
+inCouleurSkin.addEventListener('input', ()=>{ couleurSkinSuitPalier = false; });
+btnCouleurSkinDefaut.addEventListener('click', ()=>{ couleurSkinSuitPalier = true; });
+const inVitesseVentilo = document.getElementById('inVitesseVentilo');
+const valVitesseVentilo = document.getElementById('valVitesseVentilo');
+inVitesseVentilo.addEventListener('input', ()=>{
+  valVitesseVentilo.textContent = Number(inVitesseVentilo.value).toFixed(2)+'s';
+  apercuVentiloEl.style.animationDuration = inVitesseVentilo.value+'s';
+});
+const inFlouVentilo = document.getElementById('inFlouVentilo');
+const valFlouVentilo = document.getElementById('valFlouVentilo');
+inFlouVentilo.addEventListener('input', ()=>{
+  valFlouVentilo.textContent = Number(inFlouVentilo.value).toFixed(1)+'px';
+  apercuVentiloEl.style.filter = 'blur('+inFlouVentilo.value+'px)';
+});
+const editCubeLigne = document.getElementById('editCubeLigne');
+const fCubeSkin = document.getElementById('fCubeSkin');
+const cubeSkinStatut = document.getElementById('cubeSkinStatut');
+document.getElementById('btnChoisirCubeSkin').addEventListener('click', ()=> fCubeSkin.click());
+fCubeSkin.addEventListener('change', ()=>{
+  const fichier = fCubeSkin.files[0];
+  if(!fichier || !editCiblageSkin) return;
+  cubeSkinStatut.textContent = 'Envoi…';
+  const lecteur = new FileReader();
+  lecteur.onload = async (e)=>{
+    cubeApercuLocal = e.target.result; mettreAJourApercuReel();
+    try{
+      const r = await fetch('/api/cube-skin'+Q, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ itemId: editCiblageSkin, cube: e.target.result })
+      });
+      const j = await r.json();
+      cubeSkinStatut.textContent = j.ok ? '✓ Cube enregistré' : 'Erreur : '+(j.erreur||'inconnue');
+    }catch(err){ cubeSkinStatut.textContent = 'Erreur réseau'; }
+  };
+  lecteur.readAsDataURL(fichier);
+});
+const editHeliceUploadLigne = document.getElementById('editHeliceUploadLigne');
+const fHeliceSkin = document.getElementById('fHeliceSkin');
+const heliceSkinStatut = document.getElementById('heliceSkinStatut');
+document.getElementById('btnChoisirHeliceSkin').addEventListener('click', ()=> fHeliceSkin.click());
+fHeliceSkin.addEventListener('change', ()=>{
+  const fichier = fHeliceSkin.files[0];
+  if(!fichier || !editCiblageSkin) return;
+  heliceSkinStatut.textContent = 'Envoi…';
+  const lecteur = new FileReader();
+  lecteur.onload = async (e)=>{
+    heliceApercuLocal = e.target.result; mettreAJourApercuReel();
+    try{
+      const r = await fetch('/api/helice-skin'+Q, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ itemId: editCiblageSkin, helice: e.target.result })
+      });
+      const j = await r.json();
+      heliceSkinStatut.textContent = j.ok ? '✓ Hélice enregistrée' : 'Erreur : '+(j.erreur||'inconnue');
+    }catch(err){ heliceSkinStatut.textContent = 'Erreur réseau'; }
+  };
+  lecteur.readAsDataURL(fichier);
+});
+btnExtraireHelice.addEventListener('click', async ()=>{
+  if(!editCiblageSkin) return;
+  btnExtraireHelice.disabled = true; const texteOrigine = btnExtraireHelice.textContent;
+  btnExtraireHelice.textContent = 'Découpage…';
+  try{
+    const v = configEnCours.ventilo;
+    const nw = editBoard.naturalWidth, nh = editBoard.naturalHeight;
+    const srcSize = (v.width/100) * nw;
+    const srcX = (v.left/100) * nw, srcY = (v.top/100) * nh;
+    const outSize = Math.max(200, Math.min(1000, Math.round(srcSize)));
+    const off = document.createElement('canvas'); off.width = outSize; off.height = outSize;
+    const ctx = off.getContext('2d');
+    ctx.save();
+    ctx.beginPath(); ctx.arc(outSize/2, outSize/2, outSize/2*0.98, 0, Math.PI*2); ctx.clip();
+    ctx.drawImage(editBoard, srcX, srcY, srcSize, srcSize, 0, 0, outSize, outSize);
+    ctx.restore();
+    heliceApercuLocal = off.toDataURL('image/png'); mettreAJourApercuReel();
+    const r = await fetch('/api/helice-skin'+Q, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ itemId: editCiblageSkin, helice: off.toDataURL('image/png') })
+    });
+    const j = await r.json();
+    btnExtraireHelice.textContent = j.ok ? '✓ Hélice extraite et enregistrée' : 'Erreur : '+(j.erreur||'inconnue');
+    setTimeout(()=>{ btnExtraireHelice.textContent = texteOrigine; btnExtraireHelice.disabled = false; }, 2200);
+  }catch(e){
+    btnExtraireHelice.textContent = 'Erreur, réessaie'; 
+    setTimeout(()=>{ btnExtraireHelice.textContent = texteOrigine; btnExtraireHelice.disabled = false; }, 2200);
+  }
+});
 document.getElementById('btnEdition').addEventListener('click', ()=>{
+  editCiblageSkin = null;
+  editBoard.src = CARTE_DEFAUT_SRC;
+  panneauEdition.querySelector('.editPanneau > h1').textContent = 'Mode édition';
+  editSansLogoLigne.style.display = 'none';
+  btnExtraireHelice.style.display = 'none';
+  editCouleurLigne.style.display = 'none';
+  editVitesseLigne.style.display = 'none';
+  editFlouLigne.style.display = 'none';
+  editCubeLigne.style.display = 'none';
+  editHeliceUploadLigne.style.display = 'none';
+  btnRecentrerZone.style.display = 'none';
+  editZoom.value = 100; editZoomVal.textContent = '100%'; editZoneInterne.style.width = LARGEUR_EDIT_BASE+'px';
+  editZoneEl.scrollLeft = 0; editZoneEl.scrollTop = 0;
   configEnCours = JSON.parse(JSON.stringify(configVisuelActuelle()));
+  heliceApercuLocal = null; cubeApercuLocal = null;
   DEFINITIONS_EDITION.forEach(d=>{ appliquerFormeDepuisConfig(d.cle); rafraichirChampsListe(d.cle); });
+  mettreAJourApercuReel();
   panneauEdition.classList.add('ouvert');
   editStatut.textContent=''; editStatut.className='editStatut';
+});
+// Mode "🎯 Zones du skin" : même panneau, mais superposé à l'image du skin Premium actif
+// sur MA carte, et enregistré en local (assets/zones-premium.json) au lieu du gabarit
+// global -- ne concerne que l'affichage de cette carte, jamais Netlify.
+document.getElementById('btnEditionSkin').addEventListener('click', async ()=>{
+  const itemId = window._moiSkinActif;
+  if(!itemId) return;
+  editCiblageSkin = itemId;
+  editBoard.src = '/assets/premium/'+encodeURIComponent(itemId)+'.png'+Q;
+  panneauEdition.querySelector('.editPanneau > h1').textContent = 'Zones du skin : '+itemId;
+  editSansLogoLigne.style.display = 'flex';
+  btnExtraireHelice.style.display = '';
+  editCouleurLigne.style.display = 'flex';
+  editVitesseLigne.style.display = 'flex';
+  editFlouLigne.style.display = 'flex';
+  editCubeLigne.style.display = '';
+  cubeSkinStatut.textContent = '';
+  editHeliceUploadLigne.style.display = '';
+  heliceSkinStatut.textContent = '';
+  btnRecentrerZone.style.display = '';
+  editZoom.value = 100; editZoomVal.textContent = '100%'; editZoneInterne.style.width = LARGEUR_EDIT_BASE+'px';
+  editZoneEl.scrollLeft = 0; editZoneEl.scrollTop = 0;
+  editStatut.textContent='Chargement…'; editStatut.className='editStatut';
+  try{
+    const r = await fetch('/api/zones-skin?itemId='+encodeURIComponent(itemId));
+    const j = await r.json();
+    const partiel = (j.ok && j.zones) ? j.zones : {};
+    configEnCours = JSON.parse(JSON.stringify(configInitiale));
+    for(const cle of Object.keys(partiel)){
+      if(partiel[cle] && typeof partiel[cle]==='object') Object.assign(configEnCours[cle], partiel[cle]);
+    }
+    couleurSkinSuitPalier = !partiel.couleur;
+    inCouleurSkin.value = partiel.couleur || '#96f01f';
+    inVitesseVentilo.value = partiel.vitesse || 0.1;
+    valVitesseVentilo.textContent = Number(inVitesseVentilo.value).toFixed(2)+'s';
+    inFlouVentilo.value = (partiel.flou!=null) ? partiel.flou : 0.4;
+    valFlouVentilo.textContent = Number(inFlouVentilo.value).toFixed(1)+'px';
+    chkSansLogoVentilo.checked = (partiel.logoVentilo === null);
+    editLogoFormeEl.style.display = chkSansLogoVentilo.checked ? 'none' : '';
+    const ligneLogo = editListe.querySelector('.editLigne[data-cle="logoVentilo"]');
+    if(ligneLogo) ligneLogo.style.display = chkSansLogoVentilo.checked ? 'none' : '';
+    heliceApercuLocal = null; cubeApercuLocal = null;
+    DEFINITIONS_EDITION.forEach(d=>{ appliquerFormeDepuisConfig(d.cle); rafraichirChampsListe(d.cle); });
+    mettreAJourApercuReel();
+    panneauEdition.classList.add('ouvert');
+    editStatut.textContent=''; editStatut.className='editStatut';
+  }catch(e){
+    editStatut.textContent='Erreur de chargement, réessaie.'; editStatut.className='editStatut erreur';
+    panneauEdition.classList.add('ouvert');
+  }
 });
 function configVisuelActuelle(){
   // Repart de la config actuellement enregistrée côté serveur si on l'a déjà rechargée,
@@ -6065,29 +6490,53 @@ function configVisuelActuelle(){
 }
 document.getElementById('btnEditFermer').addEventListener('click', ()=>{
   panneauEdition.classList.remove('ouvert');
+  editLogoFormeEl.style.display = '';
+  const ligneLogo = editListe.querySelector('.editLigne[data-cle="logoVentilo"]');
+  if(ligneLogo) ligneLogo.style.display = '';
+  editVentiloEl.classList.remove('tourne');
+  apercuVentiloEl.classList.remove('tourne');
+  btnEditTourner.textContent = '▶ Tester la rotation';
+  btnEditTourner.classList.remove('actif');
 });
 
 // Tester la rotation (ventilo + logo enfant tournent ensemble, comme en prod)
 const btnEditTourner=document.getElementById('btnEditTourner');
 btnEditTourner.addEventListener('click', ()=>{
   const t=editVentiloEl.classList.toggle('tourne');
+  apercuVentiloEl.classList.toggle('tourne', t);
   btnEditTourner.textContent = t ? '⏸ Arrêter' : '▶ Tester la rotation';
   btnEditTourner.classList.toggle('actif', t);
 });
 
 // Enregistrer : envoie la config au serveur, qui l'écrit sur disque et l'applique
-// immédiatement (sans redémarrage nécessaire).
+// immédiatement (sans redémarrage nécessaire). Route selon editCiblageSkin : config
+// globale (/api/config-visuel) ou zones d'un skin précis (/api/zones-skin), toutes deux
+// 100% locales.
 document.getElementById('btnEditEnregistrer').addEventListener('click', async ()=>{
   editStatut.textContent='Enregistrement…'; editStatut.className='editStatut';
   try{
-    const r=await fetch('/api/config-visuel'+Q, {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify(configEnCours)
-    });
+    let r;
+    if(editCiblageSkin){
+      const zonesAEnvoyer = JSON.parse(JSON.stringify(configEnCours));
+      if(chkSansLogoVentilo.checked) zonesAEnvoyer.logoVentilo = null;
+      if(!couleurSkinSuitPalier) zonesAEnvoyer.couleur = inCouleurSkin.value;
+      zonesAEnvoyer.vitesse = Number(inVitesseVentilo.value);
+      zonesAEnvoyer.flou = Number(inFlouVentilo.value);
+      r = await fetch('/api/zones-skin'+Q, {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({itemId: editCiblageSkin, zones: zonesAEnvoyer})
+      });
+    } else {
+      r = await fetch('/api/config-visuel'+Q, {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(configEnCours)
+      });
+    }
     const j=await r.json();
     if(j.ok){
-      window._configVisuelServeur = configEnCours;
+      if(!editCiblageSkin) window._configVisuelServeur = configEnCours;
       editStatut.textContent='Enregistré ! Rechargement de la page…';
       editStatut.className='editStatut succes';
       setTimeout(()=>location.reload(), 900);
@@ -6384,6 +6833,24 @@ function fmtD(d){if(!d)return'—';if(d>=1e12)return(d/1e12).toFixed(2)+' T';if(
       });
       return;
     }
+    if (/^\/assets\/helices-premium\/[a-z0-9-]{1,60}\.png$/i.test(url.pathname)) {
+      const chemin = path.join(DOSSIER_HELICES_PREMIUM, path.basename(url.pathname));
+      fs.readFile(chemin, (err, data) => {
+        if (err) { res.writeHead(404); res.end(); return; }
+        res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=86400' });
+        res.end(data);
+      });
+      return;
+    }
+    if (/^\/assets\/cubes-premium\/[a-z0-9-]{1,60}\.png$/i.test(url.pathname)) {
+      const chemin = path.join(DOSSIER_CUBES_PREMIUM, path.basename(url.pathname));
+      fs.readFile(chemin, (err, data) => {
+        if (err) { res.writeHead(404); res.end(); return; }
+        res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=86400' });
+        res.end(data);
+      });
+      return;
+    }
     if (/^\/assets\/machines\/niveau-(\d{2})\.png$/.test(url.pathname)) {
       // Une variante de carte par palier de cube (1 à 22). Repli automatique sur la
       // carte par défaut si ce palier précis n'a pas encore d'image fournie -- pas
@@ -6432,7 +6899,7 @@ function fmtD(d){if(!d)return'—';if(d>=1e12)return(d/1e12).toFixed(2)+' T';if(
       // pour qu'une revente future coupe l'accès immédiatement, sans avoir à supprimer un
       // quelconque fichier sur l'ordinateur du précédent propriétaire.
       const itemId = path.basename(url.pathname, '.png');
-      recupererUnPremiumPossede(itemId, (err, donnees) => {
+      recupererUnPremiumPossedeAvecCache(itemId, (err, donnees) => {
         if (err) { res.writeHead(403, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ erreur: err.message })); return; }
         // Cache court côté navigateur seulement (jamais sur disque) -- évite de re-solliciter
         // le service à chaque rafraîchissement du dashboard (~toutes les 2-5s) tout en
@@ -6572,6 +7039,113 @@ function fmtD(d){if(!d)return'—';if(d>=1e12)return(d/1e12).toFixed(2)+' T';if(
         .sort((a, b) => b.hashrate - a.hashrate);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ moi: { machineId, worker: workerName, cpu: cpuModel, hashrate: state.hashrate }, machines: liste }));
+    } else if (url.pathname === '/api/zones-skin' && req.method === 'GET') {
+      // Zones déjà enregistrées pour un skin donné (voir bouton "🎯 Zones du skin" sur
+      // /machines) -- objet PARTIEL, ne contient que les zones qui dévient du gabarit,
+      // au client de compléter avec configInitiale pour les zones absentes.
+      const itemId = url.searchParams.get('itemId') || '';
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+      res.end(JSON.stringify({ ok: true, zones: zonesPremium[itemId] || {} }));
+    } else if (url.pathname === '/api/zones-skin' && req.method === 'POST') {
+      // Enregistre les zones ajustées pour un skin donné, en local (assets/zones-premium.json).
+      // Même validation que /api/config-visuel (uniquement des nombres, sur les clés
+      // connues) -- aucune structure/code arbitraire accepté.
+      let corps = '';
+      req.on('data', chunk => { corps += chunk; if (corps.length > 20000) req.destroy(); });
+      req.on('end', () => {
+        try {
+          const recu = JSON.parse(corps);
+          const itemId = /^[a-z0-9-]{1,60}$/i.test(recu.itemId || '') ? recu.itemId : null;
+          if (!itemId) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ ok: false, erreur: 'itemId invalide' }));
+            return;
+          }
+          const zonesRecues = recu.zones || {};
+          const nouvelle = {};
+          for (const cle of Object.keys(CONFIG_VISUEL_DEFAUT)) {
+            if (!zonesRecues[cle]) continue; // absent = ne suit pas ce skin, retombe sur cv
+            nouvelle[cle] = {};
+            for (const champ of Object.keys(CONFIG_VISUEL_DEFAUT[cle])) {
+              const v = Number(zonesRecues[cle][champ]);
+              if (Number.isFinite(v)) nouvelle[cle][champ] = v;
+            }
+          }
+          // logoVentilo:null explicite = "l'hélice a déjà son cube, masquer l'overlay".
+          if (zonesRecues.logoVentilo === null) nouvelle.logoVentilo = null;
+          // Couleur d'ambiance propre au skin (liseré, barre LED, logo/marque AXECUBE,
+          // nom du palier) -- surcharge --couleur-cube UNIQUEMENT visuellement, ne change
+          // jamais le palier réel ni les données affichées (bestDiff, nom du palier...).
+          if (/^#[0-9a-f]{6}$/i.test(zonesRecues.couleur || '')) nouvelle.couleur = zonesRecues.couleur;
+          // Vitesse de rotation propre au skin, en secondes par tour (plus petit = plus
+          // rapide). Bornée pour rester sensée -- ni figée, ni en toupie illisible.
+          const vitesse = Number(zonesRecues.vitesse);
+          if (Number.isFinite(vitesse) && vitesse >= 0.02 && vitesse <= 3) nouvelle.vitesse = vitesse;
+          // Flou de rotation propre au skin, en pixels -- 0 = toujours net (utile pour
+          // les artworks très détaillés), valeur haute = effet de mouvement plus marqué.
+          const flou = Number(zonesRecues.flou);
+          if (Number.isFinite(flou) && flou >= 0 && flou <= 6) nouvelle.flou = flou;
+
+          zonesPremium[itemId] = nouvelle;
+          sauvegarderZonesPremium(zonesPremium);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: true, itemId, zones: nouvelle }));
+        } catch (e) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: false, erreur: 'JSON invalide : ' + e.message }));
+        }
+      });
+    } else if (url.pathname === '/api/helice-skin' && req.method === 'POST') {
+      // Reçoit l'hélice découpée depuis l'artwork du skin (bouton "✂️ Extraire l'hélice"
+      // du panneau "🎯 Zones du skin") et l'écrit dans assets/helices-premium/<itemId>.png.
+      // Comme zones-premium.json, ce fichier est prévu pour être commité en Git.
+      let corps = '';
+      req.on('data', chunk => { corps += chunk; if (corps.length > 8 * 1024 * 1024) req.destroy(); });
+      req.on('end', () => {
+        try {
+          const recu = JSON.parse(corps);
+          const itemId = /^[a-z0-9-]{1,60}$/i.test(recu.itemId || '') ? recu.itemId : null;
+          const m = /^data:image\/png;base64,(.+)$/.exec(recu.helice || '');
+          if (!itemId || !m) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ ok: false, erreur: 'itemId ou image (PNG base64) invalide' }));
+            return;
+          }
+          fs.mkdirSync(DOSSIER_HELICES_PREMIUM, { recursive: true });
+          fs.writeFileSync(path.join(DOSSIER_HELICES_PREMIUM, itemId + '.png'), Buffer.from(m[1], 'base64'));
+          helicesSkinDisponibles.add(itemId);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: true, itemId }));
+        } catch (e) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: false, erreur: 'JSON invalide : ' + e.message }));
+        }
+      });
+    } else if (url.pathname === '/api/cube-skin' && req.method === 'POST') {
+      // Reçoit un PNG fourni directement par Chris (upload de fichier, pas de découpe)
+      // pour le cube/logo central d'un skin -- assets/cubes-premium/<itemId>.png.
+      let corps = '';
+      req.on('data', chunk => { corps += chunk; if (corps.length > 8 * 1024 * 1024) req.destroy(); });
+      req.on('end', () => {
+        try {
+          const recu = JSON.parse(corps);
+          const itemId = /^[a-z0-9-]{1,60}$/i.test(recu.itemId || '') ? recu.itemId : null;
+          const m = /^data:image\/png;base64,(.+)$/.exec(recu.cube || '');
+          if (!itemId || !m) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ ok: false, erreur: 'itemId ou image (PNG base64) invalide' }));
+            return;
+          }
+          fs.mkdirSync(DOSSIER_CUBES_PREMIUM, { recursive: true });
+          fs.writeFileSync(path.join(DOSSIER_CUBES_PREMIUM, itemId + '.png'), Buffer.from(m[1], 'base64'));
+          cubesSkinDisponibles.add(itemId);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: true, itemId }));
+        } catch (e) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: false, erreur: 'JSON invalide : ' + e.message }));
+        }
+      });
     } else if (url.pathname === '/api/config-visuel' && req.method === 'GET') {
       res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
       res.end(JSON.stringify(configVisuel));
@@ -6676,6 +7250,13 @@ function fmtD(d){if(!d)return'—';if(d>=1e12)return(d/1e12).toFixed(2)+' T';if(
         bloc: { hauteur: state.blockHeight, depuis: state.lastBlockAt },
         paiement: state.paiement,
         skinPremiumActif: state.skinPremiumActif || null,
+        zonesSkinActif: zonesSkinActifPour(state.skinPremiumActif),
+        heliceSkinDisponible: !!(state.skinPremiumActif && helicesSkinDisponibles.has(state.skinPremiumActif)),
+        heliceSkinVersion: (state.skinPremiumActif && helicesSkinDisponibles.has(state.skinPremiumActif))
+          ? empreinteFichier(path.join('assets', 'helices-premium', state.skinPremiumActif + '.png')) : '',
+        cubeSkinDisponible: !!(state.skinPremiumActif && cubesSkinDisponibles.has(state.skinPremiumActif)),
+        cubeSkinVersion: (state.skinPremiumActif && cubesSkinDisponibles.has(state.skinPremiumActif))
+          ? empreinteFichier(path.join('assets', 'cubes-premium', state.skinPremiumActif + '.png')) : '',
         bestDiffVerifie: state.bestDiffVerifie || 0,
         reseau: { cle: reseauCle, symbole: reseau.symbole, recompense: reseau.recompense, label: reseau.label },
         marche: { btcPrice: state.btcPrice, btcSymbol: state.btcSymbol, devise: state.btcDevise },
