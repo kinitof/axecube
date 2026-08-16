@@ -5289,7 +5289,7 @@ charger();setInterval(charger,5000);
      éditable en direct via le bouton "🛠 Écran") -- remplace l'ancienne grille figée. */
   .zoneChamps{position:relative;width:100%;height:calc(100% - 9% - 3%);margin-top:3%}
   .celluleEcran{position:absolute;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;gap:2%}
-  .ecranLogo{display:flex;align-items:center;gap:5px;font-weight:700;color:var(--couleur-cube,var(--white));font-size:min(9.5cqw,29cqh,29px);
+  .ecranLogo{display:flex;align-items:center;gap:5px;font-weight:700;color:var(--z-couleur-logo,var(--couleur-cube,var(--white)));font-size:min(9.5cqw,29cqh,29px);
     min-width:0;flex-shrink:1;overflow:hidden;white-space:nowrap;filter:brightness(1.6) saturate(1.3)}
   .ecranLogo span{overflow:hidden;text-overflow:ellipsis}
   .ecranLogo svg{width:1.1em;height:1.1em}
@@ -5333,7 +5333,7 @@ charger();setInterval(charger,5000);
   .eGrid .rej{color:var(--mut);font-weight:400;font-size:0.8em}
   .nomMachine{position:absolute;left:4%;right:4%;bottom:-26px;text-align:center;font-size:11px;color:var(--white-dim);
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .flechePage{position:absolute;right:26%;top:4.49%;width:6%;aspect-ratio:1/1;z-index:3;
+  .flechePage{position:absolute;right:3%;top:12.5%;width:6%;aspect-ratio:1/1;z-index:3;
     background:rgba(5,7,10,.55);border:1px solid rgba(150,240,31,.4);border-radius:50%;
     color:var(--amber);cursor:pointer;display:flex;align-items:center;justify-content:center;
     font-size:min(5cqw,15cqh,15px);line-height:1;padding:0;font-family:inherit}
@@ -5525,9 +5525,14 @@ charger();setInterval(charger,5000);
         <span id="heliceSkinStatut" style="font-size:10.5px;color:var(--mut);margin-left:6px"></span>
       </div>
       <label id="editCouleurLigne" style="display:none;align-items:center;gap:8px;font-size:12px;margin:4px 0 10px">
-        Couleur d'ambiance du skin (liseré, barre LED, logo, marque) :
+        Couleur d'ambiance du skin (liseré, barre LED) :
         <input type="color" id="inCouleurSkin" value="#96f01f">
         <button type="button" id="btnCouleurSkinDefaut" style="font-size:10.5px">↺ Suivre le vrai palier</button>
+      </label>
+      <label id="editCouleurLogoLigne" style="display:none;align-items:center;gap:8px;font-size:12px;margin:4px 0 10px">
+        Couleur du logo/marque AXECUBE dans l'écran :
+        <input type="color" id="inCouleurLogoSkin" value="#96f01f">
+        <button type="button" id="btnCouleurLogoSkinDefaut" style="font-size:10.5px">↺ Suivre l'ambiance</button>
       </label>
       <label id="editVitesseLigne" style="display:none;align-items:center;gap:8px;font-size:12px;margin:4px 0 10px">
         Durée d'un tour de l'hélice (secondes) :
@@ -5749,6 +5754,7 @@ function stylesZonesSkin(zonesSkin){
   if(z.logoVentilo) css+='--z-logo-left:'+z.logoVentilo.left+'%;--z-logo-top:'+z.logoVentilo.top+'%;--z-logo-width:'+z.logoVentilo.width+'%;';
   if(z.vitesse) css+='--z-ventilo-vitesse:'+z.vitesse+'s;';
   if(z.flou!=null) css+='--z-ventilo-flou:'+z.flou+'px;';
+  if(z.couleurLogo) css+='--z-couleur-logo:'+z.couleurLogo+';';
   return css;
 }
 function classeSansLogoVentilo(zonesSkin){
@@ -6042,7 +6048,7 @@ function afficherModale(idx, animer){
   indexOuvert=idx;
   let vClasse=(d.m.hashrate||0)>0 ? '' : 'arrete';
   if(ventiloPauseManuelle.get(cleStableDe(d.m, d.estMoi, idx))) vClasse='arrete';
-  modalHote.innerHTML=d.complete?carteComplete(d.m,d.estMoi,null,vClasse):carteLegere(d.m,null,vClasse);
+  modalHote.innerHTML=d.complete?carteComplete(d.m,d.estMoi,idx,vClasse):carteLegere(d.m,idx,vClasse);
   activerDefilementPool();
   if(animer!==false) modal.classList.add('ouverte');
 }
@@ -6330,6 +6336,12 @@ const btnCouleurSkinDefaut = document.getElementById('btnCouleurSkinDefaut');
 let couleurSkinSuitPalier = true; // true = pas de surcharge, on garde la couleur du vrai palier
 inCouleurSkin.addEventListener('input', ()=>{ couleurSkinSuitPalier = false; });
 btnCouleurSkinDefaut.addEventListener('click', ()=>{ couleurSkinSuitPalier = true; });
+const editCouleurLogoLigne = document.getElementById('editCouleurLogoLigne');
+const inCouleurLogoSkin = document.getElementById('inCouleurLogoSkin');
+const btnCouleurLogoSkinDefaut = document.getElementById('btnCouleurLogoSkinDefaut');
+let couleurLogoSkinSuitAmbiance = true;
+inCouleurLogoSkin.addEventListener('input', ()=>{ couleurLogoSkinSuitAmbiance = false; });
+btnCouleurLogoSkinDefaut.addEventListener('click', ()=>{ couleurLogoSkinSuitAmbiance = true; });
 const inVitesseVentilo = document.getElementById('inVitesseVentilo');
 const valVitesseVentilo = document.getElementById('valVitesseVentilo');
 inVitesseVentilo.addEventListener('input', ()=>{
@@ -6422,6 +6434,7 @@ document.getElementById('btnEdition').addEventListener('click', ()=>{
   editSansLogoLigne.style.display = 'none';
   btnExtraireHelice.style.display = 'none';
   editCouleurLigne.style.display = 'none';
+  editCouleurLogoLigne.style.display = 'none';
   editVitesseLigne.style.display = 'none';
   editFlouLigne.style.display = 'none';
   editCubeLigne.style.display = 'none';
@@ -6448,6 +6461,7 @@ document.getElementById('btnEditionSkin').addEventListener('click', async ()=>{
   editSansLogoLigne.style.display = 'flex';
   btnExtraireHelice.style.display = '';
   editCouleurLigne.style.display = 'flex';
+  editCouleurLogoLigne.style.display = 'flex';
   editVitesseLigne.style.display = 'flex';
   editFlouLigne.style.display = 'flex';
   editCubeLigne.style.display = '';
@@ -6468,6 +6482,8 @@ document.getElementById('btnEditionSkin').addEventListener('click', async ()=>{
     }
     couleurSkinSuitPalier = !partiel.couleur;
     inCouleurSkin.value = partiel.couleur || '#96f01f';
+    couleurLogoSkinSuitAmbiance = !partiel.couleurLogo;
+    inCouleurLogoSkin.value = partiel.couleurLogo || partiel.couleur || '#96f01f';
     inVitesseVentilo.value = partiel.vitesse || 0.1;
     valVitesseVentilo.textContent = Number(inVitesseVentilo.value).toFixed(2)+'s';
     inFlouVentilo.value = (partiel.flou!=null) ? partiel.flou : 0.4;
@@ -6523,6 +6539,7 @@ document.getElementById('btnEditEnregistrer').addEventListener('click', async ()
       const zonesAEnvoyer = JSON.parse(JSON.stringify(configEnCours));
       if(chkSansLogoVentilo.checked) zonesAEnvoyer.logoVentilo = null;
       if(!couleurSkinSuitPalier) zonesAEnvoyer.couleur = inCouleurSkin.value;
+      if(!couleurLogoSkinSuitAmbiance) zonesAEnvoyer.couleurLogo = inCouleurLogoSkin.value;
       zonesAEnvoyer.vitesse = Number(inVitesseVentilo.value);
       zonesAEnvoyer.flou = Number(inFlouVentilo.value);
       r = await fetch('/api/zones-skin'+Q, {
@@ -6575,7 +6592,7 @@ function forcerPageEdition(page){
   const cleStable=cleStableDe(donneesActuelles[idxMoi].m, true, idxMoi);
   pageActuelle.set(cleStable, page);
   const vClasse=(donneesActuelles[idxMoi].m.hashrate||0)>0?'':'arrete';
-  modalHote.innerHTML=carteComplete(donneesActuelles[idxMoi].m, true, null, vClasse);
+  modalHote.innerHTML=carteComplete(donneesActuelles[idxMoi].m, true, idxMoi, vClasse);
   ajouterPoigneesEdition();
   document.getElementById('inMargeH').value=CE.margeH!=null?CE.margeH:2.5;
   document.getElementById('inMargeV').value=CE.margeV!=null?CE.margeV:2;
@@ -7080,6 +7097,10 @@ function fmtD(d){if(!d)return'—';if(d>=1e12)return(d/1e12).toFixed(2)+' T';if(
           // nom du palier) -- surcharge --couleur-cube UNIQUEMENT visuellement, ne change
           // jamais le palier réel ni les données affichées (bestDiff, nom du palier...).
           if (/^#[0-9a-f]{6}$/i.test(zonesRecues.couleur || '')) nouvelle.couleur = zonesRecues.couleur;
+          // Couleur propre au logo/marque AXECUBE affiché dans l'écran, indépendante de
+          // la couleur d'ambiance (liseré/barre LED) -- utile car le texte a besoin de
+          // contraste sur fond noir, sans dépendre de l'intensité choisie pour le halo.
+          if (/^#[0-9a-f]{6}$/i.test(zonesRecues.couleurLogo || '')) nouvelle.couleurLogo = zonesRecues.couleurLogo;
           // Vitesse de rotation propre au skin, en secondes par tour (plus petit = plus
           // rapide). Bornée pour rester sensée -- ni figée, ni en toupie illisible.
           const vitesse = Number(zonesRecues.vitesse);
