@@ -5404,8 +5404,8 @@ charger();setInterval(charger,5000);
   .editZoomBar input[type=range]{width:110px;accent-color:#96f01f}
   .editZoomBar button{font-size:10px;padding:4px 8px}
   .editZone{position:relative;width:420px;max-height:70vh;overflow:auto;border:1px solid var(--line);border-radius:8px}
-  .editZoneInterne{position:relative;width:100%;transform-origin:top left}
-  .editBoard{width:100%;display:block;user-select:none;-webkit-user-drag:none}
+  .editZoneInterne{position:relative;width:100%;aspect-ratio:1023/1537;transform-origin:top left}
+  .editBoard{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;display:block;user-select:none;-webkit-user-drag:none}
   .editForme{position:absolute;outline:2px dashed;box-sizing:border-box;cursor:move}
   .apercuFondNoir{position:absolute;border-radius:50%;background:#000;pointer-events:none}
   .apercuVentilo{position:absolute;background-size:contain;background-repeat:no-repeat;background-position:center;pointer-events:none}
