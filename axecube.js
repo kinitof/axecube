@@ -5333,7 +5333,7 @@ charger();setInterval(charger,5000);
   .eGrid .rej{color:var(--mut);font-weight:400;font-size:0.8em}
   .nomMachine{position:absolute;left:4%;right:4%;bottom:-26px;text-align:center;font-size:11px;color:var(--white-dim);
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .flechePage{position:absolute;right:3%;top:12.5%;width:6%;aspect-ratio:1/1;z-index:3;
+  .flechePage{position:absolute;right:26%;top:13%;width:6%;aspect-ratio:1/1;z-index:3;
     background:rgba(5,7,10,.55);border:1px solid rgba(150,240,31,.4);border-radius:50%;
     color:var(--amber);cursor:pointer;display:flex;align-items:center;justify-content:center;
     font-size:min(5cqw,15cqh,15px);line-height:1;padding:0;font-family:inherit}
