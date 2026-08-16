@@ -5240,27 +5240,30 @@ charger();setInterval(charger,5000);
   @keyframes ralentirVentilo{from{transform:rotate(0deg)}to{transform:rotate(1080deg)}}
   /* Liseré du contour de la carte : couleur = palier de cube atteint (variable CSS
      --couleur-cube posée sur .carteMachine, verte par défaut si aucun cube). Pulse
-     franc façon néon sous tension (plusieurs couches de halo pour un vrai flash). */
+     franc façon néon sous tension. Peu de blanc mélangé (délaverait une couleur foncée) --
+     on intensifie via brightness/saturate, qui éclaircissent sans désaturer vers le blanc. */
   .contourGlow{position:absolute;left:var(--z-contour-left,${cv.contourGlow.left}%);top:var(--z-contour-top,${cv.contourGlow.top}%);width:var(--z-contour-width,${cv.contourGlow.width}%);height:var(--z-contour-height,${cv.contourGlow.height}%);border-radius:4.5%/3.8%;
     pointer-events:none;
-    box-shadow:0 0 0 0.55cqw color-mix(in srgb, var(--couleur-cube,#96f01f) 100%, white 25%),
-               0 0 1.2cqw 0.3cqw color-mix(in srgb, var(--couleur-cube,#96f01f) 95%, white 10%),
+    box-shadow:0 0 0 0.55cqw color-mix(in srgb, var(--couleur-cube,#96f01f) 96%, white 8%),
+               0 0 1.2cqw 0.3cqw var(--couleur-cube,#96f01f),
                0 0 3cqw 0.7cqw color-mix(in srgb, var(--couleur-cube,#96f01f) 85%, transparent),
                0 0 6cqw 1.6cqw color-mix(in srgb, var(--couleur-cube,#96f01f) 50%, transparent);
+    filter:brightness(1.7) saturate(1.5) contrast(1.1);
     animation:respirerGlow 1.7s ease-in-out infinite}
-  /* Barre LED du socle : bande nette (façon strip LED) + halo qui rayonne autour, même
-     logique que le contour (bord net -> diffusion -> grand halo) plutôt qu'un simple
-     dégradé flou -- rend un vrai éclat au lieu d'une tache diffuse. */
+  /* Barre LED du socle : bande nette (façon strip LED) + halo qui rayonne autour. On évite
+     de mélanger trop de blanc (color-mix avec du blanc DÉLAVE une couleur foncée en gris
+     pâle plutôt que de la faire briller) -- on préfère intensifier la teinte d'origine via
+     brightness/saturate/contrast, qui l'éclaircissent sans la désaturer vers le blanc. */
   .barreGlow{position:absolute;left:var(--z-barre-left,${cv.barreGlow.left}%);top:var(--z-barre-top,${cv.barreGlow.top}%);width:var(--z-barre-width,${cv.barreGlow.width}%);height:var(--z-barre-height,${cv.barreGlow.height}%);border-radius:50%;
     pointer-events:none;
     background:linear-gradient(90deg, transparent 0%,
-               color-mix(in srgb, var(--couleur-cube,#96f01f) 90%, white 30%) 12%,
-               color-mix(in srgb, var(--couleur-cube,#96f01f) 100%, white 45%) 50%,
-               color-mix(in srgb, var(--couleur-cube,#96f01f) 90%, white 30%) 88%, transparent 100%);
-    box-shadow:0 0 0.8cqw 0.15cqw color-mix(in srgb, var(--couleur-cube,#96f01f) 100%, white 20%),
-               0 0 2.2cqw 0.5cqw color-mix(in srgb, var(--couleur-cube,#96f01f) 90%, transparent),
-               0 0 4.5cqw 1cqw color-mix(in srgb, var(--couleur-cube,#96f01f) 55%, transparent);
-    filter:brightness(1.5) saturate(1.4);animation:respirerGlow 1.7s ease-in-out infinite;animation-delay:.3s}
+               color-mix(in srgb, var(--couleur-cube,#96f01f) 95%, white 8%) 12%,
+               color-mix(in srgb, var(--couleur-cube,#96f01f) 100%, white 15%) 50%,
+               color-mix(in srgb, var(--couleur-cube,#96f01f) 95%, white 8%) 88%, transparent 100%);
+    box-shadow:0 0 0.8cqw 0.15cqw var(--couleur-cube,#96f01f),
+               0 0 2.2cqw 0.5cqw color-mix(in srgb, var(--couleur-cube,#96f01f) 95%, transparent),
+               0 0 4.5cqw 1cqw color-mix(in srgb, var(--couleur-cube,#96f01f) 65%, transparent);
+    filter:brightness(2.1) saturate(1.7) contrast(1.15);animation:respirerGlow 1.7s ease-in-out infinite;animation-delay:.3s}
   @keyframes respirerGlow{0%,100%{opacity:.85}50%{opacity:1}}
   /* Paliers "rainbow" (Multicolore I/II, Multi-Gemmes II) : le liseré cycle toutes les
      couleurs au lieu d'une teinte fixe, pour bien les distinguer des paliers unis. */
@@ -5287,7 +5290,7 @@ charger();setInterval(charger,5000);
   .zoneChamps{position:relative;width:100%;height:calc(100% - 9% - 3%);margin-top:3%}
   .celluleEcran{position:absolute;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;gap:2%}
   .ecranLogo{display:flex;align-items:center;gap:5px;font-weight:700;color:var(--couleur-cube,var(--white));font-size:min(9.5cqw,29cqh,29px);
-    min-width:0;flex-shrink:1;overflow:hidden;white-space:nowrap}
+    min-width:0;flex-shrink:1;overflow:hidden;white-space:nowrap;filter:brightness(1.6) saturate(1.3)}
   .ecranLogo span{overflow:hidden;text-overflow:ellipsis}
   .ecranLogo svg{width:1.1em;height:1.1em}
   .statut{color:var(--amber);display:flex;align-items:center;gap:4px;font-weight:700;font-size:min(8.3cqw,27cqh,23px);
@@ -5318,7 +5321,7 @@ charger();setInterval(charger,5000);
   .badgeMini.atteint{filter:none;opacity:1}
   .miniCube{width:calc(15px*var(--ti,1));height:calc(15px*var(--ti,1));vertical-align:middle;object-fit:contain;margin-right:3px}
   .nomCube{display:block;font-size:0.72em;font-weight:400;color:var(--couleur-cube,var(--amber));
-    letter-spacing:.04em;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    letter-spacing:.04em;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;filter:brightness(1.6) saturate(1.3)}
   .blocHash{margin-top:3%}
   .eGrid{display:grid;grid-template-columns:1fr 1fr;gap:2%;margin-top:3%;min-width:0}
   .eGrid>div{display:flex;flex-direction:column;gap:2%;min-width:0}

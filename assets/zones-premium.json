@@ -24,8 +24,8 @@
       "width": 24.98
     },
     "contourGlow": {
-      "left": 2.08,
-      "top": 0.64,
+      "left": 1.96,
+      "top": 0.83,
       "width": 95.31,
       "height": 90.98
     },
@@ -40,7 +40,7 @@
       "top": 53.18,
       "width": 4.96
     },
-    "couleur": "#2a54e8",
+    "couleur": "#2a27e8",
     "vitesse": 0.09,
     "flou": 0
   }
