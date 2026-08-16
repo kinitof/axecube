@@ -5223,7 +5223,7 @@ charger();setInterval(charger,5000);
      précis où la machine tombe hors ligne (joué une seule fois), puis reste immobile. */
   .ventilo{position:absolute;left:var(--z-ventilo-left,${cv.ventilo.left}%);top:var(--z-ventilo-top,${cv.ventilo.top}%);width:var(--z-ventilo-width,${cv.ventilo.width}%);aspect-ratio:1/1;
     background-image:var(--fan-blade, url('/assets/fan-blade.png?v=${CACHE_VENTILO}${jeton ? '&token='+jeton : ''}'));background-size:contain;background-repeat:no-repeat;
-    animation-name:tournerVentilo;animation-duration:var(--z-ventilo-vitesse,.1s);animation-timing-function:linear;animation-iteration-count:infinite;
+    animation-name:tournerVentilo;animation-duration:var(--z-ventilo-vitesse,.1s);animation-timing-function:linear;animation-iteration-count:infinite;animation-direction:var(--z-ventilo-sens,normal);
     transform-origin:var(--z-ventilo-pivotx,${cv.ventilo.pivotX}%) var(--z-ventilo-pivoty,${cv.ventilo.pivotY}%);
     filter:blur(var(--z-ventilo-flou,1.8px));will-change:transform}
   .ventilo.ralentit{animation:ralentirVentilo 1.8s cubic-bezier(.25,.1,.25,1) 1 forwards;filter:blur(1.2px)}
@@ -5235,7 +5235,13 @@ charger();setInterval(charger,5000);
   .logoVentilo{position:absolute;left:var(--z-logo-left,${cv.logoVentilo.left}%);top:var(--z-logo-top,${cv.logoVentilo.top}%);width:var(--z-logo-width,${cv.logoVentilo.width}%);aspect-ratio:1/1;
     background-image:var(--logo-cube, url('/assets/logo-ventilo.png?v=${CACHE_LOGO_VENTILO}${jeton ? '&token='+jeton : ''}'));background-size:contain;background-repeat:no-repeat;
     mix-blend-mode:screen}
+  /* Fond opaque derrière le logo superposé : cache ce que l'hélice a elle-même en son
+     centre (hub imprimé sur l'artwork découpée), pour que le logo se pose sur un fond
+     propre plutôt que de se mélanger avec le dessin d'origine de l'hélice. */
+  .logoVentiloFond{position:absolute;left:var(--z-logo-left,${cv.logoVentilo.left}%);top:var(--z-logo-top,${cv.logoVentilo.top}%);width:var(--z-logo-width,${cv.logoVentilo.width}%);aspect-ratio:1/1;
+    border-radius:50%;background:#000}
   .carteMachine.sans-logo-ventilo .logoVentilo{display:none}
+  .carteMachine.sans-logo-ventilo .logoVentiloFond{display:none}
   @keyframes tournerVentilo{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
   @keyframes ralentirVentilo{from{transform:rotate(0deg)}to{transform:rotate(1080deg)}}
   /* Liseré du contour de la carte : couleur = palier de cube atteint (variable CSS
@@ -5405,6 +5411,7 @@ charger();setInterval(charger,5000);
   .apercuVentilo{position:absolute;background-size:contain;background-repeat:no-repeat;background-position:center;pointer-events:none}
   .apercuVentilo.tourne{animation:tourner .1s linear infinite}
   .apercuLogoVentilo{position:absolute;background-size:contain;background-repeat:no-repeat;background-position:center;mix-blend-mode:screen;pointer-events:none}
+  .apercuLogoVentiloFond{position:absolute;border-radius:50%;background:#000;pointer-events:none}
   .editForme.editRonde{border-radius:50%;aspect-ratio:1/1}
   .editForme.selectionnee{outline-width:3px;z-index:4}
   .editForme.editEnfant{z-index:5}
@@ -5496,7 +5503,7 @@ charger();setInterval(charger,5000);
         <div class="editZoneInterne">
           <img class="editBoard" src="/assets/bitaxe-board.png?v=${CACHE_CARTE}${jeton ? '&token='+jeton : ''}">
           <div class="apercuFondNoir"></div>
-          <div class="apercuVentilo"><div class="apercuLogoVentilo"></div></div>
+          <div class="apercuVentilo"><div class="apercuLogoVentiloFond"></div><div class="apercuLogoVentilo"></div></div>
           <div class="editForme" data-cle="ecran" style="outline-color:#e0e0e0"><div class="editPoignee" style="background:#e0e0e0"></div></div>
           <div class="editForme editRonde" data-cle="fondNoir" style="outline-color:#0096ff"><div class="editPoignee" style="background:#0096ff"></div></div>
           <div class="editForme editRonde" data-cle="ventilo" style="outline-color:#ff0096">
@@ -5543,6 +5550,9 @@ charger();setInterval(charger,5000);
         Flou de rotation (0 = image toujours nette) :
         <input type="range" id="inFlouVentilo" min="0" max="3" step="0.1" value="0.4">
         <span id="valFlouVentilo" style="font-size:10.5px;color:var(--mut)">0.4px</span>
+      </label>
+      <label id="editSensLigne" style="display:none;align-items:center;gap:8px;font-size:12px;margin:4px 0 10px;cursor:pointer">
+        <input type="checkbox" id="chkSensInverse"> Inverser le sens de rotation de l'hélice
       </label>
       <div id="editCubeLigne" style="display:none;margin-bottom:10px">
         <label style="font-size:10.5px;color:var(--mut);letter-spacing:.05em;text-transform:uppercase;display:block;margin-bottom:6px">
@@ -5754,6 +5764,7 @@ function stylesZonesSkin(zonesSkin){
   if(z.logoVentilo) css+='--z-logo-left:'+z.logoVentilo.left+'%;--z-logo-top:'+z.logoVentilo.top+'%;--z-logo-width:'+z.logoVentilo.width+'%;';
   if(z.vitesse) css+='--z-ventilo-vitesse:'+z.vitesse+'s;';
   if(z.flou!=null) css+='--z-ventilo-flou:'+z.flou+'px;';
+  if(z.sensInverse) css+='--z-ventilo-sens:reverse;';
   if(z.couleurLogo) css+='--z-couleur-logo:'+z.couleurLogo+';';
   return css;
 }
@@ -5791,7 +5802,7 @@ function carteComplete(m, estMoi, idx, ventiloClasse){
   const couleurCarte=(zonesSkinActif && zonesSkinActif.couleur) ? zonesSkinActif.couleur : cube.couleur;
   return '<div class="carteMachine'+(enLigne?'':' hors-ligne')+(cube.rainbow?' rainbow-tier':'')+classeSansLogoVentilo(zonesSkinActif)+'"'+(idx!=null?' data-idx="'+idx+'"':'')+' data-cle="'+cleStable+'" style="--couleur-cube:'+couleurCarte+';'+imgStyle+'">'
     +'<div class="fondNoir"></div>'
-    +'<div class="ventilo'+(ventiloClasse?' '+ventiloClasse:'')+'"><div class="logoVentilo"></div></div>'+'<button type="button" class="boutonVentilo" onclick="toggleVentilo(event)" title="Arr\u00eater/relancer le ventilateur (visuel)" aria-label="Basculer le ventilateur"></button>'
+    +'<div class="ventilo'+(ventiloClasse?' '+ventiloClasse:'')+'"><div class="logoVentiloFond"></div><div class="logoVentilo"></div></div>'+'<button type="button" class="boutonVentilo" onclick="toggleVentilo(event)" title="Arr\u00eater/relancer le ventilateur (visuel)" aria-label="Basculer le ventilateur"></button>'
     +'<div class="contourGlow"></div>'
     +'<div class="barreGlow"></div>'
     +'<div class="ecran'+(page===2?' vitrine':'')+'" style="--marge-h:'+(CE.margeH!=null?CE.margeH:2.5)+'%;--marge-v:'+(CE.margeV!=null?CE.margeV:2)+'%">'
@@ -5846,7 +5857,7 @@ function carteLegere(m, idx, ventiloClasse){
   const imgStyle=(cube.imageCarte?('--carte-image:url(\\''+cube.imageCarte+'\\');'):'')+(cube.imageLogo?('--logo-cube:url(\\''+cube.imageLogo+'\\');'):'')+(cube.imageFanBlade?('--fan-blade:url(\\''+cube.imageFanBlade+'\\');'):'');
   return '<div class="carteMachine'+(enLigne?'':' hors-ligne')+(cube.rainbow?' rainbow-tier':'')+'"'+(idx!=null?' data-idx="'+idx+'"':'')+' data-cle="'+cleStable+'" style="--couleur-cube:'+cube.couleur+';'+imgStyle+'">'
     +'<div class="fondNoir"></div>'
-    +'<div class="ventilo'+(ventiloClasse?' '+ventiloClasse:'')+'"><div class="logoVentilo"></div></div>'+'<button type="button" class="boutonVentilo" onclick="toggleVentilo(event)" title="Arr\u00eater/relancer le ventilateur (visuel)" aria-label="Basculer le ventilateur"></button>'
+    +'<div class="ventilo'+(ventiloClasse?' '+ventiloClasse:'')+'"><div class="logoVentiloFond"></div><div class="logoVentilo"></div></div>'+'<button type="button" class="boutonVentilo" onclick="toggleVentilo(event)" title="Arr\u00eater/relancer le ventilateur (visuel)" aria-label="Basculer le ventilateur"></button>'
     +'<div class="contourGlow"></div>'
     +'<div class="barreGlow"></div>'
     +'<div class="ecran">'
@@ -6150,6 +6161,7 @@ const editVentiloEl=panneauEdition.querySelector('.editForme[data-cle="ventilo"]
 const apercuFondNoirEl=panneauEdition.querySelector('.apercuFondNoir');
 const apercuVentiloEl=panneauEdition.querySelector('.apercuVentilo');
 const apercuLogoVentiloEl=panneauEdition.querySelector('.apercuLogoVentilo');
+const apercuLogoVentiloFondEl=panneauEdition.querySelector('.apercuLogoVentiloFond');
 // URLs locales (dataURL) dès qu'un fichier est choisi cette session, AVANT même l'envoi
 // au serveur -- pour un aperçu instantané. Repli sur l'asset déjà enregistré côté serveur
 // si présent, puis sur le calque par défaut sinon.
@@ -6173,12 +6185,16 @@ function mettreAJourApercuReel(){
   apercuVentiloEl.style.backgroundImage="url('"+heliceApercuUrl()+"')";
   apercuVentiloEl.style.animationDuration=(inVitesseVentilo?inVitesseVentilo.value:0.1)+'s';
   apercuVentiloEl.style.filter = 'blur('+(inFlouVentilo?inFlouVentilo.value:0.4)+'px)';
+  apercuVentiloEl.style.animationDirection = (chkSensInverse&&chkSensInverse.checked) ? 'reverse' : 'normal';
   const masque = chkSansLogoVentilo.checked;
   apercuLogoVentiloEl.style.display = masque ? 'none' : '';
+  apercuLogoVentiloFondEl.style.display = masque ? 'none' : '';
   if(!masque){
     apercuLogoVentiloEl.style.left=l.left+'%'; apercuLogoVentiloEl.style.top=l.top+'%';
     apercuLogoVentiloEl.style.width=l.width+'%'; apercuLogoVentiloEl.style.aspectRatio='1/1';
     apercuLogoVentiloEl.style.backgroundImage="url('"+cubeApercuUrl()+"')";
+    apercuLogoVentiloFondEl.style.left=l.left+'%'; apercuLogoVentiloFondEl.style.top=l.top+'%';
+    apercuLogoVentiloFondEl.style.width=l.width+'%'; apercuLogoVentiloFondEl.style.aspectRatio='1/1';
   }
 }
 const editListe=document.getElementById('editListe');
@@ -6354,6 +6370,11 @@ inFlouVentilo.addEventListener('input', ()=>{
   valFlouVentilo.textContent = Number(inFlouVentilo.value).toFixed(1)+'px';
   apercuVentiloEl.style.filter = 'blur('+inFlouVentilo.value+'px)';
 });
+const editSensLigne = document.getElementById('editSensLigne');
+const chkSensInverse = document.getElementById('chkSensInverse');
+chkSensInverse.addEventListener('change', ()=>{
+  apercuVentiloEl.style.animationDirection = chkSensInverse.checked ? 'reverse' : 'normal';
+});
 const editCubeLigne = document.getElementById('editCubeLigne');
 const fCubeSkin = document.getElementById('fCubeSkin');
 const cubeSkinStatut = document.getElementById('cubeSkinStatut');
@@ -6437,6 +6458,7 @@ document.getElementById('btnEdition').addEventListener('click', ()=>{
   editCouleurLogoLigne.style.display = 'none';
   editVitesseLigne.style.display = 'none';
   editFlouLigne.style.display = 'none';
+  editSensLigne.style.display = 'none';
   editCubeLigne.style.display = 'none';
   editHeliceUploadLigne.style.display = 'none';
   btnRecentrerZone.style.display = 'none';
@@ -6464,6 +6486,7 @@ document.getElementById('btnEditionSkin').addEventListener('click', async ()=>{
   editCouleurLogoLigne.style.display = 'flex';
   editVitesseLigne.style.display = 'flex';
   editFlouLigne.style.display = 'flex';
+  editSensLigne.style.display = 'flex';
   editCubeLigne.style.display = '';
   cubeSkinStatut.textContent = '';
   editHeliceUploadLigne.style.display = '';
@@ -6488,6 +6511,7 @@ document.getElementById('btnEditionSkin').addEventListener('click', async ()=>{
     valVitesseVentilo.textContent = Number(inVitesseVentilo.value).toFixed(2)+'s';
     inFlouVentilo.value = (partiel.flou!=null) ? partiel.flou : 0.4;
     valFlouVentilo.textContent = Number(inFlouVentilo.value).toFixed(1)+'px';
+    chkSensInverse.checked = !!partiel.sensInverse;
     chkSansLogoVentilo.checked = (partiel.logoVentilo === null);
     editLogoFormeEl.style.display = chkSansLogoVentilo.checked ? 'none' : '';
     const ligneLogo = editListe.querySelector('.editLigne[data-cle="logoVentilo"]');
@@ -6542,6 +6566,7 @@ document.getElementById('btnEditEnregistrer').addEventListener('click', async ()
       if(!couleurLogoSkinSuitAmbiance) zonesAEnvoyer.couleurLogo = inCouleurLogoSkin.value;
       zonesAEnvoyer.vitesse = Number(inVitesseVentilo.value);
       zonesAEnvoyer.flou = Number(inFlouVentilo.value);
+      if(chkSensInverse.checked) zonesAEnvoyer.sensInverse = true;
       r = await fetch('/api/zones-skin'+Q, {
         method:'POST',
         headers:{'Content-Type':'application/json'},
@@ -7109,6 +7134,7 @@ function fmtD(d){if(!d)return'—';if(d>=1e12)return(d/1e12).toFixed(2)+' T';if(
           // les artworks très détaillés), valeur haute = effet de mouvement plus marqué.
           const flou = Number(zonesRecues.flou);
           if (Number.isFinite(flou) && flou >= 0 && flou <= 6) nouvelle.flou = flou;
+          if (zonesRecues.sensInverse === true) nouvelle.sensInverse = true;
 
           zonesPremium[itemId] = nouvelle;
           sauvegarderZonesPremium(zonesPremium);
