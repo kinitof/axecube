@@ -3086,6 +3086,23 @@ function main() {
     45%{transform:scale(1.5)}60%{transform:scale(1)}100%{transform:scale(1)}}
   .blocBadge.trouve .n{animation:blocPulse 1.1s ease-in-out 6}
   .blocBadge.flash .n{animation:blocFlash 1.6s ease-in-out, blocPulse 1.1s ease-in-out infinite;color:#fff}
+  /* Bannière de célébration -- cachée par défaut, révélée par celebrerBloc() (bloc réel
+     trouvé, ou test manuel via le bouton 🎁). Réutilise la palette existante (--amber =
+     vert néon ici, --glow) pour rester cohérente avec le reste du dashboard. */
+  .banniereBloc{display:none;text-align:center;margin:10px 0;padding:14px 12px;
+    border:2px solid var(--amber);border-radius:10px;background:rgba(150,240,31,.06);
+    box-shadow:0 0 18px rgba(150,240,31,.4), inset 0 0 14px rgba(150,240,31,.08);
+    animation:banniereApparition .4s ease-out}
+  .banniereBloc.visible{display:block}
+  .banniereBloc .bbTitre{font-size:19px;font-weight:800;color:var(--amber);text-shadow:var(--glow);
+    letter-spacing:.02em;margin-bottom:8px;animation:blocPulse 1.3s ease-in-out infinite}
+  .banniereBloc .bbTrophees{display:block;font-size:14px;margin-top:2px;font-weight:700}
+  .banniereBloc .bbLigne{display:flex;justify-content:space-between;font-size:11px;
+    color:var(--white-dim);letter-spacing:.05em;padding:3px 4px;border-top:1px dashed rgba(150,240,31,.2)}
+  .banniereBloc .bbLigne:first-of-type{border-top:none}
+  .banniereBloc .bbLigne b{color:var(--amber);font-weight:700;font-variant-numeric:tabular-nums}
+  .banniereBloc .bbLigneBloc b{color:var(--white-dim);font-weight:600}
+  @keyframes banniereApparition{from{opacity:0;transform:scale(.92)}to{opacity:1;transform:scale(1)}}
   canvas{width:100%;height:44px;display:block;opacity:.9}
   .cores{display:flex;gap:4px;align-items:flex-end;height:18px;margin-top:8px}
   .cores i{flex:0 0 12px;background:var(--amber-faint);border-radius:1px;min-height:2px}
@@ -3276,6 +3293,12 @@ function main() {
         <div class="n" id="blocsN">0</div>
         <div class="l">BLOC</div>
       </div>
+    </div>
+    <div class="banniereBloc" id="banniereBloc">
+      <div class="bbTitre">₿ BLOC TROUVÉ ! <span class="bbTrophees">🏆 FÉLICITATIONS ! 🏆</span></div>
+      <div class="bbLigne"><span>DIFFICULTÉ DU BLOC</span><b id="bb_diff">—</b></div>
+      <div class="bbLigne"><span>RÉCOMPENSE</span><b id="bb_recompense">—</b></div>
+      <div class="bbLigne bbLigneBloc"><span>BLOC</span><b id="bb_hauteur">—</b></div>
     </div>
     <canvas id="spark" width="360" height="44"></canvas>
     <div class="record">
@@ -3713,6 +3736,24 @@ function celebrerBloc(permanent){
   if(!confettiInterval){
     confettiInterval=setInterval(lancerConfettis, 900);
   }
+  afficherBanniereBloc(permanent);
+}
+// Remplit et révèle la bannière "BLOC TROUVÉ" avec les vraies données courantes en cas de
+// bloc réel, ou des valeurs plausibles (meilleure diff perso, hauteur courante) en test.
+function afficherBanniereBloc(permanent){
+  const ban=document.getElementById('banniereBloc');
+  if(!ban)return;
+  const s=dernierStats||{};
+  const diff=(permanent && s.netDiff) ? s.netDiff : (s.bestDiff||4750000);
+  const hauteur=s.blockHeight||963001;
+  // Subside actuel selon le calendrier de halving Bitcoin (50 BTC ÷ 2 tous les 210 000
+  // blocs) -- calculé à la volée, reste juste après chaque futur halving sans y retoucher.
+  const subside=50/Math.pow(2, Math.floor(hauteur/210000));
+  document.getElementById('bb_diff').textContent=fmtD(diff);
+  document.getElementById('bb_recompense').textContent=subside.toFixed(8)+' BTC + frais';
+  document.getElementById('bb_hauteur').textContent=hauteur.toLocaleString('fr-FR')
+    +(permanent?'':' (exemple, mode test)');
+  ban.classList.add('visible');
 }
 function testerCelebrationBloc(){ fermerPopupParametres(); celebrerBloc(false); }
 async function appliquerSoloSplit(){
