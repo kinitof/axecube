@@ -5250,6 +5250,12 @@ charger();setInterval(charger,5000);
      on intensifie via brightness/saturate, qui éclaircissent sans désaturer vers le blanc. */
   .contourGlow{position:absolute;left:var(--z-contour-left,${cv.contourGlow.left}%);top:var(--z-contour-top,${cv.contourGlow.top}%);width:var(--z-contour-width,${cv.contourGlow.width}%);height:var(--z-contour-height,${cv.contourGlow.height}%);border-radius:4.5%/3.8%;
     pointer-events:none;
+    -webkit-mask:linear-gradient(#000 0 0) padding-box,
+      linear-gradient(#000 0 0) var(--z-encoche-left,-999cqw) var(--z-encoche-top,-999cqh)/var(--z-encoche-width,0cqw) var(--z-encoche-height,0cqh) no-repeat;
+    -webkit-mask-composite:xor;
+    mask:linear-gradient(#000 0 0) padding-box,
+      linear-gradient(#000 0 0) var(--z-encoche-left,-999cqw) var(--z-encoche-top,-999cqh)/var(--z-encoche-width,0cqw) var(--z-encoche-height,0cqh) no-repeat;
+    mask-composite:exclude;
     box-shadow:0 0 0 0.55cqw color-mix(in srgb, var(--couleur-cube,#96f01f) 96%, white 8%),
                0 0 1.2cqw 0.3cqw var(--couleur-cube,#96f01f),
                0 0 3cqw 0.7cqw color-mix(in srgb, var(--couleur-cube,#96f01f) 85%, transparent),
@@ -5275,7 +5281,10 @@ charger();setInterval(charger,5000);
      couleurs au lieu d'une teinte fixe, pour bien les distinguer des paliers unis. */
   .carteMachine.rainbow-tier .contourGlow,.carteMachine.rainbow-tier .barreGlow{animation-name:respirerGlow,arcEnCiel;animation-duration:1.7s,4s;animation-timing-function:ease-in-out,linear;animation-iteration-count:infinite,infinite}
   .carteMachine.rainbow-tier .ecranLogo{animation:arcEnCiel 4s linear infinite}
-  @keyframes arcEnCiel{from{filter:hue-rotate(0deg) saturate(1.6) brightness(1.6) contrast(1.15)}to{filter:hue-rotate(360deg) saturate(1.6) brightness(1.6) contrast(1.15)}}
+  @keyframes arcEnCiel{
+    0%{filter:hue-rotate(var(--z-arc-debut,0deg)) saturate(1.6) brightness(1.6) contrast(1.15)}
+    100%{filter:hue-rotate(var(--z-arc-fin,360deg)) saturate(1.6) brightness(1.6) contrast(1.15)}
+  }
   /* Badge "bloc trouvé" : cachée par défaut, apparaît seulement si blocsTrouves>0 */
   .badgeBloc{display:none;align-items:center;gap:4px;background:rgba(150,240,31,.16);color:var(--amber);
     border:1px solid rgba(150,240,31,.5);font-size:min(4.4cqw,13cqh,13px);font-weight:700;letter-spacing:.06em;
@@ -5425,6 +5434,10 @@ charger();setInterval(charger,5000);
     border-radius:50%;border:2px solid #00e5ff;background:rgba(0,229,255,.3)}
   .editForme[data-cle="ventilo"].selectionnee .editPivot{display:block}
   .panneauEdition.modeSkin .editPivot{display:none!important}
+  .editForme[data-cle="encoche"]{display:none}
+  .panneauEdition.modeSkin .editForme[data-cle="encoche"].active{display:block}
+  .editLigne.skinOnly{display:none}
+  .panneauEdition.modeSkin .editLigne.skinOnly{display:block}
   .editForme.tourne{animation:tourner .1s linear infinite;filter:blur(1.5px);cursor:default}
   .editForme.tourne .editPoignee,.editForme.tourne .editPivot{display:none}
   @keyframes tourner{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
@@ -5515,6 +5528,7 @@ charger();setInterval(charger,5000);
             </div>
           </div>
           <div class="editForme" data-cle="contourGlow" style="outline-color:#96f01f"><div class="editPoignee" style="background:#96f01f"></div></div>
+        <div class="editForme" data-cle="encoche" style="outline-color:#ff3b3b;outline-style:dotted"><div class="editPoignee" style="background:#ff3b3b"></div></div>
           <div class="editForme editRonde" data-cle="barreGlow" style="outline-color:#ff8800"><div class="editPoignee" style="background:#ff8800"></div></div>
           <div class="editForme editRonde" data-cle="boutonVentilo" style="outline-color:#c800ff"><div class="editPoignee" style="background:#c800ff"></div></div>
         </div>
@@ -5536,6 +5550,12 @@ charger();setInterval(charger,5000);
         Couleur d'ambiance du skin (liseré, barre LED) :
         <input type="color" id="inCouleurSkin" value="#96f01f">
         <button type="button" id="btnCouleurSkinDefaut" style="font-size:10.5px">↺ Suivre le vrai palier</button>
+      </label>
+      <label id="editArcLigne" style="display:none;align-items:center;gap:8px;font-size:11px;margin:4px 0 10px;cursor:pointer">
+        <input type="checkbox" id="chkArcRestreint"> Si le vrai palier est arc-en-ciel : limiter la palette à rouge/violet/rose (au lieu de tout le spectre)
+      </label>
+      <label id="editEncocheLigne" style="display:none;align-items:center;gap:8px;font-size:11px;margin:4px 0 10px;cursor:pointer">
+        <input type="checkbox" id="chkEncoche"> Masquer le liseré à un endroit précis (rectangle rouge pointillé, ex: connecteur qui dépasse)
       </label>
       <label id="editCouleurLogoLigne" style="display:none;align-items:center;gap:8px;font-size:12px;margin:4px 0 10px">
         Couleur du logo/marque AXECUBE dans l'écran :
@@ -5766,6 +5786,8 @@ function stylesZonesSkin(zonesSkin){
   if(z.vitesse) css+='--z-ventilo-vitesse:'+z.vitesse+'s;';
   if(z.flou!=null) css+='--z-ventilo-flou:'+z.flou+'px;';
   if(z.sensInverse) css+='--z-ventilo-sens:reverse;';
+  if(z.arcRestreint) css+='--z-arc-debut:-55deg;--z-arc-fin:55deg;';
+  if(z.encoche && z.encoche.width) css+='--z-encoche-left:'+z.encoche.left+'cqw;--z-encoche-top:'+z.encoche.top+'cqh;--z-encoche-width:'+z.encoche.width+'cqw;--z-encoche-height:'+(z.encoche.height||z.encoche.width)+'cqh;';
   if(z.couleurLogo) css+='--z-couleur-logo:'+z.couleurLogo+';';
   return css;
 }
@@ -6126,6 +6148,7 @@ const DEFINITIONS_EDITION = [
   {cle:'contourGlow',   label:'LISERÉ VERT (contour)',   couleur:'#96f01f', parent:'board', hauteur:true},
   {cle:'barreGlow',     label:'BARRE LED (socle)',       couleur:'#ff8800', parent:'board', hauteur:true},
   {cle:'boutonVentilo', label:'BOUTON BLANC (cliquable)',couleur:'#c800ff', parent:'board', hauteur:false},
+  {cle:'encoche',       label:'ENCOCHE (masque le liseré)',couleur:'#ff3b3b', parent:'board', hauteur:true, skinOnly:true},
 ];
 let configEnCours = JSON.parse(JSON.stringify(configInitiale));
 let formeSelectionnee = null;
@@ -6204,7 +6227,7 @@ const editStatut=document.getElementById('editStatut');
 function appliquerFormeDepuisConfig(cle){
   const def=DEFINITIONS_EDITION.find(d=>d.cle===cle);
   const el=panneauEdition.querySelector('.editForme[data-cle="'+cle+'"]');
-  const c=configEnCours[cle];
+  const c=configEnCours[cle] || {left:0,top:0,width:0,height:0};
   el.style.left=c.left+'%'; el.style.top=c.top+'%'; el.style.width=c.width+'%';
   if(def.hauteur) el.style.height=c.height+'%';
   if(def.pivot){
@@ -6217,9 +6240,9 @@ DEFINITIONS_EDITION.forEach(d=>appliquerFormeDepuisConfig(d.cle));
 
 function construireLigne(def){
   const div=document.createElement('div');
-  div.className='editLigne';
+  div.className='editLigne'+(def.skinOnly?' skinOnly':'');
   div.dataset.cle=def.cle;
-  const c=configEnCours[def.cle];
+  const c=configEnCours[def.cle] || {left:0,top:0,width:0,height:0};
   let champs = '<label>LEFT %<input type="number" step="0.01" data-champ="left" value="'+c.left+'"></label>'
     +'<label>TOP %<input type="number" step="0.01" data-champ="top" value="'+c.top+'"></label>'
     +'<label>WIDTH %<input type="number" step="0.01" data-champ="width" value="'+c.width+'"></label>';
@@ -6353,6 +6376,18 @@ const btnCouleurSkinDefaut = document.getElementById('btnCouleurSkinDefaut');
 let couleurSkinSuitPalier = true; // true = pas de surcharge, on garde la couleur du vrai palier
 inCouleurSkin.addEventListener('input', ()=>{ couleurSkinSuitPalier = false; });
 btnCouleurSkinDefaut.addEventListener('click', ()=>{ couleurSkinSuitPalier = true; });
+const editArcLigne = document.getElementById('editArcLigne');
+const chkArcRestreint = document.getElementById('chkArcRestreint');
+const editEncocheLigne = document.getElementById('editEncocheLigne');
+const chkEncoche = document.getElementById('chkEncoche');
+const encocheFormeEl = panneauEdition.querySelector('.editForme[data-cle="encoche"]');
+chkEncoche.addEventListener('change', ()=>{
+  encocheFormeEl.classList.toggle('active', chkEncoche.checked);
+  if(chkEncoche.checked && (!configEnCours.encoche || !configEnCours.encoche.width)){
+    configEnCours.encoche = {left:70, top:5, width:12, height:12};
+    appliquerFormeDepuisConfig('encoche'); rafraichirChampsListe('encoche');
+  }
+});
 const editCouleurLogoLigne = document.getElementById('editCouleurLogoLigne');
 const inCouleurLogoSkin = document.getElementById('inCouleurLogoSkin');
 const btnCouleurLogoSkinDefaut = document.getElementById('btnCouleurLogoSkinDefaut');
@@ -6457,6 +6492,9 @@ document.getElementById('btnEdition').addEventListener('click', ()=>{
   editSansLogoLigne.style.display = 'none';
   btnExtraireHelice.style.display = 'none';
   editCouleurLigne.style.display = 'none';
+  editArcLigne.style.display = 'none';
+  editEncocheLigne.style.display = 'none';
+  encocheFormeEl.classList.remove('active');
   editCouleurLogoLigne.style.display = 'none';
   editVitesseLigne.style.display = 'none';
   editFlouLigne.style.display = 'none';
@@ -6486,6 +6524,8 @@ document.getElementById('btnEditionSkin').addEventListener('click', async ()=>{
   editSansLogoLigne.style.display = 'flex';
   btnExtraireHelice.style.display = '';
   editCouleurLigne.style.display = 'flex';
+  editArcLigne.style.display = 'flex';
+  editEncocheLigne.style.display = 'flex';
   editCouleurLogoLigne.style.display = 'flex';
   editVitesseLigne.style.display = 'flex';
   editFlouLigne.style.display = 'flex';
@@ -6503,11 +6543,15 @@ document.getElementById('btnEditionSkin').addEventListener('click', async ()=>{
     const j = await r.json();
     const partiel = (j.ok && j.zones) ? j.zones : {};
     configEnCours = JSON.parse(JSON.stringify(configInitiale));
+    configEnCours.encoche = {left:0,top:0,width:0,height:0};
     for(const cle of Object.keys(partiel)){
       if(partiel[cle] && typeof partiel[cle]==='object') Object.assign(configEnCours[cle], partiel[cle]);
     }
     couleurSkinSuitPalier = !partiel.couleur;
     inCouleurSkin.value = partiel.couleur || '#96f01f';
+    chkArcRestreint.checked = !!partiel.arcRestreint;
+    chkEncoche.checked = !!(configEnCours.encoche && configEnCours.encoche.width);
+    encocheFormeEl.classList.toggle('active', chkEncoche.checked);
     couleurLogoSkinSuitAmbiance = !partiel.couleurLogo;
     inCouleurLogoSkin.value = partiel.couleurLogo || partiel.couleur || '#96f01f';
     inVitesseVentilo.value = partiel.vitesse || 0.1;
@@ -6570,6 +6614,9 @@ document.getElementById('btnEditEnregistrer').addEventListener('click', async ()
       zonesAEnvoyer.ventilo.pivotX = 50; zonesAEnvoyer.ventilo.pivotY = 50;
       if(chkSansLogoVentilo.checked) zonesAEnvoyer.logoVentilo = null;
       if(!couleurSkinSuitPalier) zonesAEnvoyer.couleur = inCouleurSkin.value;
+      if(chkArcRestreint.checked) zonesAEnvoyer.arcRestreint = true;
+      if(chkEncoche.checked) zonesAEnvoyer.encoche = configEnCours.encoche;
+      else delete zonesAEnvoyer.encoche;
       if(!couleurLogoSkinSuitAmbiance) zonesAEnvoyer.couleurLogo = inCouleurLogoSkin.value;
       zonesAEnvoyer.vitesse = Number(inVitesseVentilo.value);
       zonesAEnvoyer.flou = Number(inFlouVentilo.value);
@@ -7142,6 +7189,20 @@ function fmtD(d){if(!d)return'—';if(d>=1e12)return(d/1e12).toFixed(2)+' T';if(
           const flou = Number(zonesRecues.flou);
           if (Number.isFinite(flou) && flou >= 0 && flou <= 6) nouvelle.flou = flou;
           if (zonesRecues.sensInverse === true) nouvelle.sensInverse = true;
+          // Palette arc-en-ciel restreinte (rouge/violet/rose) -- ne concerne que les
+          // machines qui ont réellement atteint le vrai palier arc-en-ciel ; ne change
+          // jamais si l'effet s'active, seulement sa gamme de teintes pour ce skin.
+          if (zonesRecues.arcRestreint === true) nouvelle.arcRestreint = true;
+          // Encoche : rectangle où le liseré est masqué (ex: connecteur qui dépasse du
+          // gabarit). left/top/width obligatoires, height optionnelle (repli sur width).
+          if (zonesRecues.encoche && typeof zonesRecues.encoche === 'object') {
+            const eLeft = Number(zonesRecues.encoche.left), eTop = Number(zonesRecues.encoche.top),
+                  eWidth = Number(zonesRecues.encoche.width), eHeight = Number(zonesRecues.encoche.height);
+            if (Number.isFinite(eLeft) && Number.isFinite(eTop) && Number.isFinite(eWidth) && eWidth > 0) {
+              nouvelle.encoche = { left: eLeft, top: eTop, width: eWidth,
+                height: Number.isFinite(eHeight) && eHeight > 0 ? eHeight : eWidth };
+            }
+          }
 
           zonesPremium[itemId] = nouvelle;
           sauvegarderZonesPremium(zonesPremium);
