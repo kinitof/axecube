@@ -6108,12 +6108,18 @@ const dernierStatut=new Map();
 // il y a longtemps. Bascule automatiquement sur la page trophée + confettis localisés à
 // CETTE carte quand une augmentation est détectée.
 const dernierBlocsTrouvesParMachine=new Map();
+// Machines "en célébration" : reste actif indéfiniment (jusqu'au rechargement de la page,
+// comme sur le tableau de bord) -- même si tu n'es pas devant l'écran au moment exact où
+// le bloc tombe, tu retrouves l'animation en revenant plus tard, pas juste une salve
+// ponctuelle déjà terminée.
+const celebrationActive=new Set();
 function detecterNouveauBloc(m, cleStable, maxPageAvecTrophee){
   const precedent=dernierBlocsTrouvesParMachine.get(cleStable);
   const actuel=m.blocsTrouves||0;
   dernierBlocsTrouvesParMachine.set(cleStable, actuel);
   if(precedent!=null && actuel>precedent){
     pageActuelle.set(cleStable, maxPageAvecTrophee);
+    celebrationActive.add(cleStable);
     return true;
   }
   return false;
@@ -6128,6 +6134,16 @@ function celebrerBlocCarte(cleStable){
     bipDisponible();
   }, 30);
 }
+// Salve continue pour toutes les machines "en célébration" -- redémarre à chaque cycle
+// même après un rafraîchissement complet de la grille (qui recrée le DOM des cartes).
+if(!window._intervalCelebrationCartes){
+  window._intervalCelebrationCartes=setInterval(()=>{
+    celebrationActive.forEach(cle=>{
+      const carte=document.querySelector('.carteMachine[data-cle="'+CSS.escape(cle)+'"]');
+      if(carte) lancerConfettisCarte(carte);
+    });
+  }, 700);
+}
 // Test manuel (bouton "🧪 Tester bloc trouvé" sur /machines) : force la page trophée sur
 // MA carte avec un blocsTrouves de test, SANS toucher aux vraies données ni au compteur
 // réel -- la valeur affichée n'est qu'une copie locale jetable de l'objet machine.
@@ -6138,6 +6154,7 @@ function testerTropheeCarte(){
   const cleStable=cleStableDe(d.m, true, idxMoi);
   const mTest=Object.assign({}, d.m, { blocsTrouves:(d.m.blocsTrouves||0)+1 });
   pageActuelle.set(cleStable, 3);
+  celebrationActive.add(cleStable);
   const carte=document.querySelector('.carteMachine[data-cle="'+CSS.escape(cleStable)+'"]');
   if(!carte) return;
   const vClasse=(d.m.hashrate||0)>0?'':'arrete';
