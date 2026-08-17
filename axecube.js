@@ -5275,7 +5275,7 @@ charger();setInterval(charger,5000);
      couleurs au lieu d'une teinte fixe, pour bien les distinguer des paliers unis. */
   .carteMachine.rainbow-tier .contourGlow,.carteMachine.rainbow-tier .barreGlow{animation-name:respirerGlow,arcEnCiel;animation-duration:1.7s,4s;animation-timing-function:ease-in-out,linear;animation-iteration-count:infinite,infinite}
   .carteMachine.rainbow-tier .ecranLogo{animation:arcEnCiel 4s linear infinite}
-  @keyframes arcEnCiel{from{filter:hue-rotate(0deg) saturate(1.4)}to{filter:hue-rotate(360deg) saturate(1.4)}}
+  @keyframes arcEnCiel{from{filter:hue-rotate(0deg) saturate(1.6) brightness(1.6) contrast(1.15)}to{filter:hue-rotate(360deg) saturate(1.6) brightness(1.6) contrast(1.15)}}
   /* Badge "bloc trouvé" : cachée par défaut, apparaît seulement si blocsTrouves>0 */
   .badgeBloc{display:none;align-items:center;gap:4px;background:rgba(150,240,31,.16);color:var(--amber);
     border:1px solid rgba(150,240,31,.5);font-size:min(4.4cqw,13cqh,13px);font-weight:700;letter-spacing:.06em;
@@ -5424,6 +5424,7 @@ charger();setInterval(charger,5000);
   .editPivotRond{position:absolute;left:50%;top:50%;width:7px;height:7px;margin:-3.5px 0 0 -3.5px;
     border-radius:50%;border:2px solid #00e5ff;background:rgba(0,229,255,.3)}
   .editForme[data-cle="ventilo"].selectionnee .editPivot{display:block}
+  .panneauEdition.modeSkin .editPivot{display:none!important}
   .editForme.tourne{animation:tourner .1s linear infinite;filter:blur(1.5px);cursor:default}
   .editForme.tourne .editPoignee,.editForme.tourne .editPivot{display:none}
   @keyframes tourner{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
@@ -6450,6 +6451,7 @@ btnExtraireHelice.addEventListener('click', async ()=>{
 });
 document.getElementById('btnEdition').addEventListener('click', ()=>{
   editCiblageSkin = null;
+  panneauEdition.classList.remove('modeSkin');
   editBoard.src = CARTE_DEFAUT_SRC;
   panneauEdition.querySelector('.editPanneau > h1').textContent = 'Mode édition';
   editSansLogoLigne.style.display = 'none';
@@ -6478,6 +6480,7 @@ document.getElementById('btnEditionSkin').addEventListener('click', async ()=>{
   const itemId = window._moiSkinActif;
   if(!itemId) return;
   editCiblageSkin = itemId;
+  panneauEdition.classList.add('modeSkin');
   editBoard.src = '/assets/premium/'+encodeURIComponent(itemId)+'.png'+Q;
   panneauEdition.querySelector('.editPanneau > h1').textContent = 'Zones du skin : '+itemId;
   editSansLogoLigne.style.display = 'flex';
@@ -6561,6 +6564,10 @@ document.getElementById('btnEditEnregistrer').addEventListener('click', async ()
     let r;
     if(editCiblageSkin){
       const zonesAEnvoyer = JSON.parse(JSON.stringify(configEnCours));
+      // Le pivot de rotation reste verrouillé au centre pour les skins -- le point de
+      // pivot est masqué dans ce panneau, mais on force quand même la valeur ici par
+      // sécurité (au cas où une ancienne dérive traînerait encore en mémoire).
+      zonesAEnvoyer.ventilo.pivotX = 50; zonesAEnvoyer.ventilo.pivotY = 50;
       if(chkSansLogoVentilo.checked) zonesAEnvoyer.logoVentilo = null;
       if(!couleurSkinSuitPalier) zonesAEnvoyer.couleur = inCouleurSkin.value;
       if(!couleurLogoSkinSuitAmbiance) zonesAEnvoyer.couleurLogo = inCouleurLogoSkin.value;
