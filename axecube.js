@@ -5986,7 +5986,7 @@ function carteComplete(m, estMoi, idx, ventiloClasse){
           + celda(1,'niveauGenese','<span>PALIER GEN\u00c8SE</span><b>'+(cube.imageLogo?'<img src="'+cube.imageLogo+'" class="miniCube" alt="">':'')+' '+(cube.niveau||0)+'/22</b>')
         ))))
         +'</div>'
-      ))
+      )
     +'</div>'
     +'<button type="button" class="flechePage" onclick="pageSuivante(event,'+idx+')" title="Voir plus d\u2019infos" aria-label="Page suivante">\u203a</button>'
     +'<div class="nomMachine">'+(estMoi?'<span class="badgeMoi">MOI</span> ':'')+(m.worker||'—')+' · '+(m.cpu||'—')+'</div>'
