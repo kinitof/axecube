@@ -5,6 +5,12 @@
 // immédiatement, sans qu'aucun fichier n'ait jamais été copié sur l'ordinateur de
 // l'ancien propriétaire (voir le proxy local /assets/premium/<id>.png dans axecube.js,
 // qui appelle cette fonction à chaque affichage de la carte).
+//
+// EXCEPTION ADMIN : les machineId listés dans ADMIN_MACHINE_IDS (variable d'environnement
+// Netlify, séparés par des virgules) sautent la vérification de possession -- pratique
+// pour Chris quand il teste/règle un nouveau skin sans avoir à d'abord se l'acquérir
+// manuellement via la boutique. Si ADMIN_MACHINE_IDS n'est pas configurée, ce bypass est
+// simplement inactif (comportement normal pour tout le monde).
 'use strict';
 const { getStore } = require('@netlify/blobs');
 
@@ -17,6 +23,10 @@ function storePossessions() {
   return (process.env.BLOBS_SITE_ID && process.env.BLOBS_TOKEN)
     ? getStore({ name: 'axecube-possessions-premium', siteID: process.env.BLOBS_SITE_ID, token: process.env.BLOBS_TOKEN })
     : getStore('axecube-possessions-premium');
+}
+function estAdmin(machineId) {
+  const liste = (process.env.ADMIN_MACHINE_IDS || '').split(',').map(s => s.trim()).filter(Boolean);
+  return liste.includes(machineId);
 }
 
 exports.handler = async (event) => {
@@ -36,14 +46,17 @@ exports.handler = async (event) => {
     return { statusCode: 400, headers: corsJson, body: JSON.stringify({ erreur: 'itemId et machineId requis' }) };
   }
 
-  // 1) Vérifie la possession -- registre écrit par acquerir-premium-gratuit.js, sous la
-  // forme { items: { "<itemId>": { acquisLe, viaOffre } } }, indexé par machineId.
-  const possessions = storePossessions();
-  let enregistrement = null;
-  try { enregistrement = await possessions.get(machineId, { type: 'json' }); } catch { /* aucune possession */ }
-  const possede = !!(enregistrement && enregistrement.items && enregistrement.items[itemId]);
-  if (!possede) {
-    return { statusCode: 403, headers: corsJson, body: JSON.stringify({ erreur: 'cette pièce n\'est pas possédée par cette machine' }) };
+  const admin = estAdmin(machineId);
+
+  // 1) Vérifie la possession -- sauf si machineId admin (voir estAdmin ci-dessus).
+  if (!admin) {
+    const possessions = storePossessions();
+    let enregistrement = null;
+    try { enregistrement = await possessions.get(machineId, { type: 'json' }); } catch { /* aucune possession */ }
+    const possede = !!(enregistrement && enregistrement.items && enregistrement.items[itemId]);
+    if (!possede) {
+      return { statusCode: 403, headers: corsJson, body: JSON.stringify({ erreur: 'cette pièce n\'est pas possédée par cette machine' }) };
+    }
   }
 
   // 2) Sert l'image complète -- jamais écrite sur disque côté client, uniquement

@@ -1,9 +1,14 @@
 // AXECUBE — fonction Netlify : liste les identifiants des pièces Premium RÉELLEMENT
-// possédées par un machineId donné (registre alimenté par acquerir-premium-gratuit.js,
-// et plus tard par un éventuel flux d'achat). Lecture publique -- c'est ce endpoint que
-// consultent boutique.html (pour afficher "Obtenue" au lieu de "Obtenir") et axecube.js
-// (pour peupler la liste "Activer ce skin" dans ⚙ Paramètres, et pour la revérification
-// périodique côté machine).
+// possédées par un machineId donné (registre alimenté par acquerir-premium-gratuit.js).
+// Lecture publique -- c'est ce endpoint que consultent boutique.html (pour afficher
+// "Obtenue" au lieu de "Obtenir") et axecube.js (pour peupler la liste "Activer ce skin"
+// dans ⚙ Paramètres, et pour la revérification périodique côté machine).
+//
+// EXCEPTION ADMIN : les machineId listés dans ADMIN_MACHINE_IDS (variable d'environnement
+// Netlify, séparés par des virgules) reçoivent la liste COMPLÈTE du catalogue (via
+// lister-premium), pas seulement ce qu'ils ont réellement acquis -- pratique pour Chris
+// qui doit pouvoir tester/régler n'importe quel skin sans étape d'acquisition manuelle.
+// Si ADMIN_MACHINE_IDS n'est pas configurée, ce bypass est simplement inactif.
 //
 // IMPORTANT : le store 'axecube-possessions-premium' garde, pour chaque machineId, un
 // enregistrement de la forme { items: { "<itemId>": { acquisLe, viaOffre } } } -- un OBJET
@@ -22,6 +27,15 @@ function storePossessions() {
     ? getStore({ name: 'axecube-possessions-premium', siteID: process.env.BLOBS_SITE_ID, token: process.env.BLOBS_TOKEN })
     : getStore('axecube-possessions-premium');
 }
+function storeImages() {
+  return (process.env.BLOBS_SITE_ID && process.env.BLOBS_TOKEN)
+    ? getStore({ name: 'axecube-images-privees', siteID: process.env.BLOBS_SITE_ID, token: process.env.BLOBS_TOKEN })
+    : getStore('axecube-images-privees');
+}
+function estAdmin(machineId) {
+  const liste = (process.env.ADMIN_MACHINE_IDS || '').split(',').map(s => s.trim()).filter(Boolean);
+  return liste.includes(machineId);
+}
 
 exports.handler = async (event) => {
   const cors = {
@@ -37,6 +51,14 @@ exports.handler = async (event) => {
   const machineId = /^[0-9a-f]{8,32}$/i.test(params.machineId || '') ? params.machineId : null;
   if (!machineId) {
     return { statusCode: 400, headers: cors, body: JSON.stringify({ erreur: 'machineId requis' }) };
+  }
+
+  // Bypass admin : tout le catalogue existant, qu'il soit réellement acquis ou non.
+  if (estAdmin(machineId)) {
+    const images = storeImages();
+    let items = [];
+    try { items = (await images.list()).blobs.map(b => b.key); } catch { items = []; }
+    return { statusCode: 200, headers: cors, body: JSON.stringify({ ok: true, items, admin: true }) };
   }
 
   const possessions = storePossessions();
