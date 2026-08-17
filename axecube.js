@@ -5250,16 +5250,6 @@ charger();setInterval(charger,5000);
      on intensifie via brightness/saturate, qui éclaircissent sans désaturer vers le blanc. */
   .contourGlow{position:absolute;left:var(--z-contour-left,${cv.contourGlow.left}%);top:var(--z-contour-top,${cv.contourGlow.top}%);width:var(--z-contour-width,${cv.contourGlow.width}%);height:var(--z-contour-height,${cv.contourGlow.height}%);border-radius:4.5%/3.8%;
     pointer-events:none;
-    -webkit-mask-image:linear-gradient(#000 0 0),linear-gradient(#000 0 0);
-    -webkit-mask-size:100% 100%,var(--z-encoche-width,0.01cqw) var(--z-encoche-height,0.01cqh);
-    -webkit-mask-position:0 0,var(--z-encoche-left,-999cqw) var(--z-encoche-top,-999cqh);
-    -webkit-mask-repeat:no-repeat,no-repeat;
-    -webkit-mask-composite:xor;
-    mask-image:linear-gradient(#000 0 0),linear-gradient(#000 0 0);
-    mask-size:100% 100%,var(--z-encoche-width,0.01cqw) var(--z-encoche-height,0.01cqh);
-    mask-position:0 0,var(--z-encoche-left,-999cqw) var(--z-encoche-top,-999cqh);
-    mask-repeat:no-repeat,no-repeat;
-    mask-composite:exclude;
     box-shadow:0 0 0 0.55cqw color-mix(in srgb, var(--couleur-cube,#96f01f) 96%, white 8%),
                0 0 1.2cqw 0.3cqw var(--couleur-cube,#96f01f),
                0 0 3cqw 0.7cqw color-mix(in srgb, var(--couleur-cube,#96f01f) 85%, transparent),
@@ -5439,7 +5429,7 @@ charger();setInterval(charger,5000);
   .editForme[data-cle="ventilo"].selectionnee .editPivot{display:block}
   .panneauEdition.modeSkin .editPivot{display:none!important}
   .editForme[data-cle="encoche"]{display:none}
-  .panneauEdition.modeSkin .editForme[data-cle="encoche"].active{display:block}
+  .panneauEdition.modeSkin .editForme[data-cle="encoche"].active{display:none}
   .editLigne.skinOnly{display:none}
   .panneauEdition.modeSkin .editLigne.skinOnly{display:block}
   .editForme.tourne{animation:tourner .1s linear infinite;filter:blur(1.5px);cursor:default}
@@ -6529,7 +6519,7 @@ document.getElementById('btnEditionSkin').addEventListener('click', async ()=>{
   btnExtraireHelice.style.display = '';
   editCouleurLigne.style.display = 'flex';
   editArcLigne.style.display = 'flex';
-  editEncocheLigne.style.display = 'flex';
+  editEncocheLigne.style.display = 'none'; // masque : technique retirée, trop instable selon navigateur
   editCouleurLogoLigne.style.display = 'flex';
   editVitesseLigne.style.display = 'flex';
   editFlouLigne.style.display = 'flex';
