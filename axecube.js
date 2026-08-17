@@ -3697,17 +3697,17 @@ const COULEURS_CONFETTI=['#96f01f','#ffb020','#ff5d8f','#39c0ff','#c084fc','#fff
 function lancerConfettis(){
   const zone=document.getElementById('confettiZone');
   if(!zone) return;
-  const N=48;
+  const N=110;
   for(let i=0;i<N;i++){
     const p=document.createElement('div');
     p.className='confettiPiece';
-    const taille=(6+Math.random()*7).toFixed(1)+'px';
+    const taille=(5+Math.random()*13).toFixed(1)+'px'; // plus de variété, jusqu'à de gros morceaux
     const x=(Math.random()*100).toFixed(1)+'%';
-    const derive=Math.round((Math.random()-0.5)*140)+'px'; // léger balancement gauche/droite
-    const chute=Math.round(220+Math.random()*260)+'px'; // hauteur de chute, variable
-    const tours=Math.round(360*(2+Math.random()*3)*(Math.random()<0.5?-1:1))+'deg';
-    const dur=(1.4+Math.random()*1.1).toFixed(2)+'s';
-    const delai=(Math.random()*0.5).toFixed(2)+'s';
+    const derive=Math.round((Math.random()-0.5)*220)+'px'; // balancement plus large
+    const chute=Math.round(220+Math.random()*320)+'px';
+    const tours=Math.round(360*(2+Math.random()*4)*(Math.random()<0.5?-1:1))+'deg';
+    const dur=(1.3+Math.random()*1.3).toFixed(2)+'s';
+    const delai=(Math.random()*0.6).toFixed(2)+'s';
     const coul=COULEURS_CONFETTI[Math.floor(Math.random()*COULEURS_CONFETTI.length)];
     p.style.cssText='--taille:'+taille+';--x:'+x+';--derive:'+derive+';--chute:'+chute
       +';--tours:'+tours+';--dur:'+dur+';--delai:'+delai+';--coul:'+coul;
@@ -3734,7 +3734,7 @@ function celebrerBloc(permanent){
   // intervalle actif à la fois même si celebrerBloc() est rappelée (plusieurs blocs
   // trouvés coup sur coup, ou test relancé).
   if(!confettiInterval){
-    confettiInterval=setInterval(lancerConfettis, 900);
+    confettiInterval=setInterval(lancerConfettis, 500);
   }
   afficherBanniereBloc(permanent);
 }
