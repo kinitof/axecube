@@ -1238,6 +1238,10 @@ function main() {
   const poolStr = args.pool || process.env.POOL
     || (preset ? `${preset.host}:${preset.port}` : `${reseau.poolDefaut}:${reseau.portDefaut}`);
   let [poolHost, poolPortStr] = poolStr.split(':');
+  // Détection directe par adresse, en complément du preset -- fonctionne même si la
+  // connexion a été configurée à la main plutôt que via le menu déroulant de pools.
+  const diffSuggereeForcee = (preset && preset.diffSuggeree)
+    || (/axeminer\.com/i.test(poolHost) ? 1 : null);
   let poolPort = parseInt(poolPortStr || String(reseau.portDefaut), 10);
   // Mode simulation : toute connexion vers une adresse locale/privée (127.x, localhost,
   // ::1, 192.168.x, 10.x, 172.16-31.x) sans passer par un --pool-preset connu est
@@ -2582,7 +2586,7 @@ function main() {
   // diffSuggeree permet de forcer une valeur différente à la place, tant que le pool
   // accepte de la respecter. C'est une SUGGESTION, jamais une garantie : le pool reste
   // seul décisionnaire de la vraie difficulté de validation via mining.set_difficulty.
-  const DIFF_SUGGESTION_INITIALE = (preset && preset.diffSuggeree) || Math.max(16, DIFF_PLANCHER_POOL);
+  const DIFF_SUGGESTION_INITIALE = diffSuggereeForcee || Math.max(16, DIFF_PLANCHER_POOL);
   let diffSuggereeActuelle = DIFF_SUGGESTION_INITIALE;
   let dernierReSuggestionDiff = 0;
   let accepteesAuDernierControle = 0;
@@ -2591,10 +2595,10 @@ function main() {
     diffSuggereeActuelle = DIFF_SUGGESTION_INITIALE;
     accepteesAuDernierControle = state.accepted;
     if (minuteurAjustementDiff) clearInterval(minuteurAjustementDiff);
-    // Si une difficulté est explicitement forcée (preset.diffSuggeree), on ne l'abaisse
+    // Si une difficulté est explicitement forcée (diffSuggereeForcee), on ne l'abaisse
     // JAMAIS automatiquement -- l'abaissement progressif ci-dessous n'a de sens que pour
     // converger vers le plancher naturel du pool, pas pour un objectif fixé à la main.
-    if (preset && preset.diffSuggeree) return;
+    if (diffSuggereeForcee) return;
     minuteurAjustementDiff = setInterval(() => {
       if (!state.connected) return;
       if (state.accepted === accepteesAuDernierControle && diffSuggereeActuelle > DIFF_PLANCHER_POOL) {
@@ -2682,12 +2686,12 @@ function main() {
       // resuggère -- au maximum une fois toutes les 30s pour ne pas le harceler. Aucune
       // garantie qu'il l'honore : c'est le pool qui a le dernier mot sur la vraie
       // difficulté de validation.
-      if (preset && preset.diffSuggeree && state.poolDiff !== preset.diffSuggeree) {
+      if (diffSuggereeForcee && state.poolDiff !== diffSuggereeForcee) {
         const maintenant = Date.now();
         if (!dernierReSuggestionDiff || maintenant - dernierReSuggestionDiff > 30000) {
           dernierReSuggestionDiff = maintenant;
-          send({ id: ++msgId, method: 'mining.suggest_difficulty', params: [preset.diffSuggeree] });
-          log('info', `⚙️ Le pool a changé la difficulté (${formatDiff(state.poolDiff)}) -- resuggestion de ${preset.diffSuggeree}.`);
+          send({ id: ++msgId, method: 'mining.suggest_difficulty', params: [diffSuggereeForcee] });
+          log('info', `⚙️ Le pool a changé la difficulté (${formatDiff(state.poolDiff)}) -- resuggestion de ${diffSuggereeForcee}.`);
         }
       }
     } else if (msg.method === 'mining.notify') {
