@@ -24,8 +24,8 @@
       "sizeIcone": 1
     },
     "uptime": {
-      "left": 0,
-      "top": 33,
+      "left": 0.16,
+      "top": 29.91,
       "width": 44,
       "size": 0.9,
       "sizeIcone": 1
@@ -39,7 +39,7 @@
     },
     "pool": {
       "left": 0,
-      "top": 50,
+      "top": 46.81,
       "width": 44,
       "size": 0.9,
       "sizeIcone": 1
@@ -52,8 +52,8 @@
       "sizeIcone": 1
     },
     "meilleure": {
-      "left": 0,
-      "top": 67,
+      "left": 0.16,
+      "top": 64.16,
       "width": 44,
       "size": 0.9,
       "sizeIcone": 1
@@ -66,8 +66,8 @@
       "sizeIcone": 1
     },
     "acceptation": {
-      "left": 0,
-      "top": 92.03,
+      "left": 0.16,
+      "top": 88.18,
       "width": 44,
       "size": 0.9,
       "sizeIcone": 1
@@ -147,9 +147,9 @@
     "badges": {
       "left": 0,
       "top": 79.51,
-      "width": 50,
+      "width": 53,
       "size": 0.9,
-      "sizeIcone": 1.1
+      "sizeIcone": 1.05
     },
     "niveauGenese": {
       "left": 54.66,

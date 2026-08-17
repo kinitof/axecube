@@ -1192,14 +1192,16 @@ function main() {
                           + 'Communaute active (Multi NerdMiner, Bitaxe, NMMiner, NerdAxe tous presents '
                           + 'sur ce pool) -- outil "Miner Lookup" public sur pool.nerdminer.io pour '
                           + 'verifier son propre statut par adresse.' },
-    axeminer:       { host: 'pool.axeminer.com', port: 7777, mode: 'solo', compte: false, diffMin: 0.01,
+    axeminer:       { host: 'pool.axeminer.com', port: 7777, mode: 'solo', compte: false, diffMin: 0.01, diffSuggeree: 1,
                       note: 'Solo (AxeMiner Pool, "Where Small Miners Make Big Swings"), aucun compte '
                           + 'requis -- adresse BTC directe utilisee comme nom de worker, mot de passe "x". '
                           + 'Port 7777 officiellement dedie aux "Small USB Lottery Miner" 1-1000 kH/s '
                           + '(NMMiner, Nerdminer, BitsyMiner, ESP-32), difficulte plancher confirmee a 0.01 '
                           + '-- tres largement adaptee au CPU, shares tres frequents attendus. Port 7778 '
                           + 'separe existe pour les Bitaxe/petits ASIC (400 GH/s-4.5 TH/s, plancher 512), '
-                          + 'non utilise ici. Pool explicitement non recommande pour Antminer ou gros ASIC.' },
+                          + 'non utilise ici. Pool explicitement non recommande pour Antminer ou gros ASIC. '
+                          + 'Difficulte forcee a 1 (au lieu du vardiff natif 0.01-0.08) -- suggestion '
+                          + 'reenvoyee des que le pool s\'en ecarte, mais le pool reste libre de l\'ignorer.' },
     ocean:          { host: 'mine.ocean.xyz', port: 3334, mode: 'solo', compte: false, diffMin: 1,
                       note: 'Solo (OCEAN, fonde par Luke Dashjr -- developpeur Bitcoin Core -- et '
                           + 'soutenu par Jack Dorsey), aucun compte ni KYC requis -- adresse BTC directe. '
@@ -2576,14 +2578,23 @@ function main() {
   // diff 8 et un share à diff 100 réclament exactement le même travail réel pour trouver un
   // bloc, seule la FRÉQUENCE des shares "visibles" en tant que participation change.
   const DIFF_PLANCHER_POOL = (preset && preset.diffMin) || 1;
-  const DIFF_SUGGESTION_INITIALE = Math.max(16, DIFF_PLANCHER_POOL);
+  // Certains pools (ex: AxeMiner) ont un vardiff natif qui reste très bas (0.01-0.08) --
+  // diffSuggeree permet de forcer une valeur différente à la place, tant que le pool
+  // accepte de la respecter. C'est une SUGGESTION, jamais une garantie : le pool reste
+  // seul décisionnaire de la vraie difficulté de validation via mining.set_difficulty.
+  const DIFF_SUGGESTION_INITIALE = (preset && preset.diffSuggeree) || Math.max(16, DIFF_PLANCHER_POOL);
   let diffSuggereeActuelle = DIFF_SUGGESTION_INITIALE;
+  let dernierReSuggestionDiff = 0;
   let accepteesAuDernierControle = 0;
   let minuteurAjustementDiff = null;
   function demarrerAjustementDiff() {
     diffSuggereeActuelle = DIFF_SUGGESTION_INITIALE;
     accepteesAuDernierControle = state.accepted;
     if (minuteurAjustementDiff) clearInterval(minuteurAjustementDiff);
+    // Si une difficulté est explicitement forcée (preset.diffSuggeree), on ne l'abaisse
+    // JAMAIS automatiquement -- l'abaissement progressif ci-dessous n'a de sens que pour
+    // converger vers le plancher naturel du pool, pas pour un objectif fixé à la main.
+    if (preset && preset.diffSuggeree) return;
     minuteurAjustementDiff = setInterval(() => {
       if (!state.connected) return;
       if (state.accepted === accepteesAuDernierControle && diffSuggereeActuelle > DIFF_PLANCHER_POOL) {
@@ -2667,6 +2678,18 @@ function main() {
       state.poolDiff = Number(msg.params[0]);
       broadcast({ type: 'difficulty', value: state.poolDiff });
       log('info', t.diffPool(formatDiff(state.poolDiff)));
+      // Difficulté forcée (voir preset.diffSuggeree) : si le pool s'en écarte, on la
+      // resuggère -- au maximum une fois toutes les 30s pour ne pas le harceler. Aucune
+      // garantie qu'il l'honore : c'est le pool qui a le dernier mot sur la vraie
+      // difficulté de validation.
+      if (preset && preset.diffSuggeree && state.poolDiff !== preset.diffSuggeree) {
+        const maintenant = Date.now();
+        if (!dernierReSuggestionDiff || maintenant - dernierReSuggestionDiff > 30000) {
+          dernierReSuggestionDiff = maintenant;
+          send({ id: ++msgId, method: 'mining.suggest_difficulty', params: [preset.diffSuggeree] });
+          log('info', `⚙️ Le pool a changé la difficulté (${formatDiff(state.poolDiff)}) -- resuggestion de ${preset.diffSuggeree}.`);
+        }
+      }
     } else if (msg.method === 'mining.notify') {
       const p = msg.params;
       const job = {
