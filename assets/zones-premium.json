@@ -61,7 +61,7 @@
       "left": 24.93,
       "top": 57.67,
       "width": 50.13,
-      "pivotX": 49.5,
+      "pivotX": 50,
       "pivotY": 50
     },
     "logoVentilo": {
@@ -76,20 +76,27 @@
       "height": 91.26
     },
     "barreGlow": {
-      "left": 19.6,
-      "top": 98.98,
-      "width": 60.46,
-      "height": 1.19
+      "left": 19.36,
+      "top": 99.36,
+      "width": 60.7,
+      "height": -0.06
     },
     "boutonVentilo": {
       "left": 17.86,
       "top": 52.37,
       "width": 6.49
     },
-    "couleur": "#55001f",
+    "couleur": "#d8001f",
     "couleurLogo": "#e00000",
-    "vitesse": 0.1,
-    "flou": 0.4,
-    "sensInverse": true
+    "vitesse": 0.09,
+    "flou": 0,
+    "sensInverse": true,
+    "arcRestreint": true,
+    "encoche": {
+      "left": 83.81,
+      "top": 18.15,
+      "width": 10.06,
+      "height": 11.74
+    }
   }
 }
