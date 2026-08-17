@@ -5250,6 +5250,7 @@ charger();setInterval(charger,5000);
      on intensifie via brightness/saturate, qui éclaircissent sans désaturer vers le blanc. */
   .contourGlow{position:absolute;left:var(--z-contour-left,${cv.contourGlow.left}%);top:var(--z-contour-top,${cv.contourGlow.top}%);width:var(--z-contour-width,${cv.contourGlow.width}%);height:var(--z-contour-height,${cv.contourGlow.height}%);border-radius:4.5%/3.8%;
     pointer-events:none;
+    clip-path:var(--z-contour-clip,none);
     box-shadow:0 0 0 0.55cqw color-mix(in srgb, var(--couleur-cube,#96f01f) 96%, white 8%),
                0 0 1.2cqw 0.3cqw var(--couleur-cube,#96f01f),
                0 0 3cqw 0.7cqw color-mix(in srgb, var(--couleur-cube,#96f01f) 85%, transparent),
@@ -5429,7 +5430,7 @@ charger();setInterval(charger,5000);
   .editForme[data-cle="ventilo"].selectionnee .editPivot{display:block}
   .panneauEdition.modeSkin .editPivot{display:none!important}
   .editForme[data-cle="encoche"]{display:none}
-  .panneauEdition.modeSkin .editForme[data-cle="encoche"].active{display:none}
+  .panneauEdition.modeSkin .editForme[data-cle="encoche"].active{display:block}
   .editLigne.skinOnly{display:none}
   .panneauEdition.modeSkin .editLigne.skinOnly{display:block}
   .editForme.tourne{animation:tourner .1s linear infinite;filter:blur(1.5px);cursor:default}
@@ -5549,7 +5550,7 @@ charger();setInterval(charger,5000);
         <input type="checkbox" id="chkArcRestreint"> Si le vrai palier est arc-en-ciel : limiter la palette à rouge/violet/rose (au lieu de tout le spectre)
       </label>
       <label id="editEncocheLigne" style="display:none;align-items:center;gap:8px;font-size:11px;margin:4px 0 10px;cursor:pointer">
-        <input type="checkbox" id="chkEncoche"> Masquer le liseré à un endroit précis (rectangle rouge pointillé, ex: connecteur qui dépasse)
+        <input type="checkbox" id="chkEncoche"> Découper le liseré sur le BORD DROIT (ex: connecteur qui dépasse) -- positionne le rectangle rouge pointillé pour qu'il touche le bord droit
       </label>
       <label id="editCouleurLogoLigne" style="display:none;align-items:center;gap:8px;font-size:12px;margin:4px 0 10px">
         Couleur du logo/marque AXECUBE dans l'écran :
@@ -5781,9 +5782,28 @@ function stylesZonesSkin(zonesSkin){
   if(z.flou!=null) css+='--z-ventilo-flou:'+z.flou+'px;';
   if(z.sensInverse) css+='--z-ventilo-sens:reverse;';
   if(z.arcRestreint) css+='--z-arc-debut:-55deg;--z-arc-fin:55deg;';
-  if(z.encoche && z.encoche.width) css+='--z-encoche-left:'+z.encoche.left+'cqw;--z-encoche-top:'+z.encoche.top+'cqh;--z-encoche-width:'+z.encoche.width+'cqw;--z-encoche-height:'+(z.encoche.height||z.encoche.width)+'cqh;';
+  if(z.encoche && z.encoche.width) css+=stylesEncocheContour(z);
   if(z.couleurLogo) css+='--z-couleur-logo:'+z.couleurLogo+';';
   return css;
+}
+// Encoche du liseré : découpe un rectangle dans le bord DROIT du contour (là où un
+// connecteur dépasse habituellement), via clip-path (bien plus fiable entre navigateurs
+// que mask-composite, qui s'est révélé instable). Les coordonnées de l'encoche sont
+// saisies en % de la CARTE (même repère que les autres zones), mais clip-path polygon()
+// attend des % relatifs à la boîte du CONTOUR lui-même -- d'où la conversion ci-dessous.
+const CONTOUR_DEFAUT = {left:3.86, top:2.09, width:91.62, height:86.18};
+function stylesEncocheContour(z){
+  const c = z.contourGlow || CONTOUR_DEFAUT;
+  const e = z.encoche;
+  const relTop = Math.max(0, Math.min(100, (e.top - c.top) / c.height * 100));
+  const relHeight = Math.max(1, Math.min(100 - relTop, e.height / c.height * 100));
+  const relDepth = Math.max(1, Math.min(60, e.width / c.width * 100));
+  const y1 = relTop.toFixed(2), y2 = (relTop + relHeight).toFixed(2);
+  const xIn = (100 - relDepth).toFixed(2);
+  // Grande marge (-60%/160%) sur tout le reste pour ne pas rogner le halo qui déborde
+  // largement du rectangle (blur/spread en cqw) -- seule l'encoche est découpée au ras.
+  const poly = 'polygon(-60% -60%,160% -60%,160% '+y1+'%,'+xIn+'% '+y1+'%,'+xIn+'% '+y2+'%,160% '+y2+'%,160% 160%,-60% 160%)';
+  return '--z-contour-clip:'+poly+';';
 }
 function classeSansLogoVentilo(zonesSkin){
   return (zonesSkin && zonesSkin.logoVentilo===null) ? ' sans-logo-ventilo' : '';
@@ -6378,7 +6398,7 @@ const encocheFormeEl = panneauEdition.querySelector('.editForme[data-cle="encoch
 chkEncoche.addEventListener('change', ()=>{
   encocheFormeEl.classList.toggle('active', chkEncoche.checked);
   if(chkEncoche.checked && (!configEnCours.encoche || !configEnCours.encoche.width)){
-    configEnCours.encoche = {left:70, top:5, width:12, height:12};
+    configEnCours.encoche = {left:82, top:14, width:16, height:14};
     appliquerFormeDepuisConfig('encoche'); rafraichirChampsListe('encoche');
   }
 });
@@ -6519,7 +6539,7 @@ document.getElementById('btnEditionSkin').addEventListener('click', async ()=>{
   btnExtraireHelice.style.display = '';
   editCouleurLigne.style.display = 'flex';
   editArcLigne.style.display = 'flex';
-  editEncocheLigne.style.display = 'none'; // masque : technique retirée, trop instable selon navigateur
+  editEncocheLigne.style.display = 'flex';
   editCouleurLogoLigne.style.display = 'flex';
   editVitesseLigne.style.display = 'flex';
   editFlouLigne.style.display = 'flex';

@@ -72,8 +72,8 @@
     "contourGlow": {
       "left": 2.33,
       "top": 1,
-      "width": 94.81,
-      "height": 91.26
+      "width": 94.87,
+      "height": 91.48
     },
     "barreGlow": {
       "left": 19.36,
@@ -86,7 +86,7 @@
       "top": 52.37,
       "width": 6.49
     },
-    "couleur": "#d8001f",
+    "couleur": "#ab001f",
     "couleurLogo": "#e00000",
     "vitesse": 0.09,
     "flou": 0,
