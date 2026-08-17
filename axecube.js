@@ -5362,6 +5362,34 @@ charger();setInterval(charger,5000);
     border-radius:2%/1.6%;overflow:hidden;background:#05070a;
     padding:var(--marge-v,2%) var(--marge-h,2.5%);box-sizing:border-box}
   .ecran.vitrine{background:transparent;padding:0}
+  /* Page trophée : n'existe que pour une machine ayant réellement trouvé un bloc, en
+     page supplémentaire à la fin du cycle. Réutilise --couleur-cube pour rester cohérente
+     avec la teinte de la carte (palier réel ou couleur de skin). */
+  .pageTrophee{display:flex;flex-direction:column;align-items:center;justify-content:center;
+    height:100%;text-align:center;gap:0.4cqh;padding:2cqw}
+  .pageTrophee .ptTitre{font-size:min(8cqw,22cqh,22px);font-weight:800;color:var(--couleur-cube,#96f01f);
+    text-shadow:0 0 1cqw color-mix(in srgb, var(--couleur-cube,#96f01f) 70%, transparent);
+    filter:brightness(1.5) saturate(1.3);animation:tropheePulse 1.3s ease-in-out infinite;letter-spacing:.02em}
+  .pageTrophee .ptSub{font-size:min(5cqw,13cqh,13px);font-weight:700;color:var(--couleur-cube,#96f01f);
+    filter:brightness(1.5) saturate(1.3);margin-bottom:1cqh}
+  .pageTrophee .ptLigne{display:flex;justify-content:space-between;width:100%;max-width:90%;
+    font-size:min(4.2cqw,11cqh,11px);color:var(--white-dim,#9fae9a);letter-spacing:.04em;
+    padding:0.5cqh 0;border-top:1px dashed rgba(150,240,31,.25)}
+  .pageTrophee .ptLigne:first-of-type{border-top:none}
+  .pageTrophee .ptLigne b{color:var(--couleur-cube,#96f01f);font-weight:700;font-variant-numeric:tabular-nums;
+    filter:brightness(1.4)}
+  @keyframes tropheePulse{0%,100%{opacity:.82}50%{opacity:1}}
+  /* Confettis scopés à une seule carte (pas toute la page) -- déclenchés quand une
+     augmentation de blocsTrouves est détectée pour cette machine précise. */
+  .confettiZoneCarte{position:absolute;inset:0;overflow:visible;pointer-events:none;z-index:12;border-radius:inherit}
+  .confettiPieceCarte{position:absolute;top:0;left:var(--x);width:var(--taille);height:calc(var(--taille)*.4);
+    background:var(--coul);opacity:0;border-radius:1px;
+    animation:tomberConfettiCarte var(--dur) cubic-bezier(.25,.46,.45,.94) var(--delai) forwards}
+  @keyframes tomberConfettiCarte{
+    0%{opacity:1;transform:translate(0,-6%) rotate(0deg)}
+    12%{opacity:1}
+    100%{opacity:0;transform:translate(var(--derive),var(--chute)) rotate(var(--tours))}
+  }
   .eLigne{height:9%;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;min-width:0}
   /* Zone libre : chaque champ (.celluleEcran) s'y positionne en absolu selon CE (config
      éditable en direct via le bouton "🛠 Écran") -- remplace l'ancienne grille figée. */
@@ -5534,6 +5562,7 @@ charger();setInterval(charger,5000);
     <button type="button" class="lien" id="btnEdition">🛠 Mode édition</button>
     <button type="button" class="lien" id="btnEditionSkin" style="display:none">🎯 Zones du skin</button>
     <button type="button" class="lien" id="btnEditionEcran">🛠 Écran</button>
+    <button type="button" class="lien" id="btnTestTrophee" title="Simule un bloc trouvé sur MA carte, pour vérifier le rendu">🧪 Tester bloc trouvé</button>
     <a class="lien" id="retour" href="/details">← Retour au tableau de bord</a>
   </div>
   <div class="sub">Essai d'affichage façon carte ASIC — une machine AXECUBE connectée = une carte. Données réelles, rafraîchies toutes les 5 secondes.</div>
@@ -5879,6 +5908,18 @@ function classeSansLogoVentilo(zonesSkin){
 
 // Carte complète : utilisée pour MA machine, dont on connaît tous les détails
 // (uptime, threads, difficulté, acceptation, historique réel...).
+// Page "trophée" : n'existe QUE pour une machine ayant trouvé au moins un vrai bloc
+// (m.blocsTrouves>0), en page supplémentaire à la fin du cycle normal -- jamais un
+// remplacement des pages existantes, juste un ajout accessible via la flèche.
+function pageTropheeHTML(m){
+  return '<div class="pageTrophee">'
+    +'<div class="ptTitre">\u20bf BLOC TROUV\u00c9 !</div>'
+    +'<div class="ptSub">\ud83c\udfc6 F\u00c9LICITATIONS \ud83c\udfc6</div>'
+    +'<div class="ptLigne"><span>DIFFICULT\u00c9 R\u00c9SEAU</span><b>'+fmtD(m.netDiff||0)+'</b></div>'
+    +'<div class="ptLigne"><span>BLOC</span><b>'+(m.blocHauteur?m.blocHauteur.toLocaleString('fr-FR'):'\u2014')+'</b></div>'
+    +'<div class="ptLigne"><span>TOTAL TROUV\u00c9S</span><b>'+(m.blocsTrouves||0)+'</b></div>'
+  +'</div>';
+}
 function carteComplete(m, estMoi, idx, ventiloClasse){
   const enLigne=(m.hashrate||0)>0;
   const acceptance=(m.accepted!=null && m.rejected!=null && (m.accepted+m.rejected)>0)
@@ -5886,6 +5927,9 @@ function carteComplete(m, estMoi, idx, ventiloClasse){
   const blocBadge=(m.blocsTrouves>0)?'<span class="badgeBloc actif" title="'+m.blocsTrouves+' bloc'+(m.blocsTrouves>1?'s':'')+' trouv\u00e9'+(m.blocsTrouves>1?'s':'')+'">\ud83c\udfc6 '+m.blocsTrouves+'</span>':'';
   const cleStable=cleStableDe(m, estMoi, idx);
   const page=pageActuelle.get(cleStable)||0;
+  const maxPageNormal=2;
+  const pageTrophee=(m.blocsTrouves>0) ? maxPageNormal+1 : null;
+  const surPageTrophee=(pageTrophee!=null && page===pageTrophee);
   const cube=infosCube(m.bestDiff||0);
   const nomCubeHtml=cube.nom?'<span class="nomCube">'+cube.nom+'</span>':'';
   // Skin Premium actif (choix local de l'utilisateur, uniquement sur SA propre carte) :
@@ -5911,7 +5955,7 @@ function carteComplete(m, estMoi, idx, ventiloClasse){
     +'<div class="contourGlow"></div>'
     +'<div class="barreGlow"></div>'
     +'<div class="ecran'+(page===2?' vitrine':'')+'" style="--marge-h:'+(CE.margeH!=null?CE.margeH:2.5)+'%;--marge-v:'+(CE.margeV!=null?CE.margeV:2)+'%">'
-      +(page===2 ? '' : (
+      +(surPageTrophee ? pageTropheeHTML(m) : (page===2 ? '' : (
         '<div class="eLigne"><div class="ecranLogo">'+LOGO_SVG+'AXECUBE</div>'
           +blocBadge+badgeSkinHtml
           +'<div class="statut'+(enLigne?'':' off')+'"><span class="pt"></span><span>'+(enLigne?'MINING':'HORS LIGNE')+'</span></div></div>'
@@ -5940,7 +5984,7 @@ function carteComplete(m, estMoi, idx, ventiloClasse){
           + celda(1,'travailTotal','<span>TRAVAIL TOTAL</span><b>'+fmtD(m.totalHashes||0)+'H</b>')
           + celda(1,'badges',celdaBadges(m))
           + celda(1,'niveauGenese','<span>PALIER GEN\u00c8SE</span><b>'+(cube.imageLogo?'<img src="'+cube.imageLogo+'" class="miniCube" alt="">':'')+' '+(cube.niveau||0)+'/22</b>')
-        ))
+        ))))
         +'</div>'
       ))
     +'</div>'
@@ -5957,6 +6001,9 @@ function carteLegere(m, idx, ventiloClasse){
   const blocBadge=(m.blocsTrouves>0)?'<span class="badgeBloc actif" title="'+m.blocsTrouves+' bloc'+(m.blocsTrouves>1?'s':'')+' trouv\u00e9'+(m.blocsTrouves>1?'s':'')+'">\ud83c\udfc6 '+m.blocsTrouves+'</span>':'';
   const cleStable=cleStableDe(m, false, idx);
   const page=pageActuelle.get(cleStable)||0;
+  const maxPageNormalLegere=1;
+  const pageTropheeLegere=(m.blocsTrouves>0) ? maxPageNormalLegere+1 : null;
+  const surPageTropheeLegere=(pageTropheeLegere!=null && page===pageTropheeLegere);
   const cube=infosCube(m.bestDiff||0);
   const nomCubeHtml=cube.nom?'<span class="nomCube">'+cube.nom+'</span>':'';
   const imgStyle=(cube.imageCarte?('--carte-image:url(\\''+cube.imageCarte+'\\');'):'')+(cube.imageLogo?('--logo-cube:url(\\''+cube.imageLogo+'\\');'):'')+(cube.imageFanBlade?('--fan-blade:url(\\''+cube.imageFanBlade+'\\');'):'');
@@ -5966,7 +6013,8 @@ function carteLegere(m, idx, ventiloClasse){
     +'<div class="contourGlow"></div>'
     +'<div class="barreGlow"></div>'
     +'<div class="ecran">'
-      +'<div class="eLigne"><div class="ecranLogo">'+LOGO_SVG+'AXECUBE</div>'
+      +(surPageTropheeLegere ? pageTropheeHTML(m) : (
+      '<div class="eLigne"><div class="ecranLogo">'+LOGO_SVG+'AXECUBE</div>'
         +blocBadge
         +'<div class="statut'+(enLigne?'':' off')+'"><span class="pt"></span><span>'+(enLigne?'MINING':'HORS LIGNE')+'</span></div></div>'
       +'<div class="blocHash"><div class="ecranLabel">HASHRATE</div>'
@@ -5980,7 +6028,7 @@ function carteLegere(m, idx, ventiloClasse){
         '<div class="eGrid"><div><span>BLOC À MINER</span><b>'+(m.blocHauteur?m.blocHauteur.toLocaleString('fr-FR'):'—')+'</b></div>'
           +'<div><span>BLOCS TROUV\u00c9S</span><b class="accent">'+(m.blocsTrouves||0)+'</b></div></div>'
         +'<div class="eGrid"><div class="pool-nom" style="grid-column:1/-1"><span>POOL (COMPLET)</span><b>'+(m.pool||'—')+'</b></div></div>'
-      ))
+      ))))
     +'</div>'
     +'<button type="button" class="flechePage" onclick="pageSuivante(event,'+idx+')" title="Voir plus d\u2019infos" aria-label="Page suivante">\u203a</button>'
     +'<div class="nomMachine">'+(m.worker||'—')+' · '+(m.cpu||'—')+(m.ip?' · '+m.ip:'')+'</div>'
@@ -6002,7 +6050,8 @@ function pageSuivante(e, idx){
   const actuelle=pageActuelle.get(cleStable)||0;
   // 3 pages (stats / stats détaillées / vitrine) pour les cartes complètes -- seulement
   // 2 pour les cartes légères des autres machines du réseau (pas les mêmes données).
-  const maxPage=d.complete?2:1;
+  // +1 page supplémentaire ("trophée") si cette machine a déjà trouvé un vrai bloc.
+  const maxPage=(d.complete?2:1) + (d.m.blocsTrouves>0?1:0);
   pageActuelle.set(cleStable, actuelle>=maxPage?0:actuelle+1);
   // Ré-affiche immédiatement cette carte avec la nouvelle page, sans attendre le
   // prochain rafraîchissement automatique.
@@ -6053,6 +6102,86 @@ let donneesActuelles=[]; // {m, estMoi, complete} pour chaque carte affichée, i
 // pour ne déclencher l'animation de ralenti du ventilo qu'au moment exact où elle
 // tombe hors ligne, et pas à chaque rafraîchissement tant qu'elle le reste.
 const dernierStatut=new Map();
+// Mémorise le dernier blocsTrouves connu de CHAQUE machine (clé stable) pour détecter une
+// AUGMENTATION précise (nouveau bloc réellement trouvé) plutôt qu'une simple valeur >0 --
+// sinon on célébrerait à chaque rafraîchissement pour une machine qui en a déjà trouvé un
+// il y a longtemps. Bascule automatiquement sur la page trophée + confettis localisés à
+// CETTE carte quand une augmentation est détectée.
+const dernierBlocsTrouvesParMachine=new Map();
+function detecterNouveauBloc(m, cleStable, maxPageAvecTrophee){
+  const precedent=dernierBlocsTrouvesParMachine.get(cleStable);
+  const actuel=m.blocsTrouves||0;
+  dernierBlocsTrouvesParMachine.set(cleStable, actuel);
+  if(precedent!=null && actuel>precedent){
+    pageActuelle.set(cleStable, maxPageAvecTrophee);
+    return true;
+  }
+  return false;
+}
+function celebrerBlocCarte(cleStable){
+  // Laisse le temps au DOM d'être régénéré (innerHTML vient d'être posé juste après)
+  // avant de chercher la carte concernée -- sinon elle n'existe pas encore.
+  setTimeout(()=>{
+    const carte=document.querySelector('.carteMachine[data-cle="'+CSS.escape(cleStable)+'"]');
+    if(!carte) return;
+    lancerConfettisCarte(carte);
+    bipDisponible();
+  }, 30);
+}
+// Test manuel (bouton "🧪 Tester bloc trouvé" sur /machines) : force la page trophée sur
+// MA carte avec un blocsTrouves de test, SANS toucher aux vraies données ni au compteur
+// réel -- la valeur affichée n'est qu'une copie locale jetable de l'objet machine.
+function testerTropheeCarte(){
+  const idxMoi=donneesActuelles.findIndex(d=>d.estMoi);
+  if(idxMoi<0){ alert('Aucune carte "MOI" trouvée pour le moment -- réessaie dans quelques secondes.'); return; }
+  const d=donneesActuelles[idxMoi];
+  const cleStable=cleStableDe(d.m, true, idxMoi);
+  const mTest=Object.assign({}, d.m, { blocsTrouves:(d.m.blocsTrouves||0)+1 });
+  pageActuelle.set(cleStable, 3);
+  const carte=document.querySelector('.carteMachine[data-cle="'+CSS.escape(cleStable)+'"]');
+  if(!carte) return;
+  const vClasse=(d.m.hashrate||0)>0?'':'arrete';
+  carte.outerHTML=carteComplete(mTest, true, idxMoi, vClasse);
+  celebrerBlocCarte(cleStable);
+}
+function bipDisponible(){
+  try{
+    const ctx=new (window.AudioContext||window.webkitAudioContext)();
+    const o=ctx.createOscillator(), g=ctx.createGain();
+    o.connect(g); g.connect(ctx.destination);
+    o.frequency.value=1320; g.gain.value=0.15;
+    o.start(); setTimeout(()=>{o.stop(); ctx.close();}, 220);
+  }catch(e){}
+}
+const COULEURS_CONFETTI_CARTE=['#96f01f','#ffb020','#ff5d8f','#39c0ff','#c084fc','#ffffff'];
+/** Pluie de confettis contenue dans les bornes d'UNE carte précise (pas toute la page) --
+ *  même principe que lancerConfettis() du tableau de bord, mais scopé à un élément. */
+function lancerConfettisCarte(carteEl){
+  let zone=carteEl.querySelector('.confettiZoneCarte');
+  if(!zone){
+    zone=document.createElement('div');
+    zone.className='confettiZoneCarte';
+    carteEl.appendChild(zone);
+  }
+  const N=60;
+  for(let i=0;i<N;i++){
+    const p=document.createElement('div');
+    p.className='confettiPieceCarte';
+    const taille=(4+Math.random()*8).toFixed(1)+'px';
+    const x=(Math.random()*100).toFixed(1)+'%';
+    const derive=Math.round((Math.random()-0.5)*90)+'px';
+    const chute=Math.round(140+Math.random()*160)+'px';
+    const tours=Math.round(360*(2+Math.random()*3)*(Math.random()<0.5?-1:1))+'deg';
+    const dur=(1.1+Math.random()*0.9).toFixed(2)+'s';
+    const delai=(Math.random()*0.4).toFixed(2)+'s';
+    const coul=COULEURS_CONFETTI_CARTE[Math.floor(Math.random()*COULEURS_CONFETTI_CARTE.length)];
+    p.style.cssText='--taille:'+taille+';--x:'+x+';--derive:'+derive+';--chute:'+chute
+      +';--tours:'+tours+';--dur:'+dur+';--delai:'+delai+';--coul:'+coul;
+    zone.appendChild(p);
+    const dureeMs=(parseFloat(dur)+parseFloat(delai))*1000+100;
+    setTimeout(()=>p.remove(), dureeMs);
+  }
+}
 function calculerClasseVentilo(cle, enLigne){
   const etaitEnLigne=dernierStatut.has(cle)?dernierStatut.get(cle):enLigne;
   dernierStatut.set(cle, enLigne);
@@ -6122,7 +6251,10 @@ async function charger(){
       if(btnEditionSkinEl) btnEditionSkinEl.style.display = moi.skinPremiumActif ? '' : 'none';
       let vClasse=calculerClasseVentilo('MOI', (moi.hashrate||0)>0);
       if(ventiloPauseManuelle.get(cleStableDe(moi, true, idxMoi))) vClasse='arrete';
+      const cleStableMoi=cleStableDe(moi, true, idxMoi);
+      const nouveauBlocMoi=detecterNouveauBloc(moi, cleStableMoi, 3);
       html+=carteComplete(moi, true, idxMoi, vClasse);
+      if(nouveauBlocMoi) setTimeout(()=>celebrerBlocCarte(cleStableMoi), 60);
     }
     const liste=SOLO?[]:((repSwarm && repSwarm.machines)||[]);
     // Le cours BTC et la hauteur de bloc ne sont pas diffusés par chaque machine (ce sont
@@ -6138,7 +6270,10 @@ async function charger(){
       // Clé STABLE (nom du worker), pas la position dans la liste -- qui peut changer
       // d'un rafraîchissement à l'autre si l'ordre des machines bouge (tri par hashrate).
       if(ventiloPauseManuelle.get(cleStableDe(m, false, idxM))) vClasse='arrete';
+      const cleStableM=cleStableDe(m, false, idxM);
+      const nouveauBlocM=detecterNouveauBloc(m, cleStableM, 2);
       html+=carteLegere(m, idxM, vClasse);
+      if(nouveauBlocM) setTimeout(()=>celebrerBlocCarte(cleStableM), 60);
     });
     if(!html){
       grille.innerHTML='<div class="vide">Aucune machine AXECUBE détectée pour l\\'instant.</div>';
@@ -6770,6 +6905,7 @@ document.getElementById('inMargeV').addEventListener('input', function(){
   const ecran=modalHote.querySelector('.ecran');
   if(ecran) ecran.style.setProperty('--marge-v', v+'%');
 });
+document.getElementById('btnTestTrophee').addEventListener('click', testerTropheeCarte);
 document.getElementById('btnEditionEcran').addEventListener('click', ()=>{
   const idxMoi=donneesActuelles.findIndex(d=>d.estMoi);
   if(idxMoi<0){ alert('Ta machine n\\'est pas encore charg\\u00e9e -- réessaie dans quelques secondes.'); return; }
