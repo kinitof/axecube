@@ -222,6 +222,20 @@ function listerCubesSkinDisponibles() {
 }
 let cubesSkinDisponibles = listerCubesSkinDisponibles();
 
+// Texture de l'écran propre à un skin Premium -- remplace le fond noir plat de la zone
+// stats par une image (ex: pierre de lave craquelée), avec un voile sombre intégré dans
+// la valeur CSS elle-même (--z-ecran-texture) pour garder le texte lisible. Même schéma
+// de distribution que les autres assets de skin : assets/ecrans-premium/ doit être commité.
+const DOSSIER_ECRANS_PREMIUM = path.join(__dirname, 'assets', 'ecrans-premium');
+function listerEcransSkinDisponibles() {
+  try {
+    return new Set(fs.readdirSync(DOSSIER_ECRANS_PREMIUM)
+      .filter(f => f.endsWith('.png'))
+      .map(f => f.slice(0, -4)));
+  } catch { return new Set(); }
+}
+let ecransSkinDisponibles = listerEcransSkinDisponibles();
+
 const { spawn } = require('child_process');
 const { Worker, isMainThread, parentPort, workerData } = require('worker_threads');
 
@@ -5364,7 +5378,8 @@ charger();setInterval(charger,5000);
     flex-shrink:0;filter:drop-shadow(0 0 3px rgba(255,255,255,.5))}
   .ecran{position:absolute;left:var(--z-ecran-left,${cv.ecran.left}%);top:var(--z-ecran-top,${cv.ecran.top}%);width:var(--z-ecran-width,${cv.ecran.width}%);height:var(--z-ecran-height,${cv.ecran.height}%);
     container-type:size;container-name:ecran;
-    border-radius:2%/1.6%;overflow:hidden;background:#05070a;
+    border-radius:2%/1.6%;overflow:hidden;background-color:#05070a;
+    background-image:var(--z-ecran-texture,none);background-size:cover;background-position:center;
     padding:var(--marge-v,2%) var(--marge-h,2.5%);box-sizing:border-box}
   .ecran.vitrine{background:transparent;padding:0}
   /* Page trophée : n'existe que pour une machine ayant réellement trouvé un bloc, en
@@ -5679,6 +5694,14 @@ charger();setInterval(charger,5000);
         <button type="button" id="btnChoisirCubeSkin" style="font-size:11px">📁 Choisir un PNG</button>
         <span id="cubeSkinStatut" style="font-size:10.5px;color:var(--mut);margin-left:6px"></span>
       </div>
+      <div id="editEcranLigne" style="display:none;margin-bottom:10px">
+        <label style="font-size:10.5px;color:var(--mut);letter-spacing:.05em;text-transform:uppercase;display:block;margin-bottom:6px">
+          Texture de fond de l'écran (remplace le noir uni -- un voile sombre est appliqué automatiquement pour garder le texte lisible)</label>
+        <input type="file" id="fEcranSkin" accept="image/png" style="display:none">
+        <button type="button" id="btnChoisirEcranSkin" style="font-size:11px">📁 Choisir un PNG</button>
+        <button type="button" id="btnRetirerEcranSkin" style="font-size:11px">↺ Revenir au noir uni</button>
+        <span id="ecranSkinStatut" style="font-size:10.5px;color:var(--mut);margin-left:6px"></span>
+      </div>
       <div id="editListe"></div>
       <div class="editBtns">
         <button type="button" id="btnEditTourner">▶ Tester la rotation</button>
@@ -5952,7 +5975,9 @@ function carteComplete(m, estMoi, idx, ventiloClasse){
     ? ('/assets/helices-premium/'+m.skinPremiumActif+'.png?v='+m.heliceSkinVersion+(TOK?'&token='+TOK:'')) : null;
   const cubeSkinUrl=(estMoi && m.skinPremiumActif && m.cubeSkinDisponible)
     ? ('/assets/cubes-premium/'+m.skinPremiumActif+'.png?v='+m.cubeSkinVersion+(TOK?'&token='+TOK:'')) : null;
-  const imgStyle=(imageCartePlaque?('--carte-image:url(\\''+imageCartePlaque+'\\');'):'')+(cubeSkinUrl?('--logo-cube:url(\\''+cubeSkinUrl+'\\');'):(cube.imageLogo?('--logo-cube:url(\\''+cube.imageLogo+'\\');'):''))+(heliceSkinUrl?('--fan-blade:url(\\''+heliceSkinUrl+'\\');'):(cube.imageFanBlade?('--fan-blade:url(\\''+cube.imageFanBlade+'\\');'):''))+stylesZonesSkin(zonesSkinActif);
+  const ecranSkinUrl=(estMoi && m.skinPremiumActif && m.ecranSkinDisponible)
+    ? ('/assets/ecrans-premium/'+m.skinPremiumActif+'.png?v='+m.ecranSkinVersion+(TOK?'&token='+TOK:'')) : null;
+  const imgStyle=(imageCartePlaque?('--carte-image:url(\\''+imageCartePlaque+'\\');'):'')+(cubeSkinUrl?('--logo-cube:url(\\''+cubeSkinUrl+'\\');'):(cube.imageLogo?('--logo-cube:url(\\''+cube.imageLogo+'\\');'):''))+(heliceSkinUrl?('--fan-blade:url(\\''+heliceSkinUrl+'\\');'):(cube.imageFanBlade?('--fan-blade:url(\\''+cube.imageFanBlade+'\\');'):''))+(ecranSkinUrl?('--z-ecran-texture:linear-gradient(rgba(5,7,10,.55),rgba(5,7,10,.78)),url(\\''+ecranSkinUrl+'\\');'):'')+stylesZonesSkin(zonesSkinActif);
   const couleurCarte=(zonesSkinActif && zonesSkinActif.couleur) ? zonesSkinActif.couleur : cube.couleur;
   return '<div class="carteMachine'+(enLigne?'':' hors-ligne')+(cube.rainbow?' rainbow-tier':'')+classeSansLogoVentilo(zonesSkinActif)+((zonesSkinActif && zonesSkinActif.couleur)?' skin-couleur-forcee':'')+'"'+(idx!=null?' data-idx="'+idx+'"':'')+' data-cle="'+cleStable+'" style="--couleur-cube:'+couleurCarte+';'+imgStyle+'">'
     +'<div class="fondNoir"></div>'
@@ -6251,6 +6276,8 @@ async function charger(){
         heliceSkinVersion: repDetails.heliceSkinVersion || '',
         cubeSkinDisponible: repDetails.cubeSkinDisponible || false,
         cubeSkinVersion: repDetails.cubeSkinVersion || '',
+        ecranSkinDisponible: repDetails.ecranSkinDisponible || false,
+        ecranSkinVersion: repDetails.ecranSkinVersion || '',
         // Nouveau, jamais affiché sur la carte jusqu'ici -- voir panneau 2.
         throttle: repDetails.perf && repDetails.perf.throttle,
         thermalReel: repDetails.perf && repDetails.perf.thermalReel,
@@ -6672,6 +6699,39 @@ fCubeSkin.addEventListener('change', ()=>{
   };
   lecteur.readAsDataURL(fichier);
 });
+const editEcranLigne = document.getElementById('editEcranLigne');
+const fEcranSkin = document.getElementById('fEcranSkin');
+const ecranSkinStatut = document.getElementById('ecranSkinStatut');
+document.getElementById('btnChoisirEcranSkin').addEventListener('click', ()=> fEcranSkin.click());
+fEcranSkin.addEventListener('change', ()=>{
+  const fichier = fEcranSkin.files[0];
+  if(!fichier || !editCiblageSkin) return;
+  ecranSkinStatut.textContent = 'Envoi…';
+  const lecteur = new FileReader();
+  lecteur.onload = async (e)=>{
+    try{
+      const r = await fetch('/api/ecran-skin'+Q, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ itemId: editCiblageSkin, ecran: e.target.result })
+      });
+      const j = await r.json();
+      ecranSkinStatut.textContent = j.ok ? '✓ Texture enregistrée (vérifie sur la vraie carte)' : 'Erreur : '+(j.erreur||'inconnue');
+    }catch(err){ ecranSkinStatut.textContent = 'Erreur réseau'; }
+  };
+  lecteur.readAsDataURL(fichier);
+});
+document.getElementById('btnRetirerEcranSkin').addEventListener('click', async ()=>{
+  if(!editCiblageSkin) return;
+  ecranSkinStatut.textContent = 'Suppression…';
+  try{
+    const r = await fetch('/api/ecran-skin'+Q, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ itemId: editCiblageSkin, ecran: null })
+    });
+    const j = await r.json();
+    ecranSkinStatut.textContent = j.ok ? '✓ Revenu au noir uni' : 'Erreur : '+(j.erreur||'inconnue');
+  }catch(err){ ecranSkinStatut.textContent = 'Erreur réseau'; }
+});
 const editHeliceUploadLigne = document.getElementById('editHeliceUploadLigne');
 const fHeliceSkin = document.getElementById('fHeliceSkin');
 const heliceSkinStatut = document.getElementById('heliceSkinStatut');
@@ -6739,6 +6799,7 @@ document.getElementById('btnEdition').addEventListener('click', ()=>{
   editFlouLigne.style.display = 'none';
   editSensLigne.style.display = 'none';
   editCubeLigne.style.display = 'none';
+  editEcranLigne.style.display = 'none';
   editHeliceUploadLigne.style.display = 'none';
   btnRecentrerZone.style.display = 'none';
   editZoom.value = 100; editZoomVal.textContent = '100%'; editZoneInterne.style.width = LARGEUR_EDIT_BASE+'px';
@@ -6771,6 +6832,8 @@ document.getElementById('btnEditionSkin').addEventListener('click', async ()=>{
   editSensLigne.style.display = 'flex';
   editCubeLigne.style.display = '';
   cubeSkinStatut.textContent = '';
+  editEcranLigne.style.display = '';
+  ecranSkinStatut.textContent = '';
   editHeliceUploadLigne.style.display = '';
   heliceSkinStatut.textContent = '';
   btnRecentrerZone.style.display = '';
@@ -7190,6 +7253,15 @@ function fmtD(d){if(!d)return'—';if(d>=1e12)return(d/1e12).toFixed(2)+' T';if(
       });
       return;
     }
+    if (/^\/assets\/ecrans-premium\/[a-z0-9-]{1,60}\.png$/i.test(url.pathname)) {
+      const chemin = path.join(DOSSIER_ECRANS_PREMIUM, path.basename(url.pathname));
+      fs.readFile(chemin, (err, data) => {
+        if (err) { res.writeHead(404); res.end(); return; }
+        res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=86400' });
+        res.end(data);
+      });
+      return;
+    }
     if (/^\/assets\/machines\/niveau-(\d{2})\.png$/.test(url.pathname)) {
       // Une variante de carte par palier de cube (1 à 22). Repli automatique sur la
       // carte par défaut si ce palier précis n'a pas encore d'image fournie -- pas
@@ -7504,6 +7576,44 @@ function fmtD(d){if(!d)return'—';if(d>=1e12)return(d/1e12).toFixed(2)+' T';if(
           res.end(JSON.stringify({ ok: false, erreur: 'JSON invalide : ' + e.message }));
         }
       });
+    } else if (url.pathname === '/api/ecran-skin' && req.method === 'POST') {
+      // Reçoit un PNG fourni directement par Chris pour la texture de fond de la zone
+      // écran d'un skin -- assets/ecrans-premium/<itemId>.png. ecran:null = suppression
+      // (retour au noir uni par défaut).
+      let corps = '';
+      req.on('data', chunk => { corps += chunk; if (corps.length > 8 * 1024 * 1024) req.destroy(); });
+      req.on('end', () => {
+        try {
+          const recu = JSON.parse(corps);
+          const itemId = /^[a-z0-9-]{1,60}$/i.test(recu.itemId || '') ? recu.itemId : null;
+          if (!itemId) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ ok: false, erreur: 'itemId invalide' }));
+            return;
+          }
+          if (recu.ecran === null) {
+            try { fs.unlinkSync(path.join(DOSSIER_ECRANS_PREMIUM, itemId + '.png')); } catch { /* déjà absent, pas grave */ }
+            ecransSkinDisponibles.delete(itemId);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ ok: true, itemId, supprime: true }));
+            return;
+          }
+          const m = /^data:image\/png;base64,(.+)$/.exec(recu.ecran || '');
+          if (!m) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ ok: false, erreur: 'image (PNG base64) invalide' }));
+            return;
+          }
+          fs.mkdirSync(DOSSIER_ECRANS_PREMIUM, { recursive: true });
+          fs.writeFileSync(path.join(DOSSIER_ECRANS_PREMIUM, itemId + '.png'), Buffer.from(m[1], 'base64'));
+          ecransSkinDisponibles.add(itemId);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: true, itemId }));
+        } catch (e) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: false, erreur: 'JSON invalide : ' + e.message }));
+        }
+      });
     } else if (url.pathname === '/api/config-visuel' && req.method === 'GET') {
       res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
       res.end(JSON.stringify(configVisuel));
@@ -7615,6 +7725,9 @@ function fmtD(d){if(!d)return'—';if(d>=1e12)return(d/1e12).toFixed(2)+' T';if(
         cubeSkinDisponible: !!(state.skinPremiumActif && cubesSkinDisponibles.has(state.skinPremiumActif)),
         cubeSkinVersion: (state.skinPremiumActif && cubesSkinDisponibles.has(state.skinPremiumActif))
           ? empreinteFichier(path.join('assets', 'cubes-premium', state.skinPremiumActif + '.png')) : '',
+        ecranSkinDisponible: !!(state.skinPremiumActif && ecransSkinDisponibles.has(state.skinPremiumActif)),
+        ecranSkinVersion: (state.skinPremiumActif && ecransSkinDisponibles.has(state.skinPremiumActif))
+          ? empreinteFichier(path.join('assets', 'ecrans-premium', state.skinPremiumActif + '.png')) : '',
         bestDiffVerifie: state.bestDiffVerifie || 0,
         reseau: { cle: reseauCle, symbole: reseau.symbole, recompense: reseau.recompense, label: reseau.label },
         marche: { btcPrice: state.btcPrice, btcSymbol: state.btcSymbol, devise: state.btcDevise },
