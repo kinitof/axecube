@@ -5316,37 +5316,42 @@ charger();setInterval(charger,5000);
      --couleur-cube posée sur .carteMachine, verte par défaut si aucun cube). Pulse
      franc façon néon sous tension. Peu de blanc mélangé (délaverait une couleur foncée) --
      on intensifie via brightness/saturate, qui éclaircissent sans désaturer vers le blanc. */
+  /* Liseré du contour de la carte : couleur = palier de cube atteint (variable CSS
+     --couleur-cube posée sur .carteMachine, verte par défaut si aucun cube). Pulse
+     doucement comme si elle était sous tension. RÉGLAGE D'ORIGINE, ne JAMAIS modifier
+     directement pour un besoin de skin Premium -- voir .skin-couleur-forcee plus bas,
+     qui isole tout renforcement visuel aux seuls skins avec une couleur personnalisée. */
   .contourGlow{position:absolute;left:var(--z-contour-left,${cv.contourGlow.left}%);top:var(--z-contour-top,${cv.contourGlow.top}%);width:var(--z-contour-width,${cv.contourGlow.width}%);height:var(--z-contour-height,${cv.contourGlow.height}%);border-radius:4.5%/3.8%;
     pointer-events:none;
     clip-path:var(--z-contour-clip,none);
-    box-shadow:0 0 0 0.55cqw color-mix(in srgb, var(--couleur-cube,#96f01f) 96%, white 8%),
-               0 0 1.2cqw 0.3cqw var(--couleur-cube,#96f01f),
-               0 0 3cqw 0.7cqw color-mix(in srgb, var(--couleur-cube,#96f01f) 85%, transparent),
-               0 0 6cqw 1.6cqw color-mix(in srgb, var(--couleur-cube,#96f01f) 50%, transparent);
-    filter:brightness(1.25) saturate(1.25) contrast(1.05);
-    animation:respirerGlow 1.7s ease-in-out infinite}
-  /* Barre LED du socle : bande nette (façon strip LED) + halo qui rayonne autour. On évite
-     de mélanger trop de blanc (color-mix avec du blanc DÉLAVE une couleur foncée en gris
-     pâle plutôt que de la faire briller) -- on préfère intensifier la teinte d'origine via
-     brightness/saturate/contrast, qui l'éclaircissent sans la désaturer vers le blanc. */
+    box-shadow:0 0 0 0.35cqw color-mix(in srgb, var(--couleur-cube,#96f01f) 60%, transparent),
+               0 0 1.3cqw 0.15cqw color-mix(in srgb, var(--couleur-cube,#96f01f) 40%, transparent);
+    animation:respirerGlow 2.6s ease-in-out infinite}
+  /* Barre LED du socle : même couleur/pulsation, léger décalage pour un effet plus vivant.
+     RÉGLAGE D'ORIGINE -- voir .skin-couleur-forcee pour le renforcement isolé aux skins. */
   .barreGlow{position:absolute;left:var(--z-barre-left,${cv.barreGlow.left}%);top:var(--z-barre-top,${cv.barreGlow.top}%);width:var(--z-barre-width,${cv.barreGlow.width}%);height:var(--z-barre-height,${cv.barreGlow.height}%);border-radius:50%;
     pointer-events:none;
-    background:linear-gradient(90deg, transparent 0%,
-               color-mix(in srgb, var(--couleur-cube,#96f01f) 95%, white 8%) 12%,
-               color-mix(in srgb, var(--couleur-cube,#96f01f) 100%, white 15%) 50%,
-               color-mix(in srgb, var(--couleur-cube,#96f01f) 95%, white 8%) 88%, transparent 100%);
-    box-shadow:0 0 0.8cqw 0.15cqw var(--couleur-cube,#96f01f),
-               0 0 2.2cqw 0.5cqw color-mix(in srgb, var(--couleur-cube,#96f01f) 95%, transparent),
-               0 0 4.5cqw 1cqw color-mix(in srgb, var(--couleur-cube,#96f01f) 65%, transparent);
-    filter:brightness(1.4) saturate(1.35) contrast(1.05);animation:respirerGlow 1.7s ease-in-out infinite;animation-delay:.3s}
-  @keyframes respirerGlow{0%,100%{opacity:.85}50%{opacity:1}}
+    background:radial-gradient(ellipse at center, color-mix(in srgb, var(--couleur-cube,#96f01f) 90%, transparent), transparent 75%);
+    filter:blur(0.35cqw);animation:respirerGlow 2.6s ease-in-out infinite;animation-delay:.3s}
+  @keyframes respirerGlow{0%,100%{opacity:.55}50%{opacity:1}}
+  /* Renforcement visuel ISOLÉ aux skins Premium ayant une couleur personnalisée forcée
+     (voir zonesSkinActif.couleur / le sélecteur "Couleur d'ambiance" du panneau) -- ne
+     touche JAMAIS .contourGlow/.barreGlow par défaut, donc ne peut plus jamais abîmer
+     les 22 machines de base quel que soit le prochain réglage fait pour un skin. */
+  .carteMachine.skin-couleur-forcee .contourGlow{
+    box-shadow:0 0 0 0.4cqw color-mix(in srgb, var(--couleur-cube,#96f01f) 90%, white 10%),
+               0 0 2cqw 0.4cqw color-mix(in srgb, var(--couleur-cube,#96f01f) 75%, transparent);
+    filter:brightness(1.3) saturate(1.25)}
+  .carteMachine.skin-couleur-forcee .barreGlow{filter:blur(0.35cqw) brightness(1.3) saturate(1.25)}
+  .carteMachine.skin-couleur-forcee .ecranLogo{filter:brightness(1.25) saturate(1.2)}
+  .carteMachine.skin-couleur-forcee .nomCube{filter:brightness(1.25) saturate(1.2)}
   /* Paliers "rainbow" (Multicolore I/II, Multi-Gemmes II) : le liseré cycle toutes les
      couleurs au lieu d'une teinte fixe, pour bien les distinguer des paliers unis. */
   .carteMachine.rainbow-tier .contourGlow,.carteMachine.rainbow-tier .barreGlow{animation-name:respirerGlow,arcEnCiel;animation-duration:1.7s,4s;animation-timing-function:ease-in-out,linear;animation-iteration-count:infinite,infinite}
   .carteMachine.rainbow-tier .ecranLogo{animation:arcEnCiel 4s linear infinite}
   @keyframes arcEnCiel{
-    0%{filter:hue-rotate(var(--z-arc-debut,0deg)) saturate(1.3) brightness(1.25) contrast(1.05)}
-    100%{filter:hue-rotate(var(--z-arc-fin,360deg)) saturate(1.3) brightness(1.25) contrast(1.05)}
+    0%{filter:hue-rotate(var(--z-arc-debut,0deg)) saturate(1.4)}
+    100%{filter:hue-rotate(var(--z-arc-fin,360deg)) saturate(1.4)}
   }
   /* Badge "bloc trouvé" : cachée par défaut, apparaît seulement si blocsTrouves>0 */
   .badgeBloc{display:none;align-items:center;gap:4px;background:rgba(150,240,31,.16);color:var(--amber);
@@ -5396,7 +5401,7 @@ charger();setInterval(charger,5000);
   .zoneChamps{position:relative;width:100%;height:calc(100% - 9% - 3%);margin-top:3%}
   .celluleEcran{position:absolute;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;gap:2%}
   .ecranLogo{display:flex;align-items:center;gap:5px;font-weight:700;color:var(--z-couleur-logo,var(--couleur-cube,var(--white)));font-size:min(9.5cqw,29cqh,29px);
-    min-width:0;flex-shrink:1;overflow:hidden;white-space:nowrap;filter:brightness(1.2) saturate(1.15)}
+    min-width:0;flex-shrink:1;overflow:hidden;white-space:nowrap}
   .ecranLogo span{overflow:hidden;text-overflow:ellipsis}
   .ecranLogo svg{width:1.1em;height:1.1em}
   .statut{color:var(--amber);display:flex;align-items:center;gap:4px;font-weight:700;font-size:min(8.3cqw,27cqh,23px);
@@ -5427,7 +5432,7 @@ charger();setInterval(charger,5000);
   .badgeMini.atteint{filter:none;opacity:1}
   .miniCube{width:calc(15px*var(--ti,1));height:calc(15px*var(--ti,1));vertical-align:middle;object-fit:contain;margin-right:3px}
   .nomCube{display:block;font-size:0.72em;font-weight:400;color:var(--couleur-cube,var(--amber));
-    letter-spacing:.04em;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;filter:brightness(1.2) saturate(1.15)}
+    letter-spacing:.04em;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .blocHash{margin-top:3%}
   .eGrid{display:grid;grid-template-columns:1fr 1fr;gap:2%;margin-top:3%;min-width:0}
   .eGrid>div{display:flex;flex-direction:column;gap:2%;min-width:0}
@@ -5949,7 +5954,7 @@ function carteComplete(m, estMoi, idx, ventiloClasse){
     ? ('/assets/cubes-premium/'+m.skinPremiumActif+'.png?v='+m.cubeSkinVersion+(TOK?'&token='+TOK:'')) : null;
   const imgStyle=(imageCartePlaque?('--carte-image:url(\\''+imageCartePlaque+'\\');'):'')+(cubeSkinUrl?('--logo-cube:url(\\''+cubeSkinUrl+'\\');'):(cube.imageLogo?('--logo-cube:url(\\''+cube.imageLogo+'\\');'):''))+(heliceSkinUrl?('--fan-blade:url(\\''+heliceSkinUrl+'\\');'):(cube.imageFanBlade?('--fan-blade:url(\\''+cube.imageFanBlade+'\\');'):''))+stylesZonesSkin(zonesSkinActif);
   const couleurCarte=(zonesSkinActif && zonesSkinActif.couleur) ? zonesSkinActif.couleur : cube.couleur;
-  return '<div class="carteMachine'+(enLigne?'':' hors-ligne')+(cube.rainbow?' rainbow-tier':'')+classeSansLogoVentilo(zonesSkinActif)+'"'+(idx!=null?' data-idx="'+idx+'"':'')+' data-cle="'+cleStable+'" style="--couleur-cube:'+couleurCarte+';'+imgStyle+'">'
+  return '<div class="carteMachine'+(enLigne?'':' hors-ligne')+(cube.rainbow?' rainbow-tier':'')+classeSansLogoVentilo(zonesSkinActif)+((zonesSkinActif && zonesSkinActif.couleur)?' skin-couleur-forcee':'')+'"'+(idx!=null?' data-idx="'+idx+'"':'')+' data-cle="'+cleStable+'" style="--couleur-cube:'+couleurCarte+';'+imgStyle+'">'
     +'<div class="fondNoir"></div>'
     +'<div class="ventilo'+(ventiloClasse?' '+ventiloClasse:'')+'"><div class="logoVentiloFond"></div><div class="logoVentilo"></div></div>'+'<button type="button" class="boutonVentilo" onclick="toggleVentilo(event)" title="Arr\u00eater/relancer le ventilateur (visuel)" aria-label="Basculer le ventilateur"></button>'
     +'<div class="contourGlow"></div>'
