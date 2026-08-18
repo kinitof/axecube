@@ -140,11 +140,17 @@
       "top": 49.68,
       "width": 4.96
     },
-    "couleur": "#0a3238",
+    "couleur": "#44a9b2",
     "couleurLogo": "#65d8e3",
     "vitesse": 0.06,
     "flou": 0,
-    "sensInverse": true
+    "sensInverse": true,
+    "encoche": {
+      "left": 82.48,
+      "top": 18.91,
+      "width": 16.15,
+      "height": 8.4
+    }
   },
   "argent": {
     "ecran": {
@@ -165,6 +171,11 @@
       "pivotX": 50,
       "pivotY": 50
     },
+    "logoVentilo": {
+      "left": 35.7,
+      "top": 35.7,
+      "width": 28.79
+    },
     "contourGlow": {
       "left": 4.59,
       "top": 1.93,
@@ -182,16 +193,122 @@
       "top": 49.68,
       "width": 4.96
     },
-    "logoVentilo": null,
     "couleur": "#8c8d8f",
     "couleurLogo": "#7b7978",
     "vitesse": 0.06,
-    "flou": 0,
+    "flou": 0.4,
+    "sensInverse": true,
     "encoche": {
       "left": 81.52,
       "top": 18.59,
       "width": 16.16,
       "height": 9.51
+    }
+  },
+  "aurore-boreale": {
+    "ecran": {
+      "left": 23.85,
+      "top": 4.49,
+      "width": 51.57,
+      "height": 42.9
+    },
+    "fondNoir": {
+      "left": 26.77,
+      "top": 58.32,
+      "width": 46.97
+    },
+    "ventilo": {
+      "left": 26.38,
+      "top": 57.95,
+      "width": 48.26,
+      "pivotX": 50,
+      "pivotY": 50
+    },
+    "logoVentilo": {
+      "left": 34.53,
+      "top": 34.74,
+      "width": 31.05
+    },
+    "contourGlow": {
+      "left": 4.32,
+      "top": 1.85,
+      "width": 91.1,
+      "height": 90.39
+    },
+    "barreGlow": {
+      "left": 19.99,
+      "top": 99.12,
+      "width": 60.12,
+      "height": 0.41
+    },
+    "boutonVentilo": {
+      "left": 20,
+      "top": 49.68,
+      "width": 4.96
+    },
+    "couleur": "#00869d",
+    "couleurLogo": "#a957b8",
+    "vitesse": 0.09,
+    "flou": 0,
+    "sensInverse": true,
+    "encoche": {
+      "left": 81.29,
+      "top": 19.22,
+      "width": 16.03,
+      "height": 9.32
+    }
+  },
+  "bleu-electrique": {
+    "ecran": {
+      "left": 25.76,
+      "top": 4.33,
+      "width": 48.47,
+      "height": 45.12
+    },
+    "fondNoir": {
+      "left": 26.89,
+      "top": 59.1,
+      "width": 46.97
+    },
+    "ventilo": {
+      "left": 26.96,
+      "top": 59,
+      "width": 45.93,
+      "pivotX": 50,
+      "pivotY": 50
+    },
+    "logoVentilo": {
+      "left": 33.32,
+      "top": 33.91,
+      "width": 32.43
+    },
+    "contourGlow": {
+      "left": 2.15,
+      "top": 1.09,
+      "width": 95.63,
+      "height": 91.27
+    },
+    "barreGlow": {
+      "left": 20.26,
+      "top": 100.65,
+      "width": 58.99,
+      "height": 0.24
+    },
+    "boutonVentilo": {
+      "left": 20,
+      "top": 49.68,
+      "width": 4.96
+    },
+    "couleur": "#001651",
+    "couleurLogo": "#0036a4",
+    "vitesse": 0.1,
+    "flou": 0,
+    "sensInverse": true,
+    "encoche": {
+      "left": 83.9,
+      "top": 18.59,
+      "width": 14.38,
+      "height": 11.69
     }
   }
 }

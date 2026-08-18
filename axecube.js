@@ -5323,7 +5323,7 @@ charger();setInterval(charger,5000);
                0 0 1.2cqw 0.3cqw var(--couleur-cube,#96f01f),
                0 0 3cqw 0.7cqw color-mix(in srgb, var(--couleur-cube,#96f01f) 85%, transparent),
                0 0 6cqw 1.6cqw color-mix(in srgb, var(--couleur-cube,#96f01f) 50%, transparent);
-    filter:brightness(1.7) saturate(1.5) contrast(1.1);
+    filter:brightness(1.25) saturate(1.25) contrast(1.05);
     animation:respirerGlow 1.7s ease-in-out infinite}
   /* Barre LED du socle : bande nette (façon strip LED) + halo qui rayonne autour. On évite
      de mélanger trop de blanc (color-mix avec du blanc DÉLAVE une couleur foncée en gris
@@ -5338,15 +5338,15 @@ charger();setInterval(charger,5000);
     box-shadow:0 0 0.8cqw 0.15cqw var(--couleur-cube,#96f01f),
                0 0 2.2cqw 0.5cqw color-mix(in srgb, var(--couleur-cube,#96f01f) 95%, transparent),
                0 0 4.5cqw 1cqw color-mix(in srgb, var(--couleur-cube,#96f01f) 65%, transparent);
-    filter:brightness(2.1) saturate(1.7) contrast(1.15);animation:respirerGlow 1.7s ease-in-out infinite;animation-delay:.3s}
+    filter:brightness(1.4) saturate(1.35) contrast(1.05);animation:respirerGlow 1.7s ease-in-out infinite;animation-delay:.3s}
   @keyframes respirerGlow{0%,100%{opacity:.85}50%{opacity:1}}
   /* Paliers "rainbow" (Multicolore I/II, Multi-Gemmes II) : le liseré cycle toutes les
      couleurs au lieu d'une teinte fixe, pour bien les distinguer des paliers unis. */
   .carteMachine.rainbow-tier .contourGlow,.carteMachine.rainbow-tier .barreGlow{animation-name:respirerGlow,arcEnCiel;animation-duration:1.7s,4s;animation-timing-function:ease-in-out,linear;animation-iteration-count:infinite,infinite}
   .carteMachine.rainbow-tier .ecranLogo{animation:arcEnCiel 4s linear infinite}
   @keyframes arcEnCiel{
-    0%{filter:hue-rotate(var(--z-arc-debut,0deg)) saturate(1.6) brightness(1.6) contrast(1.15)}
-    100%{filter:hue-rotate(var(--z-arc-fin,360deg)) saturate(1.6) brightness(1.6) contrast(1.15)}
+    0%{filter:hue-rotate(var(--z-arc-debut,0deg)) saturate(1.3) brightness(1.25) contrast(1.05)}
+    100%{filter:hue-rotate(var(--z-arc-fin,360deg)) saturate(1.3) brightness(1.25) contrast(1.05)}
   }
   /* Badge "bloc trouvé" : cachée par défaut, apparaît seulement si blocsTrouves>0 */
   .badgeBloc{display:none;align-items:center;gap:4px;background:rgba(150,240,31,.16);color:var(--amber);
@@ -5369,9 +5369,9 @@ charger();setInterval(charger,5000);
     height:100%;text-align:center;gap:0.4cqh;padding:2cqw}
   .pageTrophee .ptTitre{font-size:min(8cqw,22cqh,22px);font-weight:800;color:var(--couleur-cube,#96f01f);
     text-shadow:0 0 1cqw color-mix(in srgb, var(--couleur-cube,#96f01f) 70%, transparent);
-    filter:brightness(1.5) saturate(1.3);animation:tropheePulse 1.3s ease-in-out infinite;letter-spacing:.02em}
+    filter:brightness(1.25) saturate(1.2);animation:tropheePulse 1.3s ease-in-out infinite;letter-spacing:.02em}
   .pageTrophee .ptSub{font-size:min(5cqw,13cqh,13px);font-weight:700;color:var(--couleur-cube,#96f01f);
-    filter:brightness(1.5) saturate(1.3);margin-bottom:1cqh}
+    filter:brightness(1.25) saturate(1.2);margin-bottom:1cqh}
   .pageTrophee .ptLigne{display:flex;justify-content:space-between;width:100%;max-width:90%;
     font-size:min(4.2cqw,11cqh,11px);color:var(--white-dim,#9fae9a);letter-spacing:.04em;
     padding:0.5cqh 0;border-top:1px dashed rgba(150,240,31,.25)}
@@ -5396,7 +5396,7 @@ charger();setInterval(charger,5000);
   .zoneChamps{position:relative;width:100%;height:calc(100% - 9% - 3%);margin-top:3%}
   .celluleEcran{position:absolute;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;gap:2%}
   .ecranLogo{display:flex;align-items:center;gap:5px;font-weight:700;color:var(--z-couleur-logo,var(--couleur-cube,var(--white)));font-size:min(9.5cqw,29cqh,29px);
-    min-width:0;flex-shrink:1;overflow:hidden;white-space:nowrap;filter:brightness(1.6) saturate(1.3)}
+    min-width:0;flex-shrink:1;overflow:hidden;white-space:nowrap;filter:brightness(1.2) saturate(1.15)}
   .ecranLogo span{overflow:hidden;text-overflow:ellipsis}
   .ecranLogo svg{width:1.1em;height:1.1em}
   .statut{color:var(--amber);display:flex;align-items:center;gap:4px;font-weight:700;font-size:min(8.3cqw,27cqh,23px);
@@ -5427,7 +5427,7 @@ charger();setInterval(charger,5000);
   .badgeMini.atteint{filter:none;opacity:1}
   .miniCube{width:calc(15px*var(--ti,1));height:calc(15px*var(--ti,1));vertical-align:middle;object-fit:contain;margin-right:3px}
   .nomCube{display:block;font-size:0.72em;font-weight:400;color:var(--couleur-cube,var(--amber));
-    letter-spacing:.04em;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;filter:brightness(1.6) saturate(1.3)}
+    letter-spacing:.04em;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;filter:brightness(1.2) saturate(1.15)}
   .blocHash{margin-top:3%}
   .eGrid{display:grid;grid-template-columns:1fr 1fr;gap:2%;margin-top:3%;min-width:0}
   .eGrid>div{display:flex;flex-direction:column;gap:2%;min-width:0}
