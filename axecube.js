@@ -5310,6 +5310,22 @@ charger();setInterval(charger,5000);
     filter:blur(var(--z-ventilo-flou,1.8px));will-change:transform}
   .ventilo.ralentit{animation:ralentirVentilo 1.8s cubic-bezier(.25,.1,.25,1) 1 forwards;filter:blur(1.2px)}
   .ventilo.arrete{animation:none;transform:rotate(0deg);filter:none}
+  /* Volutes de vapeur/brume froide -- effet optionnel par skin (case "Effet fumée/vapeur"
+     du panneau), désactivé par défaut pour tout le monde. Placé au même endroit que le
+     ventilo (mêmes variables --z-ventilo-*) pour rester centré dessus quel que soit le
+     réglage de zone de ce skin. CSS pur, pas de JS -- 5 volutes en boucle décalées. */
+  .fumeeVentilo{position:absolute;left:var(--z-ventilo-left,${cv.ventilo.left}%);top:var(--z-ventilo-top,${cv.ventilo.top}%);width:var(--z-ventilo-width,${cv.ventilo.width}%);aspect-ratio:1/1;
+    pointer-events:none;overflow:visible;display:none;z-index:6}
+  .carteMachine.effet-fumee .fumeeVentilo{display:block}
+  .fumeeWisp{position:absolute;width:40%;height:40%;margin:-20% 0 0 -20%;
+    border-radius:50%;background:radial-gradient(circle, rgba(255,255,255,.85), rgba(220,235,255,.5) 45%, transparent 72%);
+    filter:blur(1.5px);opacity:0;animation:fumeeMonte 4.5s ease-out infinite}
+  @keyframes fumeeMonte{
+    0%{opacity:0;transform:translate(0,0) scale(.4)}
+    18%{opacity:.9}
+    55%{opacity:.55}
+    100%{opacity:0;transform:translate(var(--dx),-190%) scale(2.4)}
+  }
   /* Logo : enfant du ventilateur, donc tourne automatiquement avec lui (solidaire des pales).
      mix-blend-mode:screen fait disparaître son fond noir sans avoir besoin de détourage.
      Masqué entièrement sur les skins dont l'hélice contient déjà son propre logo dessiné
@@ -5379,7 +5395,8 @@ charger();setInterval(charger,5000);
   .ecran{position:absolute;left:var(--z-ecran-left,${cv.ecran.left}%);top:var(--z-ecran-top,${cv.ecran.top}%);width:var(--z-ecran-width,${cv.ecran.width}%);height:var(--z-ecran-height,${cv.ecran.height}%);
     container-type:size;container-name:ecran;
     border-radius:2%/1.6%;overflow:hidden;background-color:#05070a;
-    background-image:var(--z-ecran-texture,none);background-size:cover;background-position:center;
+    background-image:var(--z-ecran-texture,none);
+    background-size:var(--z-ecran-bgsize,cover);background-position:var(--z-ecran-bgpos,center);
     padding:var(--marge-v,2%) var(--marge-h,2.5%);box-sizing:border-box}
   .ecran.vitrine{background:transparent;padding:0}
   /* Page trophée : n'existe que pour une machine ayant réellement trouvé un bloc, en
@@ -5687,6 +5704,9 @@ charger();setInterval(charger,5000);
       <label id="editSensLigne" style="display:none;align-items:center;gap:8px;font-size:12px;margin:4px 0 10px;cursor:pointer">
         <input type="checkbox" id="chkSensInverse"> Inverser le sens de rotation de l'hélice
       </label>
+      <label id="editFumeeLigne" style="display:none;align-items:center;gap:8px;font-size:12px;margin:4px 0 10px;cursor:pointer">
+        <input type="checkbox" id="chkFumee"> Volutes de vapeur/brume froide autour de l'hélice
+      </label>
       <div id="editCubeLigne" style="display:none;margin-bottom:10px">
         <label style="font-size:10.5px;color:var(--mut);letter-spacing:.05em;text-transform:uppercase;display:block;margin-bottom:6px">
           Cube (logo central), fourni séparément de l'hélice</label>
@@ -5696,11 +5716,19 @@ charger();setInterval(charger,5000);
       </div>
       <div id="editEcranLigne" style="display:none;margin-bottom:10px">
         <label style="font-size:10.5px;color:var(--mut);letter-spacing:.05em;text-transform:uppercase;display:block;margin-bottom:6px">
-          Texture de fond de l'écran (remplace le noir uni -- un voile sombre est appliqué automatiquement pour garder le texte lisible)</label>
+          Texture de fond de l'écran (remplace le noir uni)</label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:11px;margin-bottom:8px;cursor:pointer">
+          <input type="checkbox" id="chkEcranPlaque"> Réutiliser la plaque elle-même (pas de fichier séparé -- recadrage automatique sur la zone écran)
+        </label>
         <input type="file" id="fEcranSkin" accept="image/png" style="display:none">
-        <button type="button" id="btnChoisirEcranSkin" style="font-size:11px">📁 Choisir un PNG</button>
+        <button type="button" id="btnChoisirEcranSkin" style="font-size:11px">📁 ...ou choisir un PNG différent</button>
         <button type="button" id="btnRetirerEcranSkin" style="font-size:11px">↺ Revenir au noir uni</button>
         <span id="ecranSkinStatut" style="font-size:10.5px;color:var(--mut);margin-left:6px"></span>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:8px;font-size:11px">
+          Voile sombre (pour garder le texte lisible) :
+          <input type="range" id="inVoileEcran" min="0" max="90" step="1" value="35">
+          <span id="valVoileEcran" style="font-size:10.5px;color:var(--mut)">35%</span>
+        </div>
       </div>
       <div id="editListe"></div>
       <div class="editBtns">
@@ -5917,6 +5945,19 @@ function stylesZonesSkin(zonesSkin){
 // saisies en % de la CARTE (même repère que les autres zones), mais clip-path polygon()
 // attend des % relatifs à la boîte du CONTOUR lui-même -- d'où la conversion ci-dessous.
 const CONTOUR_DEFAUT = {left:3.86, top:2.09, width:91.62, height:86.18};
+const ECRAN_DEFAUT = {left:23.85, top:4.49, width:51.03, height:41.31};
+// Recadrage CSS pour afficher UNIQUEMENT la zone écran de la plaque en fond de l'écran
+// lui-même (option "Réutiliser la plaque" du panneau) -- technique standard de zoom sur
+// une portion d'image via background-size/position, sans avoir besoin d'extraire un
+// fichier séparé. Respecte automatiquement les zones personnalisées de ce skin si elles
+// existent (z.ecran), sinon retombe sur le gabarit par défaut.
+function calculerRecadragePlaque(zonesSkin){
+  const e = (zonesSkin && zonesSkin.ecran) || ECRAN_DEFAUT;
+  const tailleX = (10000/e.width).toFixed(2), tailleY = (10000/e.height).toFixed(2);
+  const posX = e.width<100 ? (e.left*100/(100-e.width)).toFixed(2) : 0;
+  const posY = e.height<100 ? (e.top*100/(100-e.height)).toFixed(2) : 0;
+  return { tailleX, tailleY, posX, posY };
+}
 function stylesEncocheContour(z){
   const c = z.contourGlow || CONTOUR_DEFAUT;
   const e = z.encoche;
@@ -5939,6 +5980,24 @@ function classeSansLogoVentilo(zonesSkin){
 // Page "trophée" : n'existe QUE pour une machine ayant trouvé au moins un vrai bloc
 // (m.blocsTrouves>0), en page supplémentaire à la fin du cycle normal -- jamais un
 // remplacement des pages existantes, juste un ajout accessible via la flèche.
+// Volutes de vapeur réparties autour de l'hélice (pas toutes du même point de départ),
+// avec un décalage d'animation calculé depuis l'heure réelle -- ainsi, même si la carte
+// est régénérée entièrement (rafraîchissement périodique), chaque volute "reprend" au
+// bon moment de son cycle au lieu de repartir de zéro, ce qui casserait l'effet continu.
+function fumeeVentiloHTML(){
+  const points=[
+    {left:24,top:20,dx:-32},
+    {left:74,top:18,dx:24},
+    {left:50,top:66,dx:-6},
+    {left:16,top:58,dx:-30},
+    {left:82,top:56,dx:28},
+  ];
+  const maintenant=Date.now()/1000, duree=4.5;
+  return '<div class="fumeeVentilo">'+points.map((p,i)=>{
+    const phase=((maintenant+i*0.9)%duree);
+    return '<span class="fumeeWisp" style="left:'+p.left+'%;top:'+p.top+'%;--dx:'+p.dx+'%;animation-delay:'+(-phase).toFixed(2)+'s"></span>';
+  }).join('')+'</div>';
+}
 function pageTropheeHTML(m){
   return '<div class="pageTrophee">'
     +'<div class="ptTitre">\u20bf BLOC TROUV\u00c9 !</div>'
@@ -5977,11 +6036,26 @@ function carteComplete(m, estMoi, idx, ventiloClasse){
     ? ('/assets/cubes-premium/'+m.skinPremiumActif+'.png?v='+m.cubeSkinVersion+(TOK?'&token='+TOK:'')) : null;
   const ecranSkinUrl=(estMoi && m.skinPremiumActif && m.ecranSkinDisponible)
     ? ('/assets/ecrans-premium/'+m.skinPremiumActif+'.png?v='+m.ecranSkinVersion+(TOK?'&token='+TOK:'')) : null;
-  const imgStyle=(imageCartePlaque?('--carte-image:url(\\''+imageCartePlaque+'\\');'):'')+(cubeSkinUrl?('--logo-cube:url(\\''+cubeSkinUrl+'\\');'):(cube.imageLogo?('--logo-cube:url(\\''+cube.imageLogo+'\\');'):''))+(heliceSkinUrl?('--fan-blade:url(\\''+heliceSkinUrl+'\\');'):(cube.imageFanBlade?('--fan-blade:url(\\''+cube.imageFanBlade+'\\');'):''))+(ecranSkinUrl?('--z-ecran-texture:linear-gradient(rgba(5,7,10,.55),rgba(5,7,10,.78)),url(\\''+ecranSkinUrl+'\\');'):'')+stylesZonesSkin(zonesSkinActif);
+  const voileEcran=(zonesSkinActif && zonesSkinActif.voileEcran!=null) ? zonesSkinActif.voileEcran : 35;
+  const voileEcranHaut=(voileEcran*0.55/100).toFixed(3), voileEcranBas=(voileEcran/100).toFixed(3);
+  const voileGradient='linear-gradient(rgba(5,7,10,'+voileEcranHaut+'),rgba(5,7,10,'+voileEcranBas+'))';
+  let styleEcranTexture='';
+  if(zonesSkinActif && zonesSkinActif.ecranPlaque && imageCartePlaque){
+    // Réutilise la plaque elle-même, recadrée automatiquement sur la zone écran -- pas
+    // besoin d'un fichier séparé, l'alignement est garanti puisque c'est la même image.
+    const r=calculerRecadragePlaque(zonesSkinActif);
+    styleEcranTexture='--z-ecran-texture:'+voileGradient+',url(\\''+imageCartePlaque+'\\');'
+      +'--z-ecran-bgsize:100% 100%,'+r.tailleX+'% '+r.tailleY+'%;'
+      +'--z-ecran-bgpos:center,'+r.posX+'% '+r.posY+'%;';
+  } else if(ecranSkinUrl){
+    styleEcranTexture='--z-ecran-texture:'+voileGradient+',url(\\''+ecranSkinUrl+'\\');';
+  }
+  const imgStyle=(imageCartePlaque?('--carte-image:url(\\''+imageCartePlaque+'\\');'):'')+(cubeSkinUrl?('--logo-cube:url(\\''+cubeSkinUrl+'\\');'):(cube.imageLogo?('--logo-cube:url(\\''+cube.imageLogo+'\\');'):''))+(heliceSkinUrl?('--fan-blade:url(\\''+heliceSkinUrl+'\\');'):(cube.imageFanBlade?('--fan-blade:url(\\''+cube.imageFanBlade+'\\');'):''))+styleEcranTexture+stylesZonesSkin(zonesSkinActif);
   const couleurCarte=(zonesSkinActif && zonesSkinActif.couleur) ? zonesSkinActif.couleur : cube.couleur;
-  return '<div class="carteMachine'+(enLigne?'':' hors-ligne')+(cube.rainbow?' rainbow-tier':'')+classeSansLogoVentilo(zonesSkinActif)+((zonesSkinActif && zonesSkinActif.couleur)?' skin-couleur-forcee':'')+'"'+(idx!=null?' data-idx="'+idx+'"':'')+' data-cle="'+cleStable+'" style="--couleur-cube:'+couleurCarte+';'+imgStyle+'">'
+  return '<div class="carteMachine'+(enLigne?'':' hors-ligne')+(cube.rainbow?' rainbow-tier':'')+classeSansLogoVentilo(zonesSkinActif)+((zonesSkinActif && zonesSkinActif.couleur)?' skin-couleur-forcee':'')+((zonesSkinActif && zonesSkinActif.fumee)?' effet-fumee':'')+'"'+(idx!=null?' data-idx="'+idx+'"':'')+' data-cle="'+cleStable+'" style="--couleur-cube:'+couleurCarte+';'+imgStyle+'">'
     +'<div class="fondNoir"></div>'
     +'<div class="ventilo'+(ventiloClasse?' '+ventiloClasse:'')+'"><div class="logoVentiloFond"></div><div class="logoVentilo"></div></div>'+'<button type="button" class="boutonVentilo" onclick="toggleVentilo(event)" title="Arr\u00eater/relancer le ventilateur (visuel)" aria-label="Basculer le ventilateur"></button>'
+    +fumeeVentiloHTML()
     +'<div class="contourGlow"></div>'
     +'<div class="barreGlow"></div>'
     +'<div class="ecran'+(page===2?' vitrine':'')+'" style="--marge-h:'+(CE.margeH!=null?CE.margeH:2.5)+'%;--marge-v:'+(CE.margeV!=null?CE.margeV:2)+'%">'
@@ -6677,6 +6751,8 @@ const chkSensInverse = document.getElementById('chkSensInverse');
 chkSensInverse.addEventListener('change', ()=>{
   apercuVentiloEl.style.animationDirection = chkSensInverse.checked ? 'reverse' : 'normal';
 });
+const editFumeeLigne = document.getElementById('editFumeeLigne');
+const chkFumee = document.getElementById('chkFumee');
 const editCubeLigne = document.getElementById('editCubeLigne');
 const fCubeSkin = document.getElementById('fCubeSkin');
 const cubeSkinStatut = document.getElementById('cubeSkinStatut');
@@ -6702,6 +6778,17 @@ fCubeSkin.addEventListener('change', ()=>{
 const editEcranLigne = document.getElementById('editEcranLigne');
 const fEcranSkin = document.getElementById('fEcranSkin');
 const ecranSkinStatut = document.getElementById('ecranSkinStatut');
+const inVoileEcran = document.getElementById('inVoileEcran');
+const valVoileEcran = document.getElementById('valVoileEcran');
+inVoileEcran.addEventListener('input', ()=>{
+  valVoileEcran.textContent = inVoileEcran.value+'%';
+});
+const chkEcranPlaque = document.getElementById('chkEcranPlaque');
+chkEcranPlaque.addEventListener('change', ()=>{
+  const actif = chkEcranPlaque.checked;
+  document.getElementById('btnChoisirEcranSkin').disabled = actif;
+  document.getElementById('btnChoisirEcranSkin').style.opacity = actif?0.4:1;
+});
 document.getElementById('btnChoisirEcranSkin').addEventListener('click', ()=> fEcranSkin.click());
 fEcranSkin.addEventListener('change', ()=>{
   const fichier = fEcranSkin.files[0];
@@ -6798,6 +6885,7 @@ document.getElementById('btnEdition').addEventListener('click', ()=>{
   editVitesseLigne.style.display = 'none';
   editFlouLigne.style.display = 'none';
   editSensLigne.style.display = 'none';
+  editFumeeLigne.style.display = 'none';
   editCubeLigne.style.display = 'none';
   editEcranLigne.style.display = 'none';
   editHeliceUploadLigne.style.display = 'none';
@@ -6830,6 +6918,7 @@ document.getElementById('btnEditionSkin').addEventListener('click', async ()=>{
   editVitesseLigne.style.display = 'flex';
   editFlouLigne.style.display = 'flex';
   editSensLigne.style.display = 'flex';
+  editFumeeLigne.style.display = 'flex';
   editCubeLigne.style.display = '';
   cubeSkinStatut.textContent = '';
   editEcranLigne.style.display = '';
@@ -6852,6 +6941,11 @@ document.getElementById('btnEditionSkin').addEventListener('click', async ()=>{
     couleurSkinSuitPalier = !partiel.couleur;
     inCouleurSkin.value = partiel.couleur || '#96f01f';
     chkArcRestreint.checked = !!partiel.arcRestreint;
+    inVoileEcran.value = (partiel.voileEcran!=null) ? partiel.voileEcran : 35;
+    valVoileEcran.textContent = inVoileEcran.value+'%';
+    chkEcranPlaque.checked = !!partiel.ecranPlaque;
+    document.getElementById('btnChoisirEcranSkin').disabled = chkEcranPlaque.checked;
+    document.getElementById('btnChoisirEcranSkin').style.opacity = chkEcranPlaque.checked?0.4:1;
     chkEncoche.checked = !!(configEnCours.encoche && configEnCours.encoche.width);
     encocheFormeEl.classList.toggle('active', chkEncoche.checked);
     couleurLogoSkinSuitAmbiance = !partiel.couleurLogo;
@@ -6861,6 +6955,7 @@ document.getElementById('btnEditionSkin').addEventListener('click', async ()=>{
     inFlouVentilo.value = (partiel.flou!=null) ? partiel.flou : 0.4;
     valFlouVentilo.textContent = Number(inFlouVentilo.value).toFixed(1)+'px';
     chkSensInverse.checked = !!partiel.sensInverse;
+    chkFumee.checked = !!partiel.fumee;
     chkSansLogoVentilo.checked = (partiel.logoVentilo === null);
     editLogoFormeEl.style.display = chkSansLogoVentilo.checked ? 'none' : '';
     const ligneLogo = editListe.querySelector('.editLigne[data-cle="logoVentilo"]');
@@ -6917,12 +7012,15 @@ document.getElementById('btnEditEnregistrer').addEventListener('click', async ()
       if(chkSansLogoVentilo.checked) zonesAEnvoyer.logoVentilo = null;
       if(!couleurSkinSuitPalier) zonesAEnvoyer.couleur = inCouleurSkin.value;
       if(chkArcRestreint.checked) zonesAEnvoyer.arcRestreint = true;
+      zonesAEnvoyer.voileEcran = Number(inVoileEcran.value);
+      zonesAEnvoyer.ecranPlaque = chkEcranPlaque.checked;
       if(chkEncoche.checked) zonesAEnvoyer.encoche = configEnCours.encoche;
       else delete zonesAEnvoyer.encoche;
       if(!couleurLogoSkinSuitAmbiance) zonesAEnvoyer.couleurLogo = inCouleurLogoSkin.value;
       zonesAEnvoyer.vitesse = Number(inVitesseVentilo.value);
       zonesAEnvoyer.flou = Number(inFlouVentilo.value);
       if(chkSensInverse.checked) zonesAEnvoyer.sensInverse = true;
+      if(chkFumee.checked) zonesAEnvoyer.fumee = true;
       r = await fetch('/api/zones-skin'+Q, {
         method:'POST',
         headers:{'Content-Type':'application/json'},
@@ -7501,10 +7599,14 @@ function fmtD(d){if(!d)return'—';if(d>=1e12)return(d/1e12).toFixed(2)+' T';if(
           const flou = Number(zonesRecues.flou);
           if (Number.isFinite(flou) && flou >= 0 && flou <= 6) nouvelle.flou = flou;
           if (zonesRecues.sensInverse === true) nouvelle.sensInverse = true;
+          if (zonesRecues.fumee === true) nouvelle.fumee = true;
           // Palette arc-en-ciel restreinte (rouge/violet/rose) -- ne concerne que les
           // machines qui ont réellement atteint le vrai palier arc-en-ciel ; ne change
           // jamais si l'effet s'active, seulement sa gamme de teintes pour ce skin.
           if (zonesRecues.arcRestreint === true) nouvelle.arcRestreint = true;
+          const voileEcran = Number(zonesRecues.voileEcran);
+          if (Number.isFinite(voileEcran) && voileEcran >= 0 && voileEcran <= 90) nouvelle.voileEcran = voileEcran;
+          if (zonesRecues.ecranPlaque === true) nouvelle.ecranPlaque = true;
           // Encoche : rectangle où le liseré est masqué (ex: connecteur qui dépasse du
           // gabarit). left/top/width obligatoires, height optionnelle (repli sur width).
           if (zonesRecues.encoche && typeof zonesRecues.encoche === 'object') {
@@ -7530,8 +7632,18 @@ function fmtD(d){if(!d)return'—';if(d>=1e12)return(d/1e12).toFixed(2)+' T';if(
       // du panneau "🎯 Zones du skin") et l'écrit dans assets/helices-premium/<itemId>.png.
       // Comme zones-premium.json, ce fichier est prévu pour être commité en Git.
       let corps = '';
-      req.on('data', chunk => { corps += chunk; if (corps.length > 8 * 1024 * 1024) req.destroy(); });
+      let tropVolumineux = false;
+      req.on('data', chunk => {
+        corps += chunk;
+        if (corps.length > 30 * 1024 * 1024 && !tropVolumineux) {
+          tropVolumineux = true;
+          res.writeHead(413, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: false, erreur: 'Image trop volumineuse (max 30 Mo) -- compresse-la ou réduis sa résolution.' }));
+          req.destroy();
+        }
+      });
       req.on('end', () => {
+        if (tropVolumineux) return;
         try {
           const recu = JSON.parse(corps);
           const itemId = /^[a-z0-9-]{1,60}$/i.test(recu.itemId || '') ? recu.itemId : null;
@@ -7555,8 +7667,18 @@ function fmtD(d){if(!d)return'—';if(d>=1e12)return(d/1e12).toFixed(2)+' T';if(
       // Reçoit un PNG fourni directement par Chris (upload de fichier, pas de découpe)
       // pour le cube/logo central d'un skin -- assets/cubes-premium/<itemId>.png.
       let corps = '';
-      req.on('data', chunk => { corps += chunk; if (corps.length > 8 * 1024 * 1024) req.destroy(); });
+      let tropVolumineux = false;
+      req.on('data', chunk => {
+        corps += chunk;
+        if (corps.length > 30 * 1024 * 1024 && !tropVolumineux) {
+          tropVolumineux = true;
+          res.writeHead(413, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: false, erreur: 'Image trop volumineuse (max 30 Mo) -- compresse-la ou réduis sa résolution.' }));
+          req.destroy();
+        }
+      });
       req.on('end', () => {
+        if (tropVolumineux) return;
         try {
           const recu = JSON.parse(corps);
           const itemId = /^[a-z0-9-]{1,60}$/i.test(recu.itemId || '') ? recu.itemId : null;
@@ -7581,8 +7703,18 @@ function fmtD(d){if(!d)return'—';if(d>=1e12)return(d/1e12).toFixed(2)+' T';if(
       // écran d'un skin -- assets/ecrans-premium/<itemId>.png. ecran:null = suppression
       // (retour au noir uni par défaut).
       let corps = '';
-      req.on('data', chunk => { corps += chunk; if (corps.length > 8 * 1024 * 1024) req.destroy(); });
+      let tropVolumineux = false;
+      req.on('data', chunk => {
+        corps += chunk;
+        if (corps.length > 30 * 1024 * 1024 && !tropVolumineux) {
+          tropVolumineux = true;
+          res.writeHead(413, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: false, erreur: 'Image trop volumineuse (max 30 Mo) -- compresse-la ou réduis sa résolution.' }));
+          req.destroy();
+        }
+      });
       req.on('end', () => {
+        if (tropVolumineux) return;
         try {
           const recu = JSON.parse(corps);
           const itemId = /^[a-z0-9-]{1,60}$/i.test(recu.itemId || '') ? recu.itemId : null;

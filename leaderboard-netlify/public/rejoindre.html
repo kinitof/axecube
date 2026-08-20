@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AXECUBE — Rejoindre avec mon matériel</title>
+<style>
+  :root{
+    --bg:#07090c; --panel:#0d1014; --panel2:#12161c; --line:#1c2029;
+    --amber:#96f01f; --amber-dim:rgba(150,240,31,.6); --amber-faint:rgba(150,240,31,.32);
+    --glow:0 0 10px rgba(150,240,31,.35);
+    --white:#e8edf5; --white-dim:rgba(232,237,245,.62); --white-faint:rgba(232,237,245,.38);
+    --err:#ff6b6b; --mono:ui-monospace,'SF Mono','Cascadia Code',Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{background:var(--bg);color:var(--white);margin:0;padding:24px 16px;
+       font-family:var(--mono);-webkit-text-size-adjust:100%}
+  .wrap{max-width:640px;margin:0 auto}
+  h1{font-size:20px;letter-spacing:.04em;margin:0 0 4px}
+  h1 b{color:var(--amber)}
+  .sub{font-size:11px;letter-spacing:.1em;color:var(--white-dim);margin-bottom:22px}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin-bottom:16px}
+  label{display:block;font-size:10px;letter-spacing:.14em;color:var(--white-dim);margin-bottom:6px;margin-top:14px}
+  label:first-child{margin-top:0}
+  input,select{width:100%;background:var(--panel2);color:var(--white);border:1px solid var(--line);
+    border-radius:8px;padding:10px 12px;font-family:var(--mono);font-size:13px}
+  input:focus,select:focus{outline:none;border-color:var(--amber-faint)}
+  button{width:100%;margin-top:18px;background:var(--amber);color:#0a0d05;border:none;border-radius:8px;
+    padding:12px;font-family:var(--mono);font-weight:700;font-size:13px;cursor:pointer;letter-spacing:.04em}
+  button:hover{filter:brightness(1.08)}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  .msg{font-size:12px;padding:10px 12px;border-radius:8px;margin-top:12px;line-height:1.5}
+  .msg.ok{background:rgba(150,240,31,.08);border:1px solid var(--amber-faint);color:var(--amber)}
+  .msg.err{background:rgba(255,107,107,.08);border:1px solid rgba(255,107,107,.3);color:var(--err)}
+  .msg.info{background:var(--panel2);border:1px solid var(--line);color:var(--white-dim)}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}
+  .card .k{font-size:9px;letter-spacing:.14em;color:var(--white-dim);margin-bottom:6px}
+  .card .v{font-size:18px;font-weight:700;color:var(--amber);text-shadow:var(--glow)}
+  .skins{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+  .skin-chip{font-size:11px;background:var(--panel2);border:1px solid var(--line);border-radius:20px;
+    padding:5px 12px;color:var(--white-dim)}
+  a.lien{color:var(--amber);text-decoration:none}
+  a.lien:hover{text-decoration:underline}
+  .reset{font-size:10px;color:var(--white-faint);text-align:center;margin-top:20px;cursor:pointer}
+  .reset:hover{color:var(--white-dim)}
+  .hidden{display:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>AXE<b>CUBE</b> — Rejoindre avec mon matériel</h1>
+  <div class="sub">POUR MINEURS HARDWARE / LOGICIELS EXTERNES — AUCUN TÉLÉCHARGEMENT REQUIS</div>
+
+  <!-- ============ ÉTAPE 1 : Formulaire d'arrivée (visible si pas encore configuré) ============ -->
+  <div class="panel" id="panelSetup">
+    <div class="msg info">
+      Tu as déjà un mineur (Bitaxe, NerdMiner, ton propre script...) qui tourne sur un pool
+      compatible ? Connecte-le ici pour rejoindre l'univers AXECUBE (badges, skins) sans
+      installer quoi que ce soit.
+    </div>
+
+    <label>Ton adresse BTC (celle utilisée sur AxeMiner)</label>
+    <input type="text" id="inAdresse" placeholder="bc1q...">
+
+    <label>Pool utilisé par ton matériel</label>
+    <select id="inPool">
+      <option value="axeminer">AxeMiner (pool.axeminer.com) — BTC</option>
+    </select>
+
+    <label>Nom du worker (optionnel, pour l'affichage)</label>
+    <input type="text" id="inWorker" placeholder="ex: monBitaxe">
+
+    <button id="btnRejoindre">🔗 Rejoindre l'univers AXECUBE</button>
+    <div id="msgSetup"></div>
+  </div>
+
+  <!-- ============ ÉTAPE 2 : Dashboard personnel (visible une fois configuré) ============ -->
+  <div id="panelDashboard" class="hidden">
+    <div class="grid">
+      <div class="card">
+        <div class="k">MEILLEURE DIFFICULTÉ</div>
+        <div class="v" id="dBestDiff">—</div>
+      </div>
+      <div class="card">
+        <div class="k">STATUT</div>
+        <div class="v" id="dStatut" style="font-size:13px">—</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="msg info" id="dInfoPool"></div>
+      <div style="margin-top:14px">
+        <span style="font-size:10px;letter-spacing:.14em;color:var(--white-dim)">SKINS PREMIUM POSSÉDÉS</span>
+        <div class="skins" id="dSkins"><span class="skin-chip">chargement…</span></div>
+      </div>
+      <div style="margin-top:14px;font-size:11px">
+        <a class="lien" href="boutique.html" id="lienBoutique" target="_blank" rel="noopener">🛒 Découvrir la boutique de skins ↗</a>
+      </div>
+    </div>
+
+    <div class="reset" id="btnReset">Changer d'adresse / de pool</div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// CONFIG -- ajuste si tes fonctions Netlify sont sur un autre domaine
+// ============================================================
+const API_BASE = '/.netlify/functions';
+
+// ============================================================
+// Identité machine : sans app locale tournant sur le vrai matériel, on ne peut pas lire
+// une empreinte matérielle réelle (contrairement à axecube.js qui utilise ioreg). On
+// génère donc un identifiant persistant dans le navigateur -- suffisant pour ce cas
+// d'usage, avec la limite assumée qu'un même mineur physique visité depuis deux
+// navigateurs différents obtiendrait deux identités distinctes.
+// ============================================================
+function obtenirMachineId() {
+  let id = localStorage.getItem('axecube_machineId');
+  if (!id) {
+    id = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random())
+      .replace(/-/g, '').slice(0, 32);
+    localStorage.setItem('axecube_machineId', id);
+  }
+  return id;
+}
+
+const machineId = obtenirMachineId();
+const config = JSON.parse(localStorage.getItem('axecube_config_' + machineId) || 'null');
+
+function afficherDashboard() {
+  document.getElementById('panelSetup').classList.add('hidden');
+  document.getElementById('panelDashboard').classList.remove('hidden');
+  document.getElementById('dInfoPool').textContent =
+    `Adresse : ${config.adresse}  ·  Pool : ${config.pool}  ·  Worker : ${config.worker || '(anonyme)'}`;
+  document.getElementById('lienBoutique').href = 'boutique.html?machineId=' + encodeURIComponent(machineId);
+  chargerRecord();
+  chargerSkins();
+}
+
+async function chargerRecord() {
+  try {
+    const r = await fetch(`${API_BASE}/mon-record?machineId=${encodeURIComponent(machineId)}`);
+    const j = await r.json();
+    document.getElementById('dBestDiff').textContent = (j.bestDiff || 0).toLocaleString('fr-FR');
+    document.getElementById('dStatut').textContent = j.bestDiff > 0 ? '✅ Actif' : '🆕 Nouveau';
+  } catch (e) {
+    document.getElementById('dBestDiff').textContent = '—';
+    document.getElementById('dStatut').textContent = '⚠️ Injoignable';
+  }
+}
+
+async function chargerSkins() {
+  const boite = document.getElementById('dSkins');
+  try {
+    const r = await fetch(`${API_BASE}/mes-possessions-premium?machineId=${encodeURIComponent(machineId)}`);
+    const j = await r.json();
+    const items = Array.isArray(j.items) ? j.items : [];
+    boite.innerHTML = items.length
+      ? items.map(id => `<span class="skin-chip">${id}</span>`).join('')
+      : '<span class="skin-chip">Aucun skin possédé pour l\'instant</span>';
+  } catch (e) {
+    boite.innerHTML = '<span class="skin-chip">Injoignable</span>';
+  }
+}
+
+document.getElementById('btnRejoindre').addEventListener('click', async () => {
+  const adresse = document.getElementById('inAdresse').value.trim();
+  const pool = document.getElementById('inPool').value;
+  const worker = document.getElementById('inWorker').value.trim();
+  const msgBox = document.getElementById('msgSetup');
+  const btn = document.getElementById('btnRejoindre');
+
+  if (adresse.length < 10) {
+    msgBox.innerHTML = '<div class="msg err">Adresse trop courte -- vérifie que tu l\'as bien collée en entier.</div>';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = '⏳ Vérification en cours…';
+  msgBox.innerHTML = '';
+
+  try {
+    const url = `${API_BASE}/importer-depuis-pool?machineId=${encodeURIComponent(machineId)}`
+      + `&adresse=${encodeURIComponent(adresse)}&pool=${encodeURIComponent(pool)}`;
+    const r = await fetch(url);
+    const j = await r.json();
+
+    if (j.ok) {
+      msgBox.innerHTML = `<div class="msg ok">🎉 ${j.message} -- ton historique de ce pool a été repris comme point de départ !</div>`;
+    } else if (r.status === 409) {
+      // Déjà un historique local -- pas un échec, juste "rien à importer", on continue quand même.
+      msgBox.innerHTML = `<div class="msg info">ℹ️ Cette machine a déjà un historique AXECUBE -- on continue avec.</div>`;
+    } else {
+      // Pas trouvé sur le pool (nouvelle adresse) -- pas une erreur, on démarre juste à 0.
+      msgBox.innerHTML = `<div class="msg info">ℹ️ ${j.erreur || 'Aucun historique trouvé sur ce pool -- tu démarres à 0, normalement.'}</div>`;
+    }
+
+    // Dans tous les cas (importé, déjà existant, ou parti de 0), on enregistre la config
+    // et on bascule sur le dashboard personnel.
+    localStorage.setItem('axecube_config_' + machineId, JSON.stringify({ adresse, pool, worker }));
+    setTimeout(() => { location.reload(); }, 1400);
+  } catch (e) {
+    msgBox.innerHTML = `<div class="msg err">⚠️ Erreur réseau -- réessaie dans un instant.</div>`;
+    btn.disabled = false;
+    btn.textContent = '🔗 Rejoindre l\'univers AXECUBE';
+  }
+});
+
+document.getElementById('btnReset')?.addEventListener('click', () => {
+  if (!confirm('Changer d\'adresse/de pool ? (ton historique AXECUBE reste lié à cette machine, rien n\'est perdu)')) return;
+  localStorage.removeItem('axecube_config_' + machineId);
+  location.reload();
+});
+
+// Point d'entrée
+if (config) afficherDashboard();
+</script>
+</body>
+</html>
